@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- squircle backdrop: warm paper -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="#f8f4ea"/>
+  <!-- soft shadow under the leaf -->
+  <rect x="292" y="232" width="460" height="600" rx="26" fill="#000000" opacity="0.06"/>
+  <!-- the folio leaf -->
+  <path d="M 292 226
+           Q 292 200 318 200
+           L 632 200
+           L 752 320
+           L 752 786
+           Q 752 812 726 812
+           L 318 812
+           Q 292 812 292 786
+           Z"
+        fill="#fdfbf7" stroke="#ddd5c4" stroke-width="6"/>
+  <!-- dog-ear fold -->
+  <path d="M 632 200 L 752 320 L 658 320 Q 632 320 632 294 Z"
+        fill="#ece4d2" stroke="#ddd5c4" stroke-width="6" stroke-linejoin="round"/>
+  <!-- pilcrow in oxblood -->
+  <text x="524" y="664"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="400"
+        font-weight="bold"
+        fill="#9e3b2a"
+        text-anchor="middle">¶</text>
+</svg>

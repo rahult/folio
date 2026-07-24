@@ -35,7 +35,7 @@ fn menu_item<R: Runtime, M: Manager<R>>(
 /// dotted ids ("paragraph.heading-1", …) that `on_menu_event` forwards
 /// to the webview as `menu` events; predefined items act natively.
 fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
-    let app_menu = SubmenuBuilder::new(app, "mdrer")
+    let app_menu = SubmenuBuilder::new(app, "Folio")
         .about(Some(AboutMetadata::default()))
         .separator()
         .services()
@@ -249,7 +249,7 @@ mod tests {
     use super::*;
 
     fn temp_path(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("mdrer-test-{name}-{}", std::process::id()))
+        std::env::temp_dir().join(format!("folio-test-{name}-{}", std::process::id()))
     }
 
     #[test]

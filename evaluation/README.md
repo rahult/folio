@@ -1,6 +1,6 @@
 # Markdown Rendering Evaluation Suite
 
-A standard set of documents for evaluating the mdrer rendering engine
+A standard set of documents for evaluating the Folio rendering engine
 (Milkdown Crepe / ProseMirror) and the app's open/save behaviour. Open each
 file in the app (⌘O) and compare the rendered output against the
 "what to check" notes below.
