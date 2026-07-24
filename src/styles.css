@@ -44,7 +44,7 @@
   --crepe-color-on-secondary: var(--accent-strong);
   --crepe-color-hover: var(--accent-wash);
   --crepe-color-selected: var(--accent-selection);
-  --crepe-color-inline-code: var(--accent-strong);
+  --crepe-color-inline-code: var(--ink);
   --crepe-color-inline-area: var(--paper-sunken);
   --crepe-color-inverse: var(--ink);
   --crepe-color-on-inverse: var(--paper);
@@ -171,7 +171,7 @@ body.is-dirty #doc-title::before {
 }
 
 #editor .milkdown {
-  max-width: 46rem;
+  max-width: 80%;
   margin: 0 auto;
   animation: editor-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -187,8 +187,8 @@ body.is-dirty #doc-title::before {
   }
 }
 
-.milkdown .ProseMirror {
-  padding: 72px 48px 120px;
+#editor .milkdown .ProseMirror {
+  padding: clamp(2rem, 7vh, 4.5rem) clamp(1.25rem, 5vw, 3rem) 7.5rem;
   font-size: 1.1875rem;
   line-height: 1.7;
 }
@@ -257,14 +257,17 @@ body.is-dirty #doc-title::before {
   font-style: italic;
 }
 
-/* inline code */
-.milkdown .ProseMirror code {
+/* inline code — quiet, smaller than prose so it doesn't shout.
+   Scoped with #editor to out-specify Crepe's own rule in reset.css. */
+#editor .milkdown .ProseMirror code {
   font-family: var(--font-mono);
-  font-size: 0.8em;
+  font-size: 0.75em;
   background: var(--paper-sunken);
-  color: var(--accent-strong);
-  padding: 0.15em 0.38em;
+  color: var(--ink);
+  padding: 0.12em 0.34em;
   border-radius: 4px;
+  display: inline;
+  line-height: inherit;
 }
 
 /* horizontal rule — a short editorial rule, centered */
@@ -324,6 +327,14 @@ body.is-dirty #doc-title::before {
   caret-color: var(--accent);
 }
 
+/* code block type — smaller than prose, tight leading */
+#editor .milkdown .milkdown-code-block .cm-content,
+#editor .milkdown .milkdown-code-block .cm-gutters {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 /* the embedded CodeMirror runs in dark mode; re-ground its active-line
    gutter and selection to the paper palette */
 #editor .milkdown .milkdown-code-block .cm-activeLineGutter {
@@ -338,6 +349,21 @@ body.is-dirty #doc-title::before {
 /* lines wrap (pre-wrap), so the horizontal scroller is pure noise */
 #editor .milkdown .milkdown-code-block .cm-scroller {
   overflow-x: hidden;
+}
+
+/* tables — compress to the measure and scroll inside it rather than
+   clipping columns on narrow windows */
+#editor .milkdown {
+  --default-cell-min-width: 3em;
+}
+
+.milkdown .ProseMirror .tableWrapper {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.milkdown .ProseMirror table {
+  width: 100%;
 }
 
 /* ——— status bar ——— */
