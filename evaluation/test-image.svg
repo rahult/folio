@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120" viewBox="0 0 320 120">
+  <rect width="320" height="120" rx="12" fill="#f4efe6"/>
+  <rect x="16" y="16" width="288" height="88" rx="8" fill="none" stroke="#8c3a2b" stroke-width="2"/>
+  <text x="160" y="58" font-family="Georgia, serif" font-size="24" font-style="italic" fill="#3d3229" text-anchor="middle">test-image.svg</text>
+  <text x="160" y="84" font-family="Georgia, serif" font-size="12" fill="#8c3a2b" text-anchor="middle">local asset for renderer evaluation</text>
+</svg>
