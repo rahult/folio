@@ -32,6 +32,12 @@ export class MarkdownEditor {
         [Crepe.Feature.Latex]: false,
         [Crepe.Feature.AI]: false,
       },
+      featureConfigs: {
+        [Crepe.Feature.Placeholder]: {
+          text: "Start writing — or press ⌘O to open a file",
+          mode: "doc",
+        },
+      },
     });
 
     this.crepe.on((api) => {

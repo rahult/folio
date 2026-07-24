@@ -1,3 +1,6 @@
+import "@fontsource-variable/instrument-sans";
+import "@fontsource-variable/newsreader";
+import "@fontsource-variable/jetbrains-mono";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { DocumentState } from "./document";
@@ -7,18 +10,36 @@ import { normalizeMarkdown } from "./markdown";
 const doc = new DocumentState();
 
 const titleEl = document.querySelector<HTMLSpanElement>("#doc-title")!;
+const pathEl = document.querySelector<HTMLSpanElement>("#doc-path")!;
+const wordCountEl = document.querySelector<HTMLSpanElement>("#word-count")!;
 const openBtn = document.querySelector<HTMLButtonElement>("#open-btn")!;
 const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
 const editorRoot = document.querySelector<HTMLElement>("#editor")!;
 
+function displayPath(path: string | null): string {
+  if (!path) return "";
+  // Abbreviate the user's home directory for readability.
+  const match = path.match(/^\/Users\/[^/]+/);
+  return match ? `~${path.slice(match[0].length)}` : path;
+}
+
+function countWords(markdown: string): number {
+  return markdown
+    .split(/\s+/)
+    .filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
+}
+
 const editor = new MarkdownEditor(editorRoot, (markdown) => {
   doc.updateDirty(markdown);
+  wordCountEl.textContent = `${countWords(markdown)} words`;
   renderTitle();
 });
 
 function renderTitle(): void {
-  titleEl.textContent = doc.displayTitle;
+  titleEl.textContent = doc.fileName;
+  document.body.classList.toggle("is-dirty", doc.dirty);
   document.title = doc.displayTitle;
+  pathEl.textContent = displayPath(doc.filePath);
 }
 
 async function openFile(): Promise<void> {

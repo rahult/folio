@@ -10,12 +10,21 @@
 
   <body>
     <header id="toolbar">
-      <span id="doc-title">Untitled</span>
       <div class="toolbar-actions">
-        <button id="open-btn" type="button" title="Open (⌘O)">Open</button>
-        <button id="save-btn" type="button" title="Save (⌘S)">Save</button>
+        <button id="open-btn" type="button" title="Open a Markdown file">
+          Open<kbd>⌘O</kbd>
+        </button>
+        <button id="save-btn" type="button" title="Save (⌘⇧S for Save As)">
+          Save<kbd>⌘S</kbd>
+        </button>
       </div>
+      <span id="doc-title">Untitled</span>
+      <div class="toolbar-balance" aria-hidden="true"></div>
     </header>
     <main id="editor"></main>
+    <footer id="statusbar">
+      <span id="doc-path"></span>
+      <span id="word-count"></span>
+    </footer>
   </body>
 </html>

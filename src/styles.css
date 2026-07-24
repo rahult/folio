@@ -1,8 +1,53 @@
+/* mdrer — editorial minimalism.
+   Warm paper canvas, Newsreader prose, Instrument Sans chrome,
+   JetBrains Mono for code, one oxblood accent. */
+
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
-  color: #1f2430;
-  background: #ffffff;
+  /* palette — warm paper, tinted neutrals, no pure black/white */
+  --paper: oklch(0.981 0.007 88);
+  --paper-raised: oklch(0.992 0.004 88);
+  --paper-sunken: oklch(0.961 0.009 88);
+  --ink: oklch(0.295 0.014 72);
+  --ink-soft: oklch(0.46 0.013 72);
+  --ink-faint: oklch(0.62 0.011 75);
+  --hairline: oklch(0.913 0.008 85);
+  --accent: oklch(0.47 0.105 33);
+  --accent-strong: oklch(0.42 0.11 33);
+  --accent-wash: oklch(0.945 0.018 45);
+  --accent-selection: oklch(0.89 0.035 45);
+
+  --font-ui: "Instrument Sans Variable", system-ui, sans-serif;
+  --font-prose: "Newsreader Variable", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --crepe-shadow-1:
+    0 1px 2px oklch(0.3 0.02 70 / 0.06), 0 4px 16px oklch(0.3 0.02 70 / 0.08);
+  --crepe-shadow-2:
+    0 2px 4px oklch(0.3 0.02 70 / 0.08), 0 12px 32px oklch(0.3 0.02 70 / 0.12);
+}
+
+/* Re-skin Crepe/Milkdown through its public tokens. Nord declares its
+   palette on `.milkdown`, so the overrides must out-specify it. */
+#editor .milkdown {
+  --crepe-font-default: var(--font-prose);
+  --crepe-font-title: var(--font-prose);
+  --crepe-font-code: var(--font-mono);
+  --crepe-color-background: var(--paper);
+  --crepe-color-on-background: var(--ink);
+  --crepe-color-surface: var(--paper-raised);
+  --crepe-color-surface-low: var(--paper-sunken);
+  --crepe-color-on-surface: var(--ink);
+  --crepe-color-on-surface-variant: var(--ink-soft);
+  --crepe-color-outline: var(--hairline);
+  --crepe-color-primary: var(--accent);
+  --crepe-color-secondary: var(--accent-wash);
+  --crepe-color-on-secondary: var(--accent-strong);
+  --crepe-color-hover: var(--accent-wash);
+  --crepe-color-selected: var(--accent-selection);
+  --crepe-color-inline-code: var(--accent-strong);
+  --crepe-color-inline-area: var(--paper-sunken);
+  --crepe-color-inverse: var(--ink);
+  --crepe-color-on-inverse: var(--paper);
 }
 
 * {
@@ -20,59 +65,330 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background: var(--paper);
+  caret-color: var(--accent);
 }
+
+::selection {
+  background: var(--accent-selection);
+}
+
+/* ——— top chrome ——— */
 
 #toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 16px;
-  border-bottom: 1px solid #e4e7ec;
-  background: #fafbfc;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--hairline);
   flex: 0 0 auto;
+}
+
+/* the title sits optically centered; the balance block mirrors the actions */
+.toolbar-balance {
+  flex: 1 1 0;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 2px;
+  flex: 1 1 0;
 }
 
 #doc-title {
   font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* unsaved-changes dot in the accent color */
+body.is-dirty #doc-title::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 8px;
+  flex: 0 0 auto;
+}
+
+.toolbar-actions button {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  transition:
+    background-color 140ms ease-out,
+    color 140ms ease-out;
+}
+
+.toolbar-actions button:hover {
+  background: var(--paper-sunken);
+  color: var(--ink);
+}
+
+.toolbar-actions button:active {
+  background: var(--hairline);
+}
+
+.toolbar-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toolbar-actions button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.toolbar-actions kbd {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+/* ——— editor canvas ——— */
+
+#editor {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+#editor .milkdown {
+  max-width: 46rem;
+  margin: 0 auto;
+  animation: editor-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes editor-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.milkdown .ProseMirror {
+  padding: 72px 48px 120px;
+  font-size: 1.1875rem;
+  line-height: 1.7;
+}
+
+/* editorial placeholder */
+.milkdown .crepe-placeholder::before {
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+/* headings — fluid editorial scale */
+.milkdown .ProseMirror h1 {
+  font-size: clamp(1.9rem, 1.6rem + 1vw, 2.4rem);
   font-weight: 600;
-  color: #3a4150;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 2.6em 0 0.55em;
+}
+
+.milkdown .ProseMirror h2 {
+  font-size: 1.55rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  margin: 2.2em 0 0.5em;
+}
+
+.milkdown .ProseMirror h3 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.3;
+  margin: 1.9em 0 0.45em;
+}
+
+.milkdown .ProseMirror h1:first-child,
+.milkdown .ProseMirror h2:first-child,
+.milkdown .ProseMirror h3:first-child {
+  margin-top: 0;
+}
+
+.milkdown .ProseMirror p {
+  margin: 0 0 1.1em;
+}
+
+/* links — the single accent, used with restraint */
+.milkdown .ProseMirror a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--accent) 40%, transparent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color 140ms ease-out;
+}
+
+.milkdown .ProseMirror a:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* blockquote */
+.milkdown .ProseMirror blockquote {
+  margin: 1.6em 0;
+  padding: 0.1em 0 0.1em 1.25em;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* inline code */
+.milkdown .ProseMirror code {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  background: var(--paper-sunken);
+  color: var(--accent-strong);
+  padding: 0.15em 0.38em;
+  border-radius: 4px;
+}
+
+/* horizontal rule — a short editorial rule, centered */
+.milkdown .ProseMirror hr {
+  border: none;
+  width: 4rem;
+  border-top: 1px solid var(--ink-faint);
+  margin: 3rem auto;
+}
+
+/* lists */
+.milkdown .ProseMirror ul,
+.milkdown .ProseMirror ol {
+  margin: 0 0 1.1em;
+  padding-left: 1.4em;
+}
+
+.milkdown .ProseMirror li::marker {
+  color: var(--ink-faint);
+}
+
+/* tables — chrome in quiet sans, editorial header */
+.milkdown .ProseMirror table {
+  font-family: var(--font-ui);
+  font-size: 0.78em;
+  margin: 1.6em 0;
+}
+
+.milkdown .ProseMirror th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* code blocks — sunken paper, quiet gutter */
+#editor .milkdown .milkdown-code-block {
+  background: var(--paper-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  margin: 1.6em 0;
+}
+
+#editor .milkdown .milkdown-code-block .cm-editor,
+#editor .milkdown .milkdown-code-block .cm-gutters,
+#editor .milkdown .milkdown-code-block .cm-panel {
+  background: var(--paper-sunken);
+}
+
+#editor .milkdown .milkdown-code-block .cm-gutters {
+  color: var(--ink-faint);
+  border-right: 1px solid var(--hairline);
+}
+
+#editor .milkdown .milkdown-code-block .cm-content {
+  caret-color: var(--accent);
+}
+
+/* the embedded CodeMirror runs in dark mode; re-ground its active-line
+   gutter and selection to the paper palette */
+#editor .milkdown .milkdown-code-block .cm-activeLineGutter {
+  background: var(--hairline);
+  color: var(--ink-soft);
+}
+
+#editor .milkdown .milkdown-code-block .cm-activeLine {
+  background: color-mix(in oklch, var(--hairline) 45%, transparent);
+}
+
+/* lines wrap (pre-wrap), so the horizontal scroller is pure noise */
+#editor .milkdown .milkdown-code-block .cm-scroller {
+  overflow-x: hidden;
+}
+
+/* ——— status bar ——— */
+
+#statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 11px;
+  color: var(--ink-faint);
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+#doc-path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.toolbar-actions {
-  display: flex;
-  gap: 8px;
+#word-count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
 }
 
-.toolbar-actions button {
-  font: inherit;
-  font-size: 13px;
-  padding: 4px 14px;
-  border: 1px solid #d4d9e0;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #1f2430;
-  cursor: pointer;
+/* ——— scrollbars ——— */
+
+::-webkit-scrollbar {
+  width: 10px;
 }
 
-.toolbar-actions button:hover {
-  background: #f0f2f5;
+::-webkit-scrollbar-thumb {
+  background: var(--hairline);
+  border-radius: 5px;
+  border: 2px solid var(--paper);
 }
 
-.toolbar-actions button:active {
-  background: #e4e7ec;
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
 }
 
-#editor {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 24px 32px 64px;
-}
+/* ——— motion preferences ——— */
 
-#editor .milkdown {
-  max-width: 760px;
-  margin: 0 auto;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
