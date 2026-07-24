@@ -94,6 +94,28 @@ describe("actionForMenuId", () => {
     expect(actionForMenuId("view.zoom-reset")).toEqual({ kind: "zoom", direction: "reset" });
   });
 
+  it("maps license, export, and view-mode menu ids", () => {
+    expect(actionForMenuId("app.enter-license")).toEqual({ kind: "enter-license" });
+    expect(actionForMenuId("file.export-html")).toEqual({ kind: "export-html" });
+    expect(actionForMenuId("file.export-pdf")).toEqual({ kind: "export-pdf" });
+    expect(actionForMenuId("view.focus-mode")).toEqual({ kind: "toggle-focus-mode" });
+    expect(actionForMenuId("view.typewriter-mode")).toEqual({
+      kind: "toggle-typewriter-mode",
+    });
+    expect(actionForMenuId("view.theme-paper")).toEqual({
+      kind: "set-theme",
+      theme: "paper",
+    });
+    expect(actionForMenuId("view.theme-night")).toEqual({
+      kind: "set-theme",
+      theme: "night",
+    });
+    expect(actionForMenuId("view.theme-newsprint")).toEqual({
+      kind: "set-theme",
+      theme: "newsprint",
+    });
+  });
+
   it("returns null for ids it does not own (e.g. predefined items)", () => {
     expect(actionForMenuId("undo")).toBeNull();
     expect(actionForMenuId("")).toBeNull();

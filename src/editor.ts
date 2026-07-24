@@ -20,6 +20,7 @@ import {
   wrapInBlockTypeCommand,
 } from "@milkdown/kit/preset/commonmark";
 import { insertTableCommand, toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
+import type { EditorView } from "@milkdown/kit/prose/view";
 import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from "./commands";
 
 /**
@@ -29,6 +30,7 @@ import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from ".
  */
 export class MarkdownEditor {
   private crepe: Crepe | null = null;
+  private selectionCb: (() => void) | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -64,9 +66,42 @@ export class MarkdownEditor {
       api.markdownUpdated((_ctx, markdown) => {
         this.onMarkdownUpdated(markdown);
       });
+      api.selectionUpdated(() => {
+        this.selectionCb?.();
+      });
     });
 
     await this.crepe.create();
+  }
+
+  /** Register a callback fired on every ProseMirror selection update.
+   *  Re-registered automatically when the editor is recreated. */
+  onSelectionUpdate(cb: () => void): void {
+    this.selectionCb = cb;
+  }
+
+  /** Run `fn` against the live ProseMirror view (no-op before create). */
+  withView(fn: (view: EditorView) => void): void {
+    if (!this.crepe) return;
+    this.crepe.editor.action((ctx) => {
+      fn(ctx.get(editorViewCtx));
+    });
+  }
+
+  /** The rendered document as clean HTML, for export: editing artifacts
+   *  (contenteditable, trailing breaks, placeholder widgets) removed. */
+  exportHtml(): string {
+    const live = this.root.querySelector(".milkdown");
+    if (!live) return "";
+    const clone = live.cloneNode(true) as HTMLElement;
+    clone.removeAttribute("contenteditable");
+    for (const el of clone.querySelectorAll("[contenteditable]")) {
+      el.removeAttribute("contenteditable");
+    }
+    for (const el of clone.querySelectorAll(".ProseMirror-trailingBreak, .crepe-placeholder")) {
+      el.remove();
+    }
+    return clone.outerHTML;
   }
 
   /** Replace the entire document content. */

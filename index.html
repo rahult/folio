@@ -5,6 +5,14 @@
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Folio</title>
+    <script>
+      // Apply the persisted theme before first paint (avoids a flash of
+      // the default Paper theme). Kept in sync with src/theme.ts.
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("folio-theme") || "paper";
+      } catch {}
+    </script>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
@@ -32,5 +40,43 @@
       <span id="doc-path"></span>
       <span id="word-count"></span>
     </footer>
+    <div id="license-overlay" hidden>
+      <div
+        id="license-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="license-heading"
+      >
+        <h2 id="license-heading">Folio Pro</h2>
+        <div id="license-enter-view">
+          <p class="license-copy">
+            Enter your license key to unlock Pro features — export, focus
+            mode, and more.
+          </p>
+          <textarea
+            id="license-key-input"
+            rows="3"
+            spellcheck="false"
+            placeholder="FOLIO1-…"
+            aria-label="License key"
+          ></textarea>
+          <p id="license-error" role="alert" hidden></p>
+          <div class="license-actions">
+            <button id="license-cancel-btn" type="button">Cancel</button>
+            <button id="license-unlock-btn" type="button">Unlock</button>
+          </div>
+        </div>
+        <div id="license-active-view" hidden>
+          <p class="license-copy">
+            Folio Pro is unlocked for
+            <strong id="license-email"></strong>.
+          </p>
+          <div class="license-actions">
+            <button id="license-remove-btn" type="button">Remove license</button>
+            <button id="license-done-btn" type="button">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

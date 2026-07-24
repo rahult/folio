@@ -5,6 +5,7 @@
  */
 
 import type { EditorCommand } from "./commands";
+import type { Theme } from "./theme";
 import type { ZoomDirection } from "./zoom";
 
 export type MenuAction =
@@ -12,8 +13,14 @@ export type MenuAction =
   | { kind: "open-file" }
   | { kind: "save-file" }
   | { kind: "save-file-as" }
+  | { kind: "export-html" }
+  | { kind: "export-pdf" }
   | { kind: "toggle-source-mode" }
+  | { kind: "toggle-focus-mode" }
+  | { kind: "toggle-typewriter-mode" }
+  | { kind: "set-theme"; theme: Theme }
   | { kind: "zoom"; direction: ZoomDirection }
+  | { kind: "enter-license" }
   | { kind: "editor-command"; command: EditorCommand };
 
 const EDITOR_COMMAND_IDS: Record<string, EditorCommand> = {
@@ -55,6 +62,22 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "save-file" };
     case "file.save-as":
       return { kind: "save-file-as" };
+    case "file.export-html":
+      return { kind: "export-html" };
+    case "file.export-pdf":
+      return { kind: "export-pdf" };
+    case "view.focus-mode":
+      return { kind: "toggle-focus-mode" };
+    case "view.typewriter-mode":
+      return { kind: "toggle-typewriter-mode" };
+    case "view.theme-paper":
+      return { kind: "set-theme", theme: "paper" };
+    case "view.theme-night":
+      return { kind: "set-theme", theme: "night" };
+    case "view.theme-newsprint":
+      return { kind: "set-theme", theme: "newsprint" };
+    case "app.enter-license":
+      return { kind: "enter-license" };
     case "view.source-mode":
       return { kind: "toggle-source-mode" };
     case "view.zoom-in":
