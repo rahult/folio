@@ -20,6 +20,9 @@
   --font-prose: "Newsreader Variable", Georgia, serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
+  /* font-size multiplier driven by View → Zoom In/Out/Actual Size */
+  --zoom: 1;
+
   --crepe-shadow-1:
     0 1px 2px oklch(0.3 0.02 70 / 0.06), 0 4px 16px oklch(0.3 0.02 70 / 0.08);
   --crepe-shadow-2:
@@ -189,7 +192,7 @@ body.is-dirty #doc-title::before {
 
 #editor .milkdown .ProseMirror {
   padding: clamp(2rem, 7vh, 4.5rem) clamp(1.25rem, 5vw, 3rem) 7.5rem;
-  font-size: 1.1875rem;
+  font-size: calc(1.1875rem * var(--zoom));
   line-height: 1.7;
 }
 
@@ -199,9 +202,13 @@ body.is-dirty #doc-title::before {
   color: var(--ink-faint);
 }
 
-/* headings — fluid editorial scale */
+/* headings — fluid editorial scale (zoom multiplies the rem terms) */
 .milkdown .ProseMirror h1 {
-  font-size: clamp(1.9rem, 1.6rem + 1vw, 2.4rem);
+  font-size: clamp(
+    calc(1.9rem * var(--zoom)),
+    calc((1.6rem + 1vw) * var(--zoom)),
+    calc(2.4rem * var(--zoom))
+  );
   font-weight: 600;
   line-height: 1.12;
   letter-spacing: -0.02em;
@@ -209,7 +216,7 @@ body.is-dirty #doc-title::before {
 }
 
 .milkdown .ProseMirror h2 {
-  font-size: 1.55rem;
+  font-size: calc(1.55rem * var(--zoom));
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.012em;
@@ -217,7 +224,7 @@ body.is-dirty #doc-title::before {
 }
 
 .milkdown .ProseMirror h3 {
-  font-size: 1.25rem;
+  font-size: calc(1.25rem * var(--zoom));
   font-weight: 500;
   font-style: italic;
   line-height: 1.3;
@@ -406,6 +413,26 @@ body.is-dirty #doc-title::before {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-faint);
+}
+
+/* ——— source code mode ——— */
+
+#source-editor {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 80%;
+  margin: 0 auto;
+  padding: clamp(2rem, 7vh, 4.5rem) clamp(1.25rem, 5vw, 3rem) 7.5rem;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: calc(0.9375rem * var(--zoom));
+  line-height: 1.7;
 }
 
 /* ——— motion preferences ——— */
