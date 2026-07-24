@@ -30,8 +30,11 @@ async function openFile(): Promise<void> {
 
   const raw = await invoke<string>("read_text_file", { path: selected });
   const content = normalizeMarkdown(raw);
-  doc.load(selected, content);
   await editor.setContent(content);
+  // The dirty baseline is the editor's serialized markdown, not the raw file
+  // text: Milkdown normalizes formatting (list markers, spacing), so a file
+  // would otherwise count as modified the moment it is opened.
+  doc.load(selected, editor.getMarkdown());
   renderTitle();
 }
 
