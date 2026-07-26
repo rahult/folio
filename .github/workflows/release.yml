@@ -5,12 +5,64 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.2.0) — bumps versions, commits, tags, builds, publishes"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  # Resolves the release tag; on manual dispatch also bumps the version in
+  # package.json, Cargo.toml and tauri.conf.json, commits and pushes the tag.
+  # The bump commit is pushed with GITHUB_TOKEN, which does not re-trigger
+  # workflows — the build below runs in this same workflow run instead.
+  bump:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: github.event_name == 'workflow_dispatch'
+        run: echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'
+
+      - uses: actions/checkout@v4
+        if: github.event_name == 'workflow_dispatch'
+
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          node-version: 24
+
+      - name: Bump versions
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          npm version "${{ inputs.version }}" --no-git-tag-version
+          node -e 'const fs=require("fs");const p="src-tauri/tauri.conf.json";const c=JSON.parse(fs.readFileSync(p,"utf8"));c.version="${{ inputs.version }}";fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n")'
+          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml
+
+      - name: Commit, tag, push
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          git commit -m "Release v${{ inputs.version }}"
+          git tag "v${{ inputs.version }}"
+          git push origin HEAD:main
+          git push origin "v${{ inputs.version }}"
+
   release:
+    needs: bump
     strategy:
       fail-fast: false
       matrix:
@@ -19,6 +71,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.bump.outputs.tag }}
 
       - uses: actions/setup-node@v4
         with:
@@ -45,6 +99,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Folio ${{ github.ref_name }}"
-          releaseDraft: true
+          tagName: ${{ needs.bump.outputs.tag }}
+          releaseName: "Folio ${{ needs.bump.outputs.tag }}"
+          releaseDraft: false

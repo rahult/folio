@@ -43,11 +43,34 @@ Pro features are unlocked with a license key (Folio → Enter License…):
 
 ## Download
 
-Grab the latest `Folio_aarch64.dmg` from
-[Releases](https://github.com/rahult/folio/releases).
+Get the latest build for your platform from
+[Releases](https://github.com/rahult/folio/releases/latest) — or try the
+[live demo](https://folio.rahultrikha.com/#demo) in your browser first:
 
-> Apple Silicon (aarch64) build. Folio is not notarized — on first launch,
-> right-click → Open, or allow it in System Settings → Privacy & Security.
+- **macOS** — `Folio_aarch64.dmg` (Apple Silicon)
+- **Windows** — `.msi` / `.exe` (NSIS)
+- **Linux** — `.AppImage` / `.deb`
+
+> Installers are unsigned: on first launch, right-click → Open (macOS
+> Gatekeeper) or More info → Run anyway (Windows SmartScreen).
+
+## Website
+
+The product site — landing page plus a live in-browser demo of the real
+editor (Write / Preview tabs) — lives at
+<https://folio.rahultrikha.com/>. Its source is in `site/`:
+
+```bash
+npm run dev:site      # local dev server
+npm run build:site    # static build → dist-site/
+```
+
+Pushes to `main` that touch `site/` or `src/` rebuild and deploy it to
+GitHub Pages via `.github/workflows/site.yml`. One-time setup: in the repo
+settings, set **Pages → Source** to "GitHub Actions" and the custom domain
+to `folio.rahultrikha.com` (a `CNAME` file in `site/public/` keeps it
+pinned across deploys); at the DNS provider, `folio` is a CNAME record
+pointing to `rahult.github.io`.
 
 ## Built with
 
@@ -139,13 +162,30 @@ every launch) in its config directory.
 
 ## Release & publishing
 
-Tagged pushes (`v*`) trigger `.github/workflows/release.yml`, which runs
-the test suites and builds unsigned installers on three platforms via
-`tauri-action`, attached to a draft GitHub Release:
+Pushes to `main` and pull requests run `.github/workflows/ci.yml`: unit
+tests, frontend typecheck/build, Rust tests, and a product-site build. The
+site redeploys automatically on relevant `main` pushes
+(`.github/workflows/site.yml`).
+
+Releasing a new version is a single manual trigger — everything else is
+automated. Run the **Release** workflow with a version:
+
+```bash
+gh workflow run release.yml -f version=0.2.0
+```
+
+`.github/workflows/release.yml` then: bumps `package.json`,
+`src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, commits and pushes
+tag `v0.2.0`, runs the test suites, and builds installers on three
+platforms via `tauri-action`, attached to a **published** (non-draft)
+GitHub Release:
 
 - macOS arm64 `.dmg`
 - Windows `.msi` / `.exe`
 - Linux `.AppImage` / `.deb`
+
+Pushing a `v*` tag by hand also works — the same pipeline runs, skipping
+the version-bump step.
 
 Installers are unsigned: macOS shows a Gatekeeper prompt and Windows a
 SmartScreen prompt on first launch (right-click → Open / More info → Run

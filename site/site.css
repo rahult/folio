@@ -1,0 +1,340 @@
+/* Folio product site — same editorial language as the app:
+   warm paper canvas, Newsreader prose, Instrument Sans chrome,
+   JetBrains Mono for code, one oxblood accent. */
+
+:root {
+  --paper: oklch(0.981 0.007 88);
+  --paper-raised: oklch(0.992 0.004 88);
+  --paper-sunken: oklch(0.961 0.009 88);
+  --ink: oklch(0.295 0.014 72);
+  --ink-soft: oklch(0.46 0.013 72);
+  --ink-faint: oklch(0.62 0.011 75);
+  --hairline: oklch(0.913 0.008 85);
+  --accent: oklch(0.47 0.105 33);
+  --accent-strong: oklch(0.42 0.11 33);
+  --accent-wash: oklch(0.945 0.018 45);
+  --accent-selection: oklch(0.89 0.035 45);
+
+  --font-ui: "Instrument Sans Variable", system-ui, sans-serif;
+  --font-prose: "Newsreader Variable", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background: var(--paper);
+  caret-color: var(--accent);
+}
+
+::selection {
+  background: var(--accent-selection);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ——— header ——— */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 1.1rem 1.5rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+.site-header nav {
+  display: flex;
+  gap: 1.4rem;
+  font-size: 0.92rem;
+}
+
+.site-header nav a {
+  color: var(--ink-soft);
+}
+
+.site-header nav a:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* ——— hero ——— */
+
+main {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.hero {
+  text-align: center;
+  padding: 5.5rem 1rem 4rem;
+}
+
+.hero h1 {
+  font-family: var(--font-prose);
+  font-weight: 500;
+  font-size: clamp(2.2rem, 5.5vw, 3.6rem);
+  line-height: 1.12;
+  margin: 0 0 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+.lede {
+  font-family: var(--font-prose);
+  font-size: 1.22rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 36rem;
+  margin: 0 auto 2rem;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-block;
+  padding: 0.65rem 1.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out;
+}
+
+.btn:hover {
+  background: var(--paper-sunken);
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+
+.btn-primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.hero-note {
+  margin-top: 1.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+/* ——— sections ——— */
+
+section {
+  padding: 3.5rem 0;
+  border-top: 1px solid var(--hairline);
+}
+
+section h2 {
+  font-family: var(--font-prose);
+  font-weight: 500;
+  font-size: 1.9rem;
+  margin: 0 0 0.6rem;
+}
+
+.section-lede {
+  color: var(--ink-soft);
+  max-width: 44rem;
+  line-height: 1.6;
+  margin: 0 0 1.8rem;
+}
+
+/* ——— live demo ——— */
+
+.demo-frame {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--paper-raised);
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px oklch(0.3 0.02 70 / 0.06),
+    0 12px 32px oklch(0.3 0.02 70 / 0.08);
+}
+
+.demo-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper-sunken);
+}
+
+.demo-tabs button {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.demo-tabs button:hover {
+  color: var(--ink);
+}
+
+.demo-tabs button.active {
+  background: var(--paper-raised);
+  color: var(--ink);
+  box-shadow: 0 1px 2px oklch(0.3 0.02 70 / 0.1);
+}
+
+#demo-editor,
+#demo-preview {
+  height: 34rem;
+  overflow-y: auto;
+  border: none;
+  width: 100%;
+  display: block;
+  background: var(--paper-raised);
+}
+
+/* Re-skin Crepe/Milkdown through its public tokens (mirrors the app). */
+#demo-editor .milkdown {
+  --crepe-font-default: var(--font-prose);
+  --crepe-font-title: var(--font-prose);
+  --crepe-font-code: var(--font-mono);
+  --crepe-color-background: var(--paper-raised);
+  --crepe-color-on-background: var(--ink);
+  --crepe-color-surface: var(--paper);
+  --crepe-color-surface-low: var(--paper-sunken);
+  --crepe-color-on-surface: var(--ink);
+  --crepe-color-on-surface-variant: var(--ink-soft);
+  --crepe-color-outline: var(--hairline);
+  --crepe-color-primary: var(--accent);
+  --crepe-color-secondary: var(--accent-wash);
+  --crepe-color-on-secondary: var(--accent-strong);
+  --crepe-color-hover: var(--accent-wash);
+  --crepe-color-selected: var(--accent-selection);
+  --crepe-color-inline-code: var(--ink);
+  --crepe-color-inline-area: var(--paper-sunken);
+  --crepe-color-inverse: var(--ink);
+  --crepe-color-on-inverse: var(--paper-raised);
+
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+#demo-editor .milkdown .ProseMirror {
+  padding-bottom: 3rem;
+}
+
+/* ——— features ——— */
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.6rem 2.2rem;
+  margin-top: 1.8rem;
+}
+
+.feature h3 {
+  font-family: var(--font-prose);
+  font-weight: 500;
+  font-size: 1.15rem;
+  margin: 0 0 0.35rem;
+}
+
+.feature p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  font-size: 0.95rem;
+}
+
+/* ——— download ——— */
+
+.platform-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--ink-soft);
+}
+
+.platform-list code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--paper-sunken);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.fine-print {
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+/* ——— footer ——— */
+
+.site-footer {
+  border-top: 1px solid var(--hairline);
+  padding: 2rem 1.5rem 3rem;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 40rem) {
+  .site-header nav {
+    gap: 0.9rem;
+  }
+
+  .hero {
+    padding: 3.5rem 0.5rem 3rem;
+  }
+
+  #demo-editor,
+  #demo-preview {
+    height: 26rem;
+  }
+}

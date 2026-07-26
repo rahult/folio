@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Folio — a calm, Typora-style Markdown editor for macOS, Windows, and Linux. Write in a single live-rendered page."
+    />
+    <link rel="icon" type="image/svg+xml" href="./folio-icon.svg" />
+    <link rel="stylesheet" href="./site.css" />
+    <title>Folio — a calm Markdown editor</title>
+    <script type="module" src="./demo.ts" defer></script>
+  </head>
+
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top">
+        <img src="./folio-icon.svg" alt="" width="28" height="28" />
+        <span>Folio</span>
+      </a>
+      <nav>
+        <a href="#demo">Demo</a>
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/rahult/folio">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <h1>A calm, Typora-style<br />Markdown editor.</h1>
+        <p class="lede">
+          Write in a single live-rendered page — no split panes, no clutter.
+          Native, tiny, and fast; the text is the interface.
+        </p>
+        <div class="hero-actions">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/rahult/folio/releases/latest"
+            >Download Folio</a
+          >
+          <a class="btn" href="#demo">Try it in your browser</a>
+        </div>
+        <p class="hero-note">
+          macOS · Windows · Linux — free, open source, ~5 MB, no Electron
+        </p>
+      </section>
+
+      <section id="demo" class="demo">
+        <h2>The editor, live</h2>
+        <p class="section-lede">
+          This is the real Folio editor running in your browser. Type on the
+          left of the page and watch Markdown render inline — then flip to the
+          preview to see the exported document.
+        </p>
+        <div class="demo-frame">
+          <div class="demo-tabs" role="tablist" aria-label="Demo view">
+            <button
+              id="tab-write"
+              class="active"
+              type="button"
+              role="tab"
+              aria-selected="true"
+            >
+              Write
+            </button>
+            <button
+              id="tab-preview"
+              type="button"
+              role="tab"
+              aria-selected="false"
+            >
+              Preview
+            </button>
+          </div>
+          <div id="demo-editor" role="tabpanel" aria-labelledby="tab-write"></div>
+          <iframe
+            id="demo-preview"
+            title="Rendered document preview"
+            role="tabpanel"
+            aria-labelledby="tab-preview"
+            sandbox=""
+            hidden
+          ></iframe>
+        </div>
+      </section>
+
+      <section id="features" class="features">
+        <h2>Features</h2>
+        <div class="feature-grid">
+          <div class="feature">
+            <h3>Seamless WYSIWYG</h3>
+            <p>
+              Markdown renders inline as you type — headings, emphasis, lists,
+              tables, code blocks, blockquotes, links, and images.
+            </p>
+          </div>
+          <div class="feature">
+            <h3>Source Code Mode</h3>
+            <p>
+              Flip between the rendered page and raw Markdown with a single
+              keystroke (⌘/).
+            </p>
+          </div>
+          <div class="feature">
+            <h3>Native everything</h3>
+            <p>
+              Real native menus and file dialogs, dirty indicator, live word
+              count — a proper desktop citizen.
+            </p>
+          </div>
+          <div class="feature">
+            <h3>Folio Pro</h3>
+            <p>
+              Export to HTML &amp; PDF, Focus Mode, Typewriter Mode, and the
+              Night and Newsprint themes — unlocked with an offline license
+              key.
+            </p>
+          </div>
+          <div class="feature">
+            <h3>Editorial design</h3>
+            <p>
+              Warm paper canvas, Newsreader serif prose, one oxblood accent.
+              Nothing between you and the sentence.
+            </p>
+          </div>
+          <div class="feature">
+            <h3>Tiny footprint</h3>
+            <p>
+              Built on Tauri with the system webview — a ~5 MB download, no
+              bundled browser.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="download" class="download">
+        <h2>Download</h2>
+        <p class="section-lede">
+          Grab the latest build from
+          <a href="https://github.com/rahult/folio/releases/latest"
+            >GitHub Releases</a
+          >:
+        </p>
+        <ul class="platform-list">
+          <li><strong>macOS</strong> — <code>.dmg</code> (Apple Silicon)</li>
+          <li><strong>Windows</strong> — <code>.msi</code> / <code>.exe</code></li>
+          <li><strong>Linux</strong> — <code>.AppImage</code> / <code>.deb</code></li>
+        </ul>
+        <p class="fine-print">
+          Installers are unsigned: on first launch, right-click → Open (macOS)
+          or More info → Run anyway (Windows).
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Folio is open source under the
+        <a href="https://github.com/rahult/folio/blob/main/LICENSE"
+          >MIT license</a
+        >.
+      </p>
+    </footer>
+  </body>
+</html>
