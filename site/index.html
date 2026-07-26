@@ -149,8 +149,10 @@
           <li><strong>Linux</strong> — <code>.AppImage</code> / <code>.deb</code></li>
         </ul>
         <p class="fine-print">
-          Installers are unsigned: on first launch, right-click → Open (macOS)
-          or More info → Run anyway (Windows).
+          Installers are unsigned: on Windows, SmartScreen → More info →
+          Run anyway. On macOS, if the app is refused as "damaged" after
+          downloading, clear the quarantine flag once:
+          <code>xattr -dr com.apple.quarantine /Applications/Folio.app</code>
         </p>
       </section>
     </main>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      @font-face {
+        font-family: "Newsreader Variable";
+        src: url("node_modules/@fontsource-variable/newsreader/files/newsreader-latin-wght-normal.woff2") format("woff2");
+        font-weight: 100 900;
+      }
+      @font-face {
+        font-family: "Instrument Sans Variable";
+        src: url("node_modules/@fontsource-variable/instrument-sans/files/instrument-sans-latin-wght-normal.woff2") format("woff2");
+        font-weight: 100 900;
+      }
+      * { margin: 0; box-sizing: border-box; }
+      body {
+        width: 1200px;
+        height: 630px;
+        background: oklch(0.981 0.007 88);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 72px;
+        font-family: "Instrument Sans Variable", system-ui, sans-serif;
+        color: oklch(0.295 0.014 72);
+      }
+      img { width: 240px; height: 240px; }
+      h1 {
+        font-family: "Newsreader Variable", Georgia, serif;
+        font-weight: 500;
+        font-size: 84px;
+        letter-spacing: -0.01em;
+        line-height: 1.05;
+      }
+      h1 .pro { color: oklch(0.47 0.105 33); font-style: italic; }
+      p {
+        margin-top: 18px;
+        font-family: "Newsreader Variable", Georgia, serif;
+        font-size: 30px;
+        color: oklch(0.46 0.013 72);
+      }
+      .tag {
+        margin-top: 30px;
+        display: inline-block;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        color: oklch(0.47 0.105 33);
+        border: 1.5px solid oklch(0.47 0.105 33 / 0.35);
+        border-radius: 999px;
+        padding: 8px 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="assets/folio-icon.svg" alt="" />
+    <div>
+      <h1>Folio <span class="pro">Pro</span></h1>
+      <p>Export, Focus Mode, Typewriter Mode, Themes.</p>
+      <span class="tag">One-time purchase · $10</span>
+    </div>
+  </body>
+</html>

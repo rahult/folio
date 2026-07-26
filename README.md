@@ -51,8 +51,10 @@ Get the latest build for your platform from
 - **Windows** — `.msi` / `.exe` (NSIS)
 - **Linux** — `.AppImage` / `.deb`
 
-> Installers are unsigned: on first launch, right-click → Open (macOS
-> Gatekeeper) or More info → Run anyway (Windows SmartScreen).
+> Installers are unsigned: on first launch, Windows shows SmartScreen
+> (More info → Run anyway). On macOS, a browser-downloaded app may be
+> refused as "damaged" — clear the quarantine flag once:
+> `xattr -dr com.apple.quarantine /Applications/Folio.app`
 
 ## Website
 
