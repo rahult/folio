@@ -66,10 +66,9 @@ npm run build:site    # static build → dist-site/
 ```
 
 Pushes to `main` that touch `site/` or `src/` rebuild and deploy it to
-GitHub Pages via `.github/workflows/site.yml`. One-time setup: in the repo
-settings, set **Pages → Source** to "GitHub Actions" and the custom domain
-to `folio.rahultrikha.com` (a `CNAME` file in `site/public/` keeps it
-pinned across deploys); at the DNS provider, `folio` is a CNAME record
+GitHub Pages via `.github/workflows/site.yml` (the workflow auto-enables
+Pages on first run; the `CNAME` file in `site/public/` pins the custom
+domain across deploys). At the DNS provider, `folio` is a CNAME record
 pointing to `rahult.github.io`.
 
 ## Built with
