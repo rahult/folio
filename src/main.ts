@@ -23,8 +23,10 @@ const pathEl = document.querySelector<HTMLSpanElement>("#doc-path")!;
 const wordCountEl = document.querySelector<HTMLSpanElement>("#word-count")!;
 const openBtn = document.querySelector<HTMLButtonElement>("#open-btn")!;
 const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
+const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
 const editorRoot = document.querySelector<HTMLElement>("#editor")!;
 const sourceEditor = document.querySelector<HTMLTextAreaElement>("#source-editor")!;
+const liveBadge = document.querySelector<HTMLSpanElement>("#live-badge")!;
 
 function displayPath(path: string | null): string {
   if (!path) return "";
@@ -76,7 +78,10 @@ async function loadContent(content: string, path: string | null): Promise<void> 
 /** Read a file from disk and load it into the editor. */
 async function loadFromPath(path: string): Promise<void> {
   const raw = await invoke<string>("read_text_file", { path });
-  await loadContent(normalizeMarkdown(raw), path);
+  const content = normalizeMarkdown(raw);
+  diskContent = content;
+  await loadContent(content, path);
+  syncWatch();
 }
 
 /** Run `next` after confirming when the current document has unsaved
@@ -176,7 +181,9 @@ async function saveFile(saveAs = false): Promise<void> {
   await invoke("write_text_file", { path, contents: content });
   doc.setPath(path);
   doc.markSaved(content);
+  diskContent = normalizeMarkdown(content);
   renderTitle();
+  syncWatch();
 }
 
 async function newFile(): Promise<void> {
@@ -187,7 +194,9 @@ async function newFile(): Promise<void> {
     );
     if (!discard) return;
   }
+  diskContent = null;
   await loadContent("", null);
+  syncWatch();
 }
 
 // ——— source code mode ———
@@ -286,6 +295,7 @@ function syncMenuState(): void {
     focus: focusMode,
     typewriter: typewriterMode,
     theme: appliedTheme,
+    floating: floatMode,
   });
 }
 
@@ -346,6 +356,65 @@ editor.onSelectionUpdate(() => {
   if (focusMode) markFocusBlock();
   if (typewriterMode) scrollCaretToTypewriterLine();
 });
+
+// ——— float mode + live file watching ———
+//
+// Floating review mode (View → Float on Top, or `folio --float file.md`):
+// the window pins above everything and the open file is polled for on-disk
+// changes, so a coding agent's rewrites appear live. The user's own unsaved
+// edits are never clobbered — watching pauses while the document is dirty.
+
+let floatMode = false;
+
+function setFloatMode(on: boolean): void {
+  floatMode = on;
+  document.body.classList.toggle("float-mode", on);
+  floatBtn.classList.toggle("active", on);
+  floatBtn.setAttribute("aria-pressed", String(on));
+  liveBadge.hidden = !on;
+  void invoke("set_window_floating", { floating: on });
+  syncMenuState();
+  syncWatch();
+}
+
+function toggleFloatMode(): void {
+  setFloatMode(!floatMode);
+}
+
+/** The file content last seen on disk (load, save, or reload baseline). */
+let diskContent: string | null = null;
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Watch only while floating with a file open. */
+function syncWatch(): void {
+  const shouldWatch = floatMode && doc.filePath !== null;
+  if (shouldWatch && watchTimer === null) {
+    watchTimer = setInterval(() => void pollDisk(), 1500);
+  } else if (!shouldWatch && watchTimer !== null) {
+    clearInterval(watchTimer);
+    watchTimer = null;
+  }
+}
+
+async function pollDisk(): Promise<void> {
+  const path = doc.filePath;
+  // Never clobber the user's own unsaved edits; watching resumes on save.
+  if (path === null || doc.dirty) return;
+  let raw: string;
+  try {
+    raw = await invoke<string>("read_text_file", { path });
+  } catch {
+    return; // file missing mid-rewrite or deleted — try again next tick
+  }
+  const incoming = normalizeMarkdown(raw);
+  if (incoming === diskContent) return;
+  diskContent = incoming;
+  await loadContent(incoming, path);
+  liveBadge.setAttribute("data-flash", "");
+  if (flashTimer !== null) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => liveBadge.removeAttribute("data-flash"), 700);
+}
 
 // ——— themes ———
 
@@ -492,6 +561,9 @@ async function runMenuAction(action: MenuAction): Promise<void> {
     case "toggle-typewriter-mode":
       toggleTypewriterMode();
       return;
+    case "toggle-float":
+      toggleFloatMode();
+      return;
     case "set-theme":
       requestTheme(action.theme);
       return;
@@ -527,6 +599,7 @@ void listen<string>("file-open", (event) => {
 
 openBtn.addEventListener("click", () => void openFile());
 saveBtn.addEventListener("click", () => void saveFile());
+floatBtn.addEventListener("click", () => toggleFloatMode());
 
 window.addEventListener("keydown", (e) => {
   if (!(e.metaKey || e.ctrlKey)) return;
@@ -547,6 +620,8 @@ void editor.create("").then(async () => {
   // document is never dirty, so no confirm is needed here.
   const pending = await invoke<string[]>("take_pending_open_paths");
   if (pending.length > 0) await loadFromPath(pending[0]);
+  // `folio --float [file.md]` — enter floating review mode on launch.
+  if (await invoke<boolean>("take_float_mode")) setFloatMode(true);
 });
 // Establish license state, then align the native menu checkmarks with
 // the actual (possibly persisted) view-mode state.

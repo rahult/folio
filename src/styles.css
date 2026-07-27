@@ -124,9 +124,39 @@ body {
   flex: 0 0 auto;
 }
 
-/* the title sits optically centered; the balance block mirrors the actions */
-.toolbar-balance {
+/* the title sits optically centered; the end block mirrors the actions */
+.toolbar-end {
   flex: 1 1 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* float-on-top pin — quiet until active, when it takes the accent */
+#float-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  transition:
+    background-color 140ms ease-out,
+    color 140ms ease-out;
+}
+
+#float-btn:hover {
+  color: var(--ink);
+  background: var(--paper-sunken);
+}
+
+#float-btn.active {
+  color: var(--accent);
+}
+
+#float-btn.active:hover {
+  color: var(--accent-strong);
 }
 
 .toolbar-actions {
@@ -438,6 +468,49 @@ body.is-dirty #doc-title::before {
 #word-count {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
+}
+
+/* live badge — shown in float mode while the open file is being watched
+   for on-disk changes (agent review). A quiet accent dot; it pulses once
+   when a reload lands. */
+#live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+/* display:inline-flex above would defeat the hidden attribute */
+#live-badge[hidden] {
+  display: none;
+}
+
+#live-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+#live-badge[data-flash] {
+  animation: live-reload 0.7s ease-out;
+}
+
+@keyframes live-reload {
+  0% { opacity: 0.15; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #live-badge[data-flash] {
+    animation: none;
+  }
 }
 
 /* ——— scrollbars ——— */

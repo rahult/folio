@@ -24,6 +24,31 @@
 - **Zoom** — ⇧⌘= / ⇧⌘- / ⇧⌘0
 - Small footprint (~5 MB DMG), no Electron
 
+## Reviewing agent output (Float on Top)
+
+Folio doubles as a live review pane for coding agents (Kimi, Claude Code,
+Codex, …) — no plugins or API keys needed, the file is the seam:
+
+```bash
+folio --float plan.md        # or -f; opens plan.md in a floating window
+```
+
+The window pins above everything else at a compact review size, and while
+it floats Folio watches the open file: every time the agent rewrites it,
+the rendered document reloads in place and the **live** badge in the status
+bar pulses. Your own unsaved edits are never clobbered — watching pauses
+while the document is dirty and resumes when you save.
+
+A typical agent loop looks like:
+
+```bash
+kimi -p "write the migration plan to docs/plan.md" &
+folio --float docs/plan.md   # watch it render as the agent works
+```
+
+Any window can float: **View → Float on Top** (⌥⌘W) or the pin button at
+the top right of the window — click it again to return to a normal window.
+
 ## Folio Pro
 
 Pro features are unlocked with a license key (Folio → Enter License…):

@@ -18,13 +18,32 @@ const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
 #[derive(Default)]
 struct PendingOpens(Mutex<Vec<String>>);
 
-/// Filter CLI arguments down to existing markdown files. Windows and Linux
-/// pass the opened file as argv[1]; macOS may inject `-psn_…`, which the
-/// extension filter drops naturally.
-fn markdown_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
-    args.into_iter()
+/// `--float` was passed on the command line: the frontend asks once on
+/// startup and switches the window into floating review mode.
+#[derive(Default)]
+struct FloatRequested(Mutex<bool>);
+
+/// CLI invocation split into markdown files to open and whether the
+/// floating review window was requested.
+#[derive(Default)]
+struct CliOptions {
+    paths: Vec<String>,
+    float: bool,
+}
+
+/// Filter CLI arguments down to existing markdown files, lifting out the
+/// `--float` / `-f` flag. Windows and Linux pass the opened file as argv[1];
+/// macOS may inject `-psn_…`, which the extension filter drops naturally.
+fn parse_cli_args(args: impl IntoIterator<Item = String>) -> CliOptions {
+    let mut float = false;
+    let paths = args
+        .into_iter()
         .skip(1)
         .filter(|arg| {
+            if arg == "--float" || arg == "-f" {
+                float = true;
+                return false;
+            }
             let path = std::path::Path::new(arg);
             path.is_file()
                 && path
@@ -33,7 +52,8 @@ fn markdown_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
                     .map(|ext| MARKDOWN_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
                     .unwrap_or(false)
         })
-        .collect()
+        .collect();
+    CliOptions { paths, float }
 }
 
 /// Drain the queue of paths the OS asked us to open before the webview was
@@ -42,6 +62,92 @@ fn markdown_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
 fn take_pending_open_paths(state: tauri::State<PendingOpens>) -> Vec<String> {
     std::mem::take(&mut *state.0.lock().unwrap())
 }
+
+/// Whether `--float` was passed on the command line. Called once by the
+/// frontend on startup; the flag is cleared by reading it.
+#[tauri::command]
+fn take_float_mode(state: tauri::State<FloatRequested>) -> bool {
+    std::mem::take(&mut *state.0.lock().unwrap())
+}
+
+/// Toggle the floating review chrome: always-on-top while floating; when
+/// entering, park the window at the monitor's top-right at a compact review
+/// size (the size is left alone when leaving — the user can resize freely
+/// either way).
+#[tauri::command]
+fn set_window_floating(app: AppHandle<Wry>, floating: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    window
+        .set_always_on_top(floating)
+        .map_err(|e| e.to_string())?;
+    // A running tiling WM owns window frames and snaps programmatic resizes
+    // back — ask it to float/retile us first so the size below sticks.
+    aerospace_layout(floating);
+    if floating {
+        // A zoomed window ignores programmatic resizes on macOS — leave the
+        // zoomed state first (best effort: macOS window *tiling* owns the
+        // frame outright and even this is ignored; the user can un-tile by
+        // dragging the window once).
+        if window.is_maximized().unwrap_or(false) {
+            let _ = window.unmaximize();
+        }
+        // Position before sizing: position-then-size survives window states
+        // where a bare set_size is ignored.
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let scale = monitor.scale_factor();
+            let margin = (20.0 * scale) as i32;
+            let width = (420.0 * scale) as i32;
+            let x = monitor.size().width as i32 - width - margin;
+            let y = (44.0 * scale) as i32;
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+        }
+        window
+            .set_size(tauri::LogicalSize::new(420.0, 640.0))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Best effort: if AeroSpace (macOS tiling WM) is managing this window, ask
+/// it to float/retile the window. Silent no-op when the CLI is absent.
+#[cfg(target_os = "macos")]
+fn aerospace_layout(floating: bool) {
+    let pid = std::process::id().to_string();
+    let Ok(out) = std::process::Command::new("aerospace")
+        .args([
+            "list-windows",
+            "--pid",
+            &pid,
+            "--monitor",
+            "all",
+            "--format",
+            "%{window-id}",
+        ])
+        .output()
+    else {
+        return;
+    };
+    if !out.status.success() {
+        return;
+    }
+    let id = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    if id.is_empty() {
+        return;
+    }
+    let _ = std::process::Command::new("aerospace")
+        .args([
+            "layout",
+            "--window-id",
+            &id,
+            if floating { "floating" } else { "tiling" },
+        ])
+        .output();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn aerospace_layout(_floating: bool) {}
 
 /// Ask LaunchServices to route markdown files to Folio (macOS only — Windows
 /// and Linux users set default apps through the OS; the bundle's declared
@@ -141,11 +247,12 @@ fn print_document(app: AppHandle<Wry>) -> Result<(), String> {
 /// The frontend owns view-mode state (gating decides what actually
 /// changed); it pushes the truth back so checkmarks never drift.
 #[tauri::command]
-fn sync_menu_state(app: AppHandle<Wry>, focus: bool, typewriter: bool, theme: String) {
+fn sync_menu_state(app: AppHandle<Wry>, focus: bool, typewriter: bool, theme: String, floating: bool) {
     let Some(menu) = app.menu() else { return };
     let checks = [
         ("view.focus-mode", focus),
         ("view.typewriter-mode", typewriter),
+        ("view.float-on-top", floating),
         ("view.theme-paper", theme == "paper"),
         ("view.theme-night", theme == "night"),
         ("view.theme-newsprint", theme == "newsprint"),
@@ -424,6 +531,14 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
             Some("Alt+CmdOrCtrl+Y"),
             false,
         )?)
+        .separator()
+        .item(&check_item(
+            app,
+            "view.float-on-top",
+            "Float on Top",
+            Some("Alt+CmdOrCtrl+W"),
+            false,
+        )?)
         .item(
             &SubmenuBuilder::new(app, "Themes")
                 .item(&check_item(app, "view.theme-paper", "Paper", None, true)?)
@@ -478,8 +593,11 @@ pub fn run() {
     // Managed before build: on a macOS cold start the Opened event can fire
     // before setup runs, and a state registered only in setup would be too
     // late to catch it. Seeded with CLI args (Windows/Linux file-open).
+    let cli = parse_cli_args(std::env::args());
     let pending = PendingOpens::default();
-    *pending.0.lock().unwrap() = markdown_args(std::env::args());
+    *pending.0.lock().unwrap() = cli.paths;
+    let float_requested = FloatRequested::default();
+    *float_requested.0.lock().unwrap() = cli.float;
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -487,6 +605,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(pending)
+        .manage(float_requested)
         .menu(|app| build_menu(app, false))
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
@@ -508,6 +627,8 @@ pub fn run() {
             print_document,
             sync_menu_state,
             take_pending_open_paths,
+            take_float_mode,
+            set_window_floating,
             register_default_markdown_handler
         ])
         .setup(|app| {
@@ -593,13 +714,13 @@ mod tests {
     }
 
     #[test]
-    fn markdown_args_keeps_existing_markdown_files() {
+    fn parse_cli_args_keeps_existing_markdown_files() {
         let md = temp_file("args", "md");
         let txt = temp_file("args", "txt");
         fs::write(&md, "# hi").unwrap();
         fs::write(&txt, "not markdown").unwrap();
 
-        let found = markdown_args(
+        let cli = parse_cli_args(
             [
                 "folio".to_string(),
                 md.to_string_lossy().into_owned(),
@@ -610,22 +731,44 @@ mod tests {
             .into_iter(),
         );
 
-        assert_eq!(found, vec![md.to_string_lossy().into_owned()]);
+        assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
+        assert!(!cli.float);
 
         fs::remove_file(&md).ok();
         fs::remove_file(&txt).ok();
     }
 
     #[test]
-    fn markdown_args_matches_extensions_case_insensitively() {
+    fn parse_cli_args_matches_extensions_case_insensitively() {
         let upper = temp_file("args-upper", "MD");
         fs::write(&upper, "# hi").unwrap();
 
-        let found =
-            markdown_args(["folio".to_string(), upper.to_string_lossy().into_owned()].into_iter());
+        let cli =
+            parse_cli_args(["folio".to_string(), upper.to_string_lossy().into_owned()].into_iter());
 
-        assert_eq!(found, vec![upper.to_string_lossy().into_owned()]);
+        assert_eq!(cli.paths, vec![upper.to_string_lossy().into_owned()]);
 
         fs::remove_file(&upper).ok();
+    }
+
+    #[test]
+    fn parse_cli_args_lifts_out_the_float_flag() {
+        let md = temp_file("args-float", "md");
+        fs::write(&md, "# hi").unwrap();
+
+        for flag in ["--float", "-f"] {
+            let cli = parse_cli_args(
+                [
+                    "folio".to_string(),
+                    flag.to_string(),
+                    md.to_string_lossy().into_owned(),
+                ]
+                .into_iter(),
+            );
+            assert!(cli.float, "{flag} should request float mode");
+            assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
+        }
+
+        fs::remove_file(&md).ok();
     }
 }

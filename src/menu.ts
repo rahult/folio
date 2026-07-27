@@ -18,6 +18,7 @@ export type MenuAction =
   | { kind: "toggle-source-mode" }
   | { kind: "toggle-focus-mode" }
   | { kind: "toggle-typewriter-mode" }
+  | { kind: "toggle-float" }
   | { kind: "set-theme"; theme: Theme }
   | { kind: "zoom"; direction: ZoomDirection }
   | { kind: "enter-license" }
@@ -72,6 +73,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-focus-mode" };
     case "view.typewriter-mode":
       return { kind: "toggle-typewriter-mode" };
+    case "view.float-on-top":
+      return { kind: "toggle-float" };
     case "view.theme-paper":
       return { kind: "set-theme", theme: "paper" };
     case "view.theme-night":

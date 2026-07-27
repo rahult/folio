@@ -27,7 +27,30 @@
         </button>
       </div>
       <span id="doc-title">Untitled</span>
-      <div class="toolbar-balance" aria-hidden="true"></div>
+      <div class="toolbar-end">
+        <button
+          id="float-btn"
+          type="button"
+          title="Float on Top (⌥⌘W)"
+          aria-label="Float on Top"
+          aria-pressed="false"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 4h6l-1 7 3 3v2H7v-2l3-3-1-7z" />
+            <path d="M12 16v5" />
+          </svg>
+        </button>
+      </div>
     </header>
     <main id="editor"></main>
     <textarea
@@ -38,6 +61,7 @@
     ></textarea>
     <footer id="statusbar">
       <span id="doc-path"></span>
+      <span id="live-badge" hidden title="Floating on top — reloading when the file changes on disk">live</span>
       <span id="word-count"></span>
     </footer>
     <div id="license-overlay" hidden>
