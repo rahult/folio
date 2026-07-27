@@ -1,12 +1,90 @@
 use std::fs;
+use std::sync::Mutex;
 
 use tauri::menu::{
     AboutMetadata, CheckMenuItem, CheckMenuItemBuilder, Menu, MenuBuilder, MenuItem,
     MenuItemBuilder, MenuItemKind, Submenu, SubmenuBuilder,
 };
-use tauri::{AppHandle, Emitter, Manager, Runtime, Wry};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Wry};
 
 pub mod license;
+
+/// File extensions Folio opens; mirrors `fileAssociations` in tauri.conf.json.
+const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
+
+/// Paths handed to us by the OS before the webview is ready to receive
+/// "file-open" events (cold start via Finder double-click or CLI argument).
+/// The frontend drains this queue on startup.
+#[derive(Default)]
+struct PendingOpens(Mutex<Vec<String>>);
+
+/// Filter CLI arguments down to existing markdown files. Windows and Linux
+/// pass the opened file as argv[1]; macOS may inject `-psn_…`, which the
+/// extension filter drops naturally.
+fn markdown_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
+    args.into_iter()
+        .skip(1)
+        .filter(|arg| {
+            let path = std::path::Path::new(arg);
+            path.is_file()
+                && path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| MARKDOWN_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
+                    .unwrap_or(false)
+        })
+        .collect()
+}
+
+/// Drain the queue of paths the OS asked us to open before the webview was
+/// listening. Called once by the frontend on startup.
+#[tauri::command]
+fn take_pending_open_paths(state: tauri::State<PendingOpens>) -> Vec<String> {
+    std::mem::take(&mut *state.0.lock().unwrap())
+}
+
+/// Ask LaunchServices to route markdown files to Folio (macOS only — Windows
+/// and Linux users set default apps through the OS; the bundle's declared
+/// file associations make Folio appear as a candidate there).
+#[tauri::command]
+fn register_default_markdown_handler(app: AppHandle<Wry>) -> Result<(), String> {
+    set_default_markdown_handler(&app.config().identifier)
+}
+
+#[cfg(target_os = "macos")]
+fn set_default_markdown_handler(bundle_id: &str) -> Result<(), String> {
+    use core_foundation::base::TCFType;
+    use core_foundation::string::{CFString, CFStringRef};
+
+    extern "C" {
+        fn LSSetDefaultRoleHandlerForContentType(
+            content_type: CFStringRef,
+            role: u32,
+            handler_bundle_id: CFStringRef,
+        ) -> i32;
+    }
+    const LS_ROLES_ALL: u32 = u32::MAX;
+
+    let uti = CFString::new("net.daringfireball.markdown");
+    let bundle = CFString::new(bundle_id);
+    let status = unsafe {
+        LSSetDefaultRoleHandlerForContentType(
+            uti.as_concrete_TypeRef(),
+            LS_ROLES_ALL,
+            bundle.as_concrete_TypeRef(),
+        )
+    };
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(format!("LaunchServices returned status {status}"))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_default_markdown_handler(_bundle_id: &str) -> Result<(), String> {
+    Err("setting the default app is only supported on macOS; use your OS settings".to_string())
+}
 
 /// Read a UTF-8 text file from disk.
 #[tauri::command]
@@ -156,6 +234,12 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
 
     let app_menu = SubmenuBuilder::new(app, "Folio")
         .item(&menu_item(app, "app.enter-license", "Enter License…", None)?)
+        .item(&menu_item(
+            app,
+            "app.check-updates",
+            "Check for Updates…",
+            None,
+        )?)
         .separator()
         .about(Some(AboutMetadata::default()))
         .separator()
@@ -168,7 +252,7 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
         .quit()
         .build()?;
 
-    let file_menu = SubmenuBuilder::new(app, "File")
+    let mut file_builder = SubmenuBuilder::new(app, "File")
         .item(&menu_item(app, "file.new", "New", Some("CmdOrCtrl+N"))?)
         .item(&menu_item(app, "file.open", "Open…", Some("CmdOrCtrl+O"))?)
         .separator()
@@ -190,10 +274,16 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
                 )?)
                 .item(&menu_item(app, "file.export-pdf", "PDF…", None)?)
                 .build()?,
-        )
-        .separator()
-        .close_window()
-        .build()?;
+        );
+    if cfg!(target_os = "macos") {
+        file_builder = file_builder.separator().item(&menu_item(
+            app,
+            "file.make-default",
+            "Set as Default Markdown App…",
+            None,
+        )?);
+    }
+    let file_menu = file_builder.separator().close_window().build()?;
 
     // Predefined edit items dispatch through the native responder chain,
     // which is what makes undo/cut/copy/paste work inside WKWebView.
@@ -385,9 +475,18 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Managed before build: on a macOS cold start the Opened event can fire
+    // before setup runs, and a state registered only in setup would be too
+    // late to catch it. Seeded with CLI args (Windows/Linux file-open).
+    let pending = PendingOpens::default();
+    *pending.0.lock().unwrap() = markdown_args(std::env::args());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .manage(pending)
         .menu(|app| build_menu(app, false))
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
@@ -407,7 +506,9 @@ pub fn run() {
             get_license_state,
             clear_license,
             print_document,
-            sync_menu_state
+            sync_menu_state,
+            take_pending_open_paths,
+            register_default_markdown_handler
         ])
         .setup(|app| {
             // Now the path resolver is managed; rebuild the menu with the
@@ -415,8 +516,23 @@ pub fn run() {
             refresh_menu_license(app.handle());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // macOS sends files opened via Finder here — including the cold
+            // start that launched the app. Queue every path (the webview may
+            // not exist yet) and also emit for an already-running frontend.
+            if let RunEvent::Opened { urls } = event {
+                for url in urls {
+                    let Ok(path) = url.to_file_path() else { continue };
+                    let path = path.to_string_lossy().into_owned();
+                    if let Some(state) = app.try_state::<PendingOpens>() {
+                        state.0.lock().unwrap().push(path.clone());
+                    }
+                    let _ = app.emit("file-open", path);
+                }
+            }
+        });
 }
 
 #[cfg(test)]
@@ -458,5 +574,50 @@ mod tests {
         assert_eq!(read_text_file(path_str.clone()).unwrap(), "second");
 
         std::fs::remove_file(&path).ok();
+    }
+
+    /// Like `temp_path`, but the extension stays last (the helper above
+    /// appends the pid after the whole name, hiding the extension).
+    /// `stem` keeps parallel tests off each other's files (APFS is
+    /// case-insensitive, so differing only in extension case collides).
+    fn temp_file(stem: &str, ext: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("folio-test-{stem}-{}.{ext}", std::process::id()))
+    }
+
+    #[test]
+    fn markdown_args_keeps_existing_markdown_files() {
+        let md = temp_file("args", "md");
+        let txt = temp_file("args", "txt");
+        fs::write(&md, "# hi").unwrap();
+        fs::write(&txt, "not markdown").unwrap();
+
+        let found = markdown_args(
+            [
+                "folio".to_string(),
+                md.to_string_lossy().into_owned(),
+                txt.to_string_lossy().into_owned(),
+                "-psn_0_12345".to_string(),
+                temp_file("args", "missing.md").to_string_lossy().into_owned(),
+            ]
+            .into_iter(),
+        );
+
+        assert_eq!(found, vec![md.to_string_lossy().into_owned()]);
+
+        fs::remove_file(&md).ok();
+        fs::remove_file(&txt).ok();
+    }
+
+    #[test]
+    fn markdown_args_matches_extensions_case_insensitively() {
+        let upper = temp_file("args-upper", "MD");
+        fs::write(&upper, "# hi").unwrap();
+
+        let found =
+            markdown_args(["folio".to_string(), upper.to_string_lossy().into_owned()].into_iter());
+
+        assert_eq!(found, vec![upper.to_string_lossy().into_owned()]);
+
+        fs::remove_file(&upper).ok();
     }
 }

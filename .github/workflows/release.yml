@@ -112,7 +112,8 @@ jobs:
 
       # With the certificate imported and APPLE_* env vars set, tauri-action
       # signs the app with the Developer ID and notarizes the dmg via
-      # notarytool before attaching it to the release.
+      # notarytool before attaching it to the release. TAURI_SIGNING_* signs
+      # the updater artifacts (latest.json + .sig) for auto-update.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,6 +121,8 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ needs.bump.outputs.tag }}
           releaseName: "Folio ${{ needs.bump.outputs.tag }}"

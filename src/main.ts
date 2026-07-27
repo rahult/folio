@@ -3,7 +3,9 @@ import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { confirm, message, ask, open, save } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
 import { buildHtmlDocument, htmlExportTarget } from "./export";
@@ -71,6 +73,25 @@ async function loadContent(content: string, path: string | null): Promise<void> 
   renderTitle();
 }
 
+/** Read a file from disk and load it into the editor. */
+async function loadFromPath(path: string): Promise<void> {
+  const raw = await invoke<string>("read_text_file", { path });
+  await loadContent(normalizeMarkdown(raw), path);
+}
+
+/** Run `next` after confirming when the current document has unsaved
+ *  changes; a fresh/untouched document proceeds without prompting. */
+async function guardDirty(next: () => Promise<void>): Promise<void> {
+  if (doc.dirty) {
+    const discard = await confirm(
+      "You have unsaved changes. Discard them and open the other file?",
+      { title: "Open File", kind: "warning", okLabel: "Discard", cancelLabel: "Cancel" },
+    );
+    if (!discard) return;
+  }
+  await next();
+}
+
 async function openFile(): Promise<void> {
   const selected = await open({
     multiple: false,
@@ -78,8 +99,66 @@ async function openFile(): Promise<void> {
   });
   if (typeof selected !== "string") return;
 
-  const raw = await invoke<string>("read_text_file", { path: selected });
-  await loadContent(normalizeMarkdown(raw), selected);
+  await loadFromPath(selected);
+}
+
+// ——— auto-update ———
+
+/** Check GitHub Releases for a newer version. The automatic startup check
+ *  (manual = false) stays silent when offline or already up to date. */
+async function checkForUpdates(manual: boolean): Promise<void> {
+  let update;
+  try {
+    update = await check();
+  } catch (e) {
+    if (manual) {
+      await message(typeof e === "string" ? e : "Could not check for updates.", {
+        title: "Check for Updates",
+        kind: "error",
+      });
+    }
+    return;
+  }
+  if (update === null) {
+    if (manual) {
+      await message("You're on the latest version of Folio.", {
+        title: "Check for Updates",
+        kind: "info",
+      });
+    }
+    return;
+  }
+  const install = await ask(
+    `Folio ${update.version} is available (you have ${update.currentVersion}). Install and relaunch?`,
+    { title: "Update Available", kind: "info", okLabel: "Install", cancelLabel: "Later" },
+  );
+  if (!install) return;
+  try {
+    await update.downloadAndInstall();
+  } catch (e) {
+    await message(typeof e === "string" ? e : "The update failed to install.", {
+      title: "Update Failed",
+      kind: "error",
+    });
+    return;
+  }
+  await relaunch();
+}
+
+/** Register Folio as the default app for markdown files (macOS menu item). */
+async function makeDefaultApp(): Promise<void> {
+  try {
+    await invoke("register_default_markdown_handler");
+    await message("Markdown files will now open in Folio.", {
+      title: "Default Markdown App",
+      kind: "info",
+    });
+  } catch (e) {
+    await message(typeof e === "string" ? e : "Could not set Folio as the default app.", {
+      title: "Default Markdown App",
+      kind: "error",
+    });
+  }
 }
 
 async function saveFile(saveAs = false): Promise<void> {
@@ -422,6 +501,10 @@ async function runMenuAction(action: MenuAction): Promise<void> {
     case "enter-license":
       openLicenseDialog();
       return;
+    case "make-default-app":
+      return makeDefaultApp();
+    case "check-updates":
+      return checkForUpdates(true);
     case "editor-command":
       // Formatting commands operate on the WYSIWYG document only.
       if (!sourceMode) editor.runCommand(action.command);
@@ -432,6 +515,12 @@ async function runMenuAction(action: MenuAction): Promise<void> {
 void listen<string>("menu", (event) => {
   const action = actionForMenuId(event.payload);
   if (action) void runMenuAction(action);
+});
+
+// Files opened via Finder while the app is running arrive as events; each
+// one replaces the current document (after a dirty check).
+void listen<string>("file-open", (event) => {
+  void guardDirty(() => loadFromPath(event.payload));
 });
 
 // ——— toolbar + fallback shortcuts (dev in browser has no native menu) ———
@@ -451,7 +540,16 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-void editor.create("").then(renderTitle);
+void editor.create("").then(async () => {
+  renderTitle();
+  // Cold-start opens (Finder double-click, CLI argument) were queued by
+  // Rust before the webview existed; drain and load the first one. A fresh
+  // document is never dirty, so no confirm is needed here.
+  const pending = await invoke<string[]>("take_pending_open_paths");
+  if (pending.length > 0) await loadFromPath(pending[0]);
+});
 // Establish license state, then align the native menu checkmarks with
 // the actual (possibly persisted) view-mode state.
 void updateLicenseUi().then(syncMenuState);
+// Silent update check on launch; failures (offline, no release) are ignored.
+void checkForUpdates(false);

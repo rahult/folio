@@ -21,6 +21,8 @@ export type MenuAction =
   | { kind: "set-theme"; theme: Theme }
   | { kind: "zoom"; direction: ZoomDirection }
   | { kind: "enter-license" }
+  | { kind: "make-default-app" }
+  | { kind: "check-updates" }
   | { kind: "editor-command"; command: EditorCommand };
 
 const EDITOR_COMMAND_IDS: Record<string, EditorCommand> = {
@@ -78,6 +80,10 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "set-theme", theme: "newsprint" };
     case "app.enter-license":
       return { kind: "enter-license" };
+    case "app.check-updates":
+      return { kind: "check-updates" };
+    case "file.make-default":
+      return { kind: "make-default-app" };
     case "view.source-mode":
       return { kind: "toggle-source-mode" };
     case "view.zoom-in":

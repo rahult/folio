@@ -7,6 +7,7 @@ describe("actionForMenuId", () => {
     expect(actionForMenuId("file.open")).toEqual({ kind: "open-file" });
     expect(actionForMenuId("file.save")).toEqual({ kind: "save-file" });
     expect(actionForMenuId("file.save-as")).toEqual({ kind: "save-file-as" });
+    expect(actionForMenuId("file.make-default")).toEqual({ kind: "make-default-app" });
   });
 
   it("maps paragraph menu ids to editor commands", () => {
@@ -96,6 +97,7 @@ describe("actionForMenuId", () => {
 
   it("maps license, export, and view-mode menu ids", () => {
     expect(actionForMenuId("app.enter-license")).toEqual({ kind: "enter-license" });
+    expect(actionForMenuId("app.check-updates")).toEqual({ kind: "check-updates" });
     expect(actionForMenuId("file.export-html")).toEqual({ kind: "export-html" });
     expect(actionForMenuId("file.export-pdf")).toEqual({ kind: "export-pdf" });
     expect(actionForMenuId("view.focus-mode")).toEqual({ kind: "toggle-focus-mode" });
