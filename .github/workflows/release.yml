@@ -49,13 +49,15 @@ jobs:
           npm version "${{ inputs.version }}" --no-git-tag-version
           node -e 'const fs=require("fs");const p="src-tauri/tauri.conf.json";const c=JSON.parse(fs.readFileSync(p,"utf8"));c.version="${{ inputs.version }}";fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n")'
           sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' src-tauri/Cargo.toml
+          # Keep the lockfile in sync with the bumped crate version.
+          cargo metadata --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
 
       - name: Commit, tag, push
         if: github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
           git commit -m "Release v${{ inputs.version }}"
           git tag "v${{ inputs.version }}"
           git push origin HEAD:main
