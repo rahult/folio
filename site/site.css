@@ -315,6 +315,15 @@ section h2 {
   color: var(--ink-faint);
 }
 
+.all-downloads {
+  margin: 0 0 1.2rem;
+  font-size: 0.95rem;
+}
+
+.platform-list a {
+  color: var(--accent);
+}
+
 /* ——— footer ——— */
 
 .site-footer {

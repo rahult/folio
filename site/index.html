@@ -37,13 +37,15 @@
         <div class="hero-actions">
           <a
             class="btn btn-primary"
+            id="dl-hero"
             href="https://github.com/rahult/folio/releases/latest"
-            >Download Folio</a
+            >Download for macOS</a
           >
           <a class="btn" href="#demo">Try it in your browser</a>
         </div>
         <p class="hero-note">
-          macOS · Windows · Linux — free, open source, ~5 MB, no Electron
+          Apple Silicon · free, open source, ~5 MB, no Electron —
+          <a href="#download">all platforms</a>
         </p>
       </section>
 
@@ -138,16 +140,35 @@
       <section id="download" class="download">
         <h2>Download</h2>
         <p class="section-lede">
-          Grab the latest build from
-          <a href="https://github.com/rahult/folio/releases/latest"
-            >GitHub Releases</a
-          >:
+          Direct downloads for the latest release
+          (<span id="latest-version">v0.2.0</span>) — no detours, the file
+          starts downloading immediately:
         </p>
         <ul class="platform-list">
-          <li><strong>macOS</strong> — <code>.dmg</code> (Apple Silicon)</li>
-          <li><strong>Windows</strong> — <code>.msi</code> / <code>.exe</code></li>
-          <li><strong>Linux</strong> — <code>.AppImage</code> / <code>.deb</code></li>
+          <li>
+            <strong>macOS</strong> (Apple Silicon) —
+            <a id="dl-macos" href="https://github.com/rahult/folio/releases/latest"><code>.dmg</code></a>
+          </li>
+          <li>
+            <strong>Windows</strong> —
+            <a id="dl-win-msi" href="https://github.com/rahult/folio/releases/latest"><code>.msi</code></a>
+            /
+            <a id="dl-win-exe" href="https://github.com/rahult/folio/releases/latest"><code>.exe</code></a>
+          </li>
+          <li>
+            <strong>Linux</strong> —
+            <a id="dl-appimage" href="https://github.com/rahult/folio/releases/latest"><code>.AppImage</code></a>
+            /
+            <a id="dl-deb" href="https://github.com/rahult/folio/releases/latest"><code>.deb</code></a>
+            /
+            <a id="dl-rpm" href="https://github.com/rahult/folio/releases/latest"><code>.rpm</code></a>
+          </li>
         </ul>
+        <p class="all-downloads">
+          <a href="https://github.com/rahult/folio/releases"
+            >See all downloads on GitHub Releases →</a
+          >
+        </p>
         <p class="fine-print">
           Installers are unsigned: on Windows, SmartScreen → More info →
           Run anyway. On macOS, if the app is refused as "damaged" after
@@ -165,5 +186,45 @@
         >.
       </p>
     </footer>
+
+    <script>
+      // Point every download link at the asset of the latest published
+      // release, so buttons start the file download directly. Falls back
+      // to the releases page if the API is unreachable or rate-limited.
+      (async () => {
+        const targets = {
+          "dl-hero": /aarch64\.dmg$/,
+          "dl-macos": /aarch64\.dmg$/,
+          "dl-win-msi": /\.msi$/,
+          "dl-win-exe": /x64-setup\.exe$/,
+          "dl-appimage": /\.AppImage$/,
+          "dl-deb": /\.deb$/,
+          "dl-rpm": /\.rpm$/,
+        };
+        try {
+          const res = await fetch(
+            "https://api.github.com/repos/rahult/folio/releases/latest",
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          for (const [id, pattern] of Object.entries(targets)) {
+            const el = document.getElementById(id);
+            const asset = (data.assets || []).find((a) =>
+              pattern.test(a.name),
+            );
+            if (el && asset) el.href = asset.browser_download_url;
+          }
+          if (data.tag_name) {
+            const hero = document.getElementById("dl-hero");
+            if (hero) hero.textContent = `Download for macOS · ${data.tag_name}`;
+            const ver = document.getElementById("latest-version");
+            if (ver) ver.textContent = data.tag_name;
+          }
+        } catch {
+          // Offline or rate-limited: fallback hrefs already point at the
+          // releases page.
+        }
+      })();
+    </script>
   </body>
 </html>
