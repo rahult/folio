@@ -518,22 +518,30 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            // macOS sends files opened via Finder here — including the cold
-            // start that launched the app. Queue every path (the webview may
-            // not exist yet) and also emit for an already-running frontend.
-            if let RunEvent::Opened { urls } = event {
-                for url in urls {
-                    let Ok(path) = url.to_file_path() else { continue };
-                    let path = path.to_string_lossy().into_owned();
-                    if let Some(state) = app.try_state::<PendingOpens>() {
-                        state.0.lock().unwrap().push(path.clone());
-                    }
-                    let _ = app.emit("file-open", path);
-                }
-            }
-        });
+        .run(handle_run_event);
 }
+
+/// Handle lifecycle events from the event loop. `RunEvent::Opened` only
+/// exists on macOS/iOS, so the whole handler is cfg-gated.
+#[cfg(target_os = "macos")]
+fn handle_run_event(app: &AppHandle<Wry>, event: RunEvent) {
+    // macOS sends files opened via Finder here — including the cold start
+    // that launched the app. Queue every path (the webview may not exist
+    // yet) and also emit for an already-running frontend.
+    if let RunEvent::Opened { urls } = event {
+        for url in urls {
+            let Ok(path) = url.to_file_path() else { continue };
+            let path = path.to_string_lossy().into_owned();
+            if let Some(state) = app.try_state::<PendingOpens>() {
+                state.0.lock().unwrap().push(path.clone());
+            }
+            let _ = app.emit("file-open", path);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn handle_run_event(_app: &AppHandle<Wry>, _event: RunEvent) {}
 
 #[cfg(test)]
 mod tests {
