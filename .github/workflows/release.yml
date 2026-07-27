@@ -81,6 +81,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Cache cargo registry + target dir per platform; Rust dependency
+      # compilation dominates the build's runtime.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.platform }}
+
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |

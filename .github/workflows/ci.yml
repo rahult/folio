@@ -19,6 +19,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Cache cargo registry + target dir; Rust dependency compilation
+      # dominates the job's runtime.
+      - uses: Swatinem/rust-cache@v2
+
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
