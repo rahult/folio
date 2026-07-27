@@ -82,6 +82,45 @@ th, td {
 }
 th { background: oklch(0.961 0.009 88); }
 hr { border: none; border-top: 1px solid oklch(0.913 0.008 85); margin: 2em 0; }
+
+/* The preview reuses the live editor DOM. Editing chrome is stripped on
+   export, but hide anything left, and render the CodeMirror-based code
+   block like a plain pre block (the iframe carries no Crepe styles). */
+.milkdown [data-show],
+.milkdown .tools,
+.milkdown-code-block .cm-gutters {
+  display: none;
+}
+.milkdown-code-block {
+  background: oklch(0.961 0.009 88);
+  border-radius: 8px;
+  margin: 1em 0;
+  padding: 1em 1.2em;
+  overflow-x: auto;
+}
+.milkdown-code-block .cm-content {
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.milkdown-code-block .cm-line { white-space: pre-wrap; }
+.table-wrapper { overflow-x: auto; }
+
+/* Crepe's list items are flex rows (bullet label + content); without the
+   Crepe stylesheet they stack, so restate the layout here. */
+.milkdown-list-item-block { list-style: none; }
+.milkdown-list-item-block > .list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+.milkdown-list-item-block .label-wrapper { flex: 0 0 auto; }
+.milkdown-list-item-block .label-wrapper svg {
+  width: 0.9em;
+  height: 0.9em;
+  fill: currentColor;
+}
+.milkdown-list-item-block .children { flex: 1; min-width: 0; }
 `;
 
 const editorRoot = document.querySelector<HTMLElement>("#demo-editor")!;
@@ -90,9 +129,9 @@ const writeTab = document.querySelector<HTMLButtonElement>("#tab-write")!;
 const previewTab = document.querySelector<HTMLButtonElement>("#tab-preview")!;
 
 const editor = new MarkdownEditor(editorRoot, () => {});
-void editor.create(SAMPLE_MARKDOWN);
+const editorReady = editor.create(SAMPLE_MARKDOWN);
 
-function activate(view: "write" | "preview"): void {
+async function activate(view: "write" | "preview"): Promise<void> {
   const isWrite = view === "write";
   writeTab.classList.toggle("active", isWrite);
   previewTab.classList.toggle("active", !isWrite);
@@ -101,6 +140,9 @@ function activate(view: "write" | "preview"): void {
   editorRoot.hidden = !isWrite;
   previewFrame.hidden = isWrite;
   if (!isWrite) {
+    // Flipping to the preview before the editor finished creating would
+    // export an empty page — wait for the initial create() to settle.
+    await editorReady;
     // Re-render on every switch so the preview always reflects the draft.
     previewFrame.srcdoc = buildHtmlDocument(
       "Folio — preview",
@@ -110,5 +152,5 @@ function activate(view: "write" | "preview"): void {
   }
 }
 
-writeTab.addEventListener("click", () => activate("write"));
-previewTab.addEventListener("click", () => activate("preview"));
+writeTab.addEventListener("click", () => void activate("write"));
+previewTab.addEventListener("click", () => void activate("preview"));

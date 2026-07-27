@@ -19,7 +19,11 @@ import {
   toggleStrongCommand,
   wrapInBlockTypeCommand,
 } from "@milkdown/kit/preset/commonmark";
-import { insertTableCommand, toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
+import {
+  columnResizingPlugin,
+  insertTableCommand,
+  toggleStrikethroughCommand,
+} from "@milkdown/kit/preset/gfm";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from "./commands";
 
@@ -71,6 +75,10 @@ export class MarkdownEditor {
       });
     });
 
+    // GFM's column-resizing plugin is exported but not part of the preset's
+    // default plugin set — enable it so table columns drag to resize.
+    this.crepe.editor.use(columnResizingPlugin);
+
     await this.crepe.create();
   }
 
@@ -89,7 +97,8 @@ export class MarkdownEditor {
   }
 
   /** The rendered document as clean HTML, for export: editing artifacts
-   *  (contenteditable, trailing breaks, placeholder widgets) removed. */
+   *  (contenteditable, drag handles, tool buttons, trailing breaks,
+   *  placeholder widgets) removed. */
   exportHtml(): string {
     const live = this.root.querySelector(".milkdown");
     if (!live) return "";
@@ -97,6 +106,16 @@ export class MarkdownEditor {
     clone.removeAttribute("contenteditable");
     for (const el of clone.querySelectorAll("[contenteditable]")) {
       el.removeAttribute("contenteditable");
+    }
+    // Editing chrome is only meaningful in the live editor (the app hides
+    // most of it via data-show="false"); an exported document must not
+    // carry it at all. `.tools` is the code block's always-visible toolbar
+    // (language picker, copy button).
+    for (const el of clone.querySelectorAll("[data-show], .tools")) {
+      el.remove();
+    }
+    for (const el of clone.querySelectorAll("[draggable]")) {
+      el.removeAttribute("draggable");
     }
     for (const el of clone.querySelectorAll(".ProseMirror-trailingBreak, .crepe-placeholder")) {
       el.remove();

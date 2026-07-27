@@ -408,6 +408,12 @@ body.is-dirty #doc-title::before {
   width: 100%;
 }
 
+/* table column resizing — the stock handle is a bright blue sliver;
+   re-tone it to the accent so it reads as Folio chrome */
+.milkdown .ProseMirror .column-resize-handle {
+  background-color: var(--accent);
+}
+
 /* ——— status bar ——— */
 
 #statusbar {

@@ -235,6 +235,13 @@ section h2 {
   background: var(--paper-raised);
 }
 
+/* display:block above would defeat the hidden attribute that toggles the
+   Write/Preview tabs — restore it with matching specificity */
+#demo-editor[hidden],
+#demo-preview[hidden] {
+  display: none;
+}
+
 /* Re-skin Crepe/Milkdown through its public tokens (mirrors the app). */
 #demo-editor .milkdown {
   --crepe-font-default: var(--font-prose);
@@ -264,6 +271,11 @@ section h2 {
 
 #demo-editor .milkdown .ProseMirror {
   padding-bottom: 3rem;
+}
+
+/* tone the column-resize handle to the accent (stock is bright blue) */
+#demo-editor .milkdown .ProseMirror .column-resize-handle {
+  background-color: var(--accent);
 }
 
 /* ——— features ——— */
