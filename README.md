@@ -188,10 +188,12 @@ GitHub Release:
 Pushing a `v*` tag by hand also works — the same pipeline runs, skipping
 the version-bump step.
 
-Installers are unsigned: macOS shows a Gatekeeper prompt and Windows a
-SmartScreen prompt on first launch (right-click → Open / More info → Run
-anyway). Proper notarization and Windows code signing require paid vendor
-certificates and are intentionally out of scope.
+Installers: the macOS build is signed with a Developer ID certificate and
+notarized when the `APPLE_*` secrets are configured in CI (certificate,
+signing identity, Apple ID + app-specific password, team ID). Windows
+builds remain unsigned — SmartScreen shows More info → Run anyway on
+first launch. Windows code signing requires a paid certificate and is
+intentionally out of scope.
 
 An **update-signing keypair** for a future Tauri updater lives outside the
 repo at `~/.tauri/folio-updater.key` (public key in
