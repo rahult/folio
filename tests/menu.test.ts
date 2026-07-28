@@ -118,6 +118,16 @@ describe("actionForMenuId", () => {
       theme: "newsprint",
     });
     expect(actionForMenuId("file.watch")).toEqual({ kind: "toggle-watch" });
+    expect(actionForMenuId("edit.annotate")).toEqual({ kind: "annotate" });
+    expect(actionForMenuId("file.feedback")).toEqual({ kind: "export-feedback" });
+    expect(actionForMenuId("file.clear-annotations")).toEqual({ kind: "clear-annotations" });
+    expect(actionForMenuId("file.back")).toEqual({ kind: "nav-back" });
+    expect(actionForMenuId("file.forward")).toEqual({ kind: "nav-forward" });
+  });
+
+  it("maps revision menu ids to their sequence number", () => {
+    expect(actionForMenuId("file.revision.3")).toEqual({ kind: "open-revision", seq: 3 });
+    expect(actionForMenuId("file.revision.x")).toBeNull();
   });
 
   it("maps recent-file menu ids to their list index", () => {

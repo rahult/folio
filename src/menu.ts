@@ -21,6 +21,12 @@ export type MenuAction =
   | { kind: "toggle-float" }
   | { kind: "toggle-watch" }
   | { kind: "open-recent"; index: number }
+  | { kind: "annotate" }
+  | { kind: "export-feedback" }
+  | { kind: "clear-annotations" }
+  | { kind: "open-revision"; seq: number }
+  | { kind: "nav-back" }
+  | { kind: "nav-forward" }
   | { kind: "set-theme"; theme: Theme }
   | { kind: "zoom"; direction: ZoomDirection }
   | { kind: "enter-license" }
@@ -61,6 +67,9 @@ export function actionForMenuId(id: string): MenuAction | null {
   const recentMatch = /^file\.recent\.(\d+)$/.exec(id);
   if (recentMatch) return { kind: "open-recent", index: Number(recentMatch[1]) };
 
+  const revisionMatch = /^file\.revision\.(\d+)$/.exec(id);
+  if (revisionMatch) return { kind: "open-revision", seq: Number(revisionMatch[1]) };
+
   switch (id) {
     case "file.new":
       return { kind: "new-file" };
@@ -82,6 +91,16 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-float" };
     case "file.watch":
       return { kind: "toggle-watch" };
+    case "edit.annotate":
+      return { kind: "annotate" };
+    case "file.feedback":
+      return { kind: "export-feedback" };
+    case "file.clear-annotations":
+      return { kind: "clear-annotations" };
+    case "file.back":
+      return { kind: "nav-back" };
+    case "file.forward":
+      return { kind: "nav-forward" };
     case "view.theme-paper":
       return { kind: "set-theme", theme: "paper" };
     case "view.theme-night":

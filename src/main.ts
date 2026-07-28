@@ -6,16 +6,28 @@ import { listen } from "@tauri-apps/api/event";
 import { confirm, message, ask, open, save } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { openUrl, openPath } from "@tauri-apps/plugin-opener";
 import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
 import { buildHtmlDocument, htmlExportTarget } from "./export";
 import { canUse, looksLikeLicenseKey, type Feature } from "./license";
+import { classifyLink } from "./links";
 import { normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
 import { shouldScroll, typewriterScrollTop } from "./modes";
+import { NavigationHistory } from "./navhistory";
 import { addRecent, loadRecent, saveRecent } from "./recent";
 import { loadSession, saveSession } from "./session";
 import { renderedText, showReloadDiff } from "./diffview";
+import {
+  buildFeedback,
+  loadAnnotations,
+  makeAnnotation,
+  saveAnnotations,
+  type Annotation,
+  type AnnotationKind,
+} from "./annotations";
+import { renderAnnotations } from "./annotview";
 import { canApplyTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
 import { TextSelection } from "@milkdown/kit/prose/state";
@@ -26,9 +38,17 @@ const titleEl = document.querySelector<HTMLSpanElement>("#doc-title")!;
 const pathEl = document.querySelector<HTMLSpanElement>("#doc-path")!;
 const wordCountEl = document.querySelector<HTMLSpanElement>("#word-count")!;
 const openBtn = document.querySelector<HTMLButtonElement>("#open-btn")!;
+const navBackBtn = document.querySelector<HTMLButtonElement>("#nav-back-btn")!;
+const navForwardBtn = document.querySelector<HTMLButtonElement>("#nav-forward-btn")!;
 const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
 const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
 const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn")!;
+const feedbackBtn = document.querySelector<HTMLButtonElement>("#feedback-btn")!;
+const annotOverlay = document.querySelector<HTMLDivElement>("#annot-overlay")!;
+const annotQuote = document.querySelector<HTMLElement>("#annot-quote")!;
+const annotBody = document.querySelector<HTMLTextAreaElement>("#annot-body")!;
+const annotSaveBtn = document.querySelector<HTMLButtonElement>("#annot-save-btn")!;
+const annotCancelBtn = document.querySelector<HTMLButtonElement>("#annot-cancel-btn")!;
 const editorRoot = document.querySelector<HTMLElement>("#editor")!;
 const sourceEditor = document.querySelector<HTMLTextAreaElement>("#source-editor")!;
 const liveBadge = document.querySelector<HTMLSpanElement>("#live-badge")!;
@@ -80,14 +100,21 @@ async function loadContent(content: string, path: string | null): Promise<void> 
   renderTitle();
 }
 
-/** Read a file from disk and load it into the editor. */
-async function loadFromPath(path: string): Promise<void> {
+/** Read a file from disk and load it into the editor. Every load is a
+ *  navigation visit unless the caller is itself history navigation. */
+async function loadFromPath(path: string, options?: { visit?: boolean }): Promise<void> {
   const raw = await invoke<string>("read_text_file", { path });
   const content = normalizeMarkdown(raw);
   diskContent = content;
   await loadContent(content, path);
   recordRecent(path);
   saveSessionNow();
+  loadAnnotationsForOpenFile();
+  void archiveCurrentRevision();
+  if (options?.visit !== false) {
+    nav.visit(path);
+    renderNavButtons();
+  }
   syncWatch();
 }
 
@@ -191,6 +218,7 @@ async function saveFile(saveAs = false): Promise<void> {
   diskContent = normalizeMarkdown(content);
   recordRecent(path);
   saveSessionNow();
+  void archiveCurrentRevision();
   renderTitle();
   syncWatch();
 }
@@ -205,6 +233,8 @@ async function newFile(): Promise<void> {
   }
   diskContent = null;
   await loadContent("", null);
+  annotations = [];
+  void invoke("set_revision_menu", { entries: [] });
   saveSessionNow();
   syncWatch();
 }
@@ -447,7 +477,10 @@ async function pollDisk(): Promise<void> {
   }
   diskContent = incoming;
   await loadContent(incoming, path);
+  void archiveCurrentRevision();
   if (!sourceMode) {
+    // The reload recreated the editor — re-render annotation marks too.
+    renderAnnotationsNow();
     editor.withView((view) => {
       showReloadDiff(view, previousText);
     });
@@ -515,6 +548,241 @@ async function restoreSession(): Promise<void> {
       }
     });
   });
+}
+
+// ——— link navigation ———
+//
+// ⌘-click a link to follow it: Markdown links between documents open inside
+// Folio with browser-style back/forward (⌘[ / ⌘]); web URLs and
+// non-Markdown files go to the OS default application.
+
+const nav = new NavigationHistory();
+
+function renderNavButtons(): void {
+  navBackBtn.disabled = !nav.canGoBack;
+  navForwardBtn.disabled = !nav.canGoForward;
+}
+
+/** Follow a link target: internal for Markdown, OS default app otherwise. */
+async function followLink(href: string): Promise<void> {
+  const target = classifyLink(href, doc.filePath);
+  switch (target.kind) {
+    case "markdown":
+      try {
+        await guardDirty(() => loadFromPath(target.path));
+      } catch {
+        await message(`Couldn't open ${target.path}`, { title: "Open Link", kind: "error" });
+      }
+      return;
+    case "external-url":
+      await openUrl(target.url);
+      return;
+    case "external-path":
+      await openPath(target.path);
+      return;
+    case "anchor":
+    case "invalid":
+      return;
+  }
+}
+
+async function navigateBack(): Promise<void> {
+  const path = nav.peekBack();
+  if (!path) return;
+  await guardDirty(async () => {
+    nav.goBack();
+    await loadFromPath(path, { visit: false });
+    renderNavButtons();
+  });
+}
+
+async function navigateForward(): Promise<void> {
+  const path = nav.peekForward();
+  if (!path) return;
+  await guardDirty(async () => {
+    nav.goForward();
+    await loadFromPath(path, { visit: false });
+    renderNavButtons();
+  });
+}
+
+// ⌘-click follows links; capture phase so ProseMirror's own handlers
+// (link tooltip, caret placement) don't swallow it first.
+editorRoot.addEventListener(
+  "click",
+  (e) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const anchor = (e.target as HTMLElement).closest("a[href]");
+    if (!anchor) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void followLink(anchor.getAttribute("href") ?? "");
+  },
+  true,
+);
+
+navBackBtn.addEventListener("click", () => void navigateBack());
+navForwardBtn.addEventListener("click", () => void navigateForward());
+
+// ——— review annotations + structured feedback ———
+
+let annotations: Annotation[] = [];
+
+/** Load the annotation list for the open file and render its marks. */
+function loadAnnotationsForOpenFile(): void {
+  annotations = doc.filePath ? loadAnnotations(doc.filePath) : [];
+  renderAnnotationsNow();
+}
+
+function renderAnnotationsNow(): void {
+  if (sourceMode) return;
+  editor.withView((view) => renderAnnotations(view, annotations));
+}
+
+let pendingQuote = "";
+
+/** Edit → Annotate Selection… — capture the selection (or, with no
+ *  selection, the block under the caret) and open the dialog. */
+function openAnnotateDialog(): void {
+  if (sourceMode) return;
+  editor.withView((view) => {
+    const { $from, from, to } = view.state.selection;
+    pendingQuote =
+      from !== to
+        ? view.state.doc.textBetween(from, to, "\n", " ")
+        : view.state.doc.textBetween($from.start($from.depth), $from.end($from.depth), "\n", " ");
+  });
+  if (!pendingQuote.trim()) return;
+  annotQuote.textContent = pendingQuote.replace(/\s+/g, " ").trim();
+  annotBody.value = "";
+  syncAnnotBodyVisibility();
+  annotOverlay.hidden = false;
+  annotBody.focus();
+}
+
+function selectedAnnotKind(): AnnotationKind {
+  const checked = document.querySelector<HTMLInputElement>('input[name="annot-kind"]:checked');
+  return (checked?.value as AnnotationKind) ?? "comment";
+}
+
+function syncAnnotBodyVisibility(): void {
+  const kind = selectedAnnotKind();
+  annotBody.hidden = kind === "delete";
+  annotBody.placeholder =
+    kind === "replace" ? "Suggested replacement…" : "Your note for the agent…";
+}
+
+function closeAnnotateDialog(): void {
+  annotOverlay.hidden = true;
+}
+
+function saveAnnotation(): void {
+  if (!doc.filePath || !pendingQuote.trim()) {
+    closeAnnotateDialog();
+    return;
+  }
+  const kind = selectedAnnotKind();
+  const body = kind === "delete" ? "" : annotBody.value.trim();
+  if (kind !== "delete" && !body) {
+    annotBody.focus();
+    return;
+  }
+  annotations = [...annotations, makeAnnotation(kind, pendingQuote, body)];
+  saveAnnotations(doc.filePath, annotations);
+  renderAnnotationsNow();
+  closeAnnotateDialog();
+}
+
+function clearReviewAnnotations(): void {
+  if (!doc.filePath) return;
+  annotations = [];
+  saveAnnotations(doc.filePath, annotations);
+  renderAnnotationsNow();
+}
+
+/** Copy text to the clipboard (WKWebView-safe with legacy fallback). */
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+}
+
+/** File → Export Review Feedback: structured, agent-consumable Markdown to
+ *  the clipboard and a `<file>.feedback.md` beside the reviewed file. */
+async function exportReviewFeedback(): Promise<void> {
+  const feedback = buildFeedback(doc.fileName, annotations);
+  await copyText(feedback);
+  if (doc.filePath) {
+    await invoke("write_text_file", {
+      path: `${doc.filePath}.feedback.md`,
+      contents: feedback,
+    });
+  }
+  feedbackBtn.classList.add("copied");
+  setTimeout(() => feedbackBtn.classList.remove("copied"), 900);
+}
+
+annotSaveBtn.addEventListener("click", saveAnnotation);
+annotCancelBtn.addEventListener("click", closeAnnotateDialog);
+annotOverlay.addEventListener("click", (e) => {
+  if (e.target === annotOverlay) closeAnnotateDialog();
+});
+for (const radio of document.querySelectorAll('input[name="annot-kind"]')) {
+  radio.addEventListener("change", syncAnnotBodyVisibility);
+}
+
+// ——— revision history ———
+
+interface RevisionMeta {
+  seq: number;
+  archived_at: number;
+  preview: string;
+}
+
+/** Archive the current version of the open file and refresh the History
+ *  menu. Called on open, on watched reload, and on save. */
+async function archiveCurrentRevision(): Promise<void> {
+  const path = doc.filePath;
+  if (!path) return;
+  let rendered = "";
+  editor.withView((view) => {
+    rendered = renderedText(view);
+  });
+  await invoke("archive_revision", { path, markdown: currentMarkdown(), rendered });
+  await refreshRevisionMenu();
+}
+
+async function refreshRevisionMenu(): Promise<void> {
+  const path = doc.filePath;
+  if (!path) {
+    void invoke("set_revision_menu", { entries: [] });
+    return;
+  }
+  const list = await invoke<RevisionMeta[]>("list_revisions", { path });
+  const entries = list.map((r, i) => {
+    const time = new Date(r.archived_at * 1000).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const current = i === 0 ? " (current)" : "";
+    return [r.seq, `v${r.seq} — ${time}${current} · ${r.preview}`] as [number, string];
+  });
+  void invoke("set_revision_menu", { entries });
+}
+
+/** History menu: diff the selected revision against the current document. */
+async function openRevision(seq: number): Promise<void> {
+  const path = doc.filePath;
+  if (!path || sourceMode) return;
+  const revision = await invoke<{ rendered: string }>("read_revision", { path, seq });
+  editor.withView((view) => showReloadDiff(view, revision.rendered));
 }
 
 // ——— themes ———
@@ -635,7 +903,9 @@ licenseOverlay.addEventListener("click", (e) => {
   if (e.target === licenseOverlay) closeLicenseDialog();
 });
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !licenseOverlay.hidden) closeLicenseDialog();
+  if (e.key !== "Escape") return;
+  if (!licenseOverlay.hidden) closeLicenseDialog();
+  if (!annotOverlay.hidden) closeAnnotateDialog();
 });
 
 // ——— native menu dispatch ———
@@ -673,6 +943,20 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       if (path) await guardDirty(() => loadFromPath(path));
       return;
     }
+    case "open-revision":
+      return openRevision(action.seq);
+    case "nav-back":
+      return navigateBack();
+    case "nav-forward":
+      return navigateForward();
+    case "annotate":
+      openAnnotateDialog();
+      return;
+    case "export-feedback":
+      return exportReviewFeedback();
+    case "clear-annotations":
+      clearReviewAnnotations();
+      return;
     case "set-theme":
       requestTheme(action.theme);
       return;
@@ -710,22 +994,12 @@ openBtn.addEventListener("click", () => void openFile());
 saveBtn.addEventListener("click", () => void saveFile());
 floatBtn.addEventListener("click", () => toggleFloatMode());
 copyAgentBtn.addEventListener("click", () => void copyForAgent());
+feedbackBtn.addEventListener("click", () => void exportReviewFeedback());
 
 /** Copy the whole document as clean Markdown, ready to paste back into a
  *  coding agent with review feedback. */
 async function copyForAgent(): Promise<void> {
-  const markdown = currentMarkdown();
-  try {
-    await navigator.clipboard.writeText(markdown);
-  } catch {
-    // WKWebView without clipboard permission: legacy fallback.
-    const ta = document.createElement("textarea");
-    ta.value = markdown;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    ta.remove();
-  }
+  await copyText(currentMarkdown());
   copyAgentBtn.classList.add("copied");
   setTimeout(() => copyAgentBtn.classList.remove("copied"), 900);
 }
@@ -739,6 +1013,12 @@ window.addEventListener("keydown", (e) => {
   } else if (key === "s") {
     e.preventDefault();
     void saveFile(e.shiftKey);
+  } else if (key === "[") {
+    e.preventDefault();
+    void navigateBack();
+  } else if (key === "]") {
+    e.preventDefault();
+    void navigateForward();
   }
 });
 

@@ -28,10 +28,23 @@ struct FloatRequested(Mutex<bool>);
 #[derive(Default)]
 struct RecentFiles(Mutex<Vec<String>>);
 
+/// Revision History submenu entries — (seq, label) pairs pushed by the
+/// frontend whenever the revision archive changes for the open document.
+#[derive(Default)]
+struct RevisionMenu(Mutex<Vec<(u64, String)>>);
+
 /// Recently opened files as stored in state (empty when not yet pushed).
 fn recent_files<R: Runtime, M: Manager<R>>(manager: &M) -> Vec<String> {
     manager
         .try_state::<RecentFiles>()
+        .map(|s| s.0.lock().unwrap().clone())
+        .unwrap_or_default()
+}
+
+/// Revision menu entries as stored in state.
+fn revision_entries<R: Runtime, M: Manager<R>>(manager: &M) -> Vec<(u64, String)> {
+    manager
+        .try_state::<RevisionMenu>()
         .map(|s| s.0.lock().unwrap().clone())
         .unwrap_or_default()
 }
@@ -248,6 +261,159 @@ fn set_default_markdown_handler(_bundle_id: &str) -> Result<(), String> {
     Err("setting the default app is only supported on macOS; use your OS settings".to_string())
 }
 
+// ——— revision history ———
+//
+// Every on-disk version of a watched/reviewed file is archived so the user
+// can diff any earlier revision against the current document. Storage:
+// <config>/history/<fnv1a(path)>/<seq>.json with {"markdown","rendered",
+// "archived_at"} — rendered text is kept alongside so history diffs map
+// exactly onto the decoration layer. Core logic takes a plain directory so
+// it is unit-testable without an AppHandle.
+
+const MAX_REVISIONS: usize = 20;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct RevisionContent {
+    markdown: String,
+    rendered: String,
+    archived_at: u64,
+}
+
+#[derive(serde::Serialize)]
+struct RevisionMeta {
+    seq: u64,
+    archived_at: u64,
+    preview: String,
+}
+
+/// FNV-1a hex of the reviewed file's path — stable directory name.
+fn path_hash(path: &str) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in path.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+fn revision_seqs(dir: &std::path::Path) -> Vec<u64> {
+    let mut seqs: Vec<u64> = fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    e.file_name()
+                        .to_str()?
+                        .strip_suffix(".json")?
+                        .parse::<u64>()
+                        .ok()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    seqs.sort_unstable();
+    seqs
+}
+
+fn read_revision_file(dir: &std::path::Path, seq: u64) -> Result<RevisionContent, String> {
+    let raw = fs::read_to_string(dir.join(format!("{seq}.json")))
+        .map_err(|e| format!("failed to read revision {seq}: {e}"))?;
+    serde_json::from_str(&raw).map_err(|e| format!("corrupt revision {seq}: {e}"))
+}
+
+/// Archive a new revision unless it matches the latest one; prune to the
+/// newest MAX_REVISIONS. Returns the revision's seq.
+fn archive_in_dir(
+    dir: &std::path::Path,
+    markdown: &str,
+    rendered: &str,
+    now: u64,
+) -> Result<u64, String> {
+    fs::create_dir_all(dir).map_err(|e| format!("failed to create history dir: {e}"))?;
+    let seqs = revision_seqs(dir);
+    if let Some(&latest) = seqs.last() {
+        if let Ok(content) = read_revision_file(dir, latest) {
+            if content.markdown == markdown {
+                return Ok(latest);
+            }
+        }
+    }
+    let seq = seqs.last().map(|s| s + 1).unwrap_or(1);
+    let content = RevisionContent {
+        markdown: markdown.to_string(),
+        rendered: rendered.to_string(),
+        archived_at: now,
+    };
+    let json = serde_json::to_string(&content).map_err(|e| e.to_string())?;
+    fs::write(dir.join(format!("{seq}.json")), json)
+        .map_err(|e| format!("failed to write revision: {e}"))?;
+    // Prune oldest beyond the cap.
+    let seqs = revision_seqs(dir);
+    for old in seqs.iter().take(seqs.len().saturating_sub(MAX_REVISIONS)) {
+        let _ = fs::remove_file(dir.join(format!("{old}.json")));
+    }
+    Ok(seq)
+}
+
+fn list_in_dir(dir: &std::path::Path) -> Vec<RevisionMeta> {
+    let mut metas: Vec<RevisionMeta> = revision_seqs(dir)
+        .into_iter()
+        .rev()
+        .filter_map(|seq| {
+            let content = read_revision_file(dir, seq).ok()?;
+            let preview: String = content
+                .rendered
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(60)
+                .collect();
+            Some(RevisionMeta {
+                seq,
+                archived_at: content.archived_at,
+                preview,
+            })
+        })
+        .collect();
+    metas.sort_by(|a, b| b.seq.cmp(&a.seq));
+    metas
+}
+
+fn history_dir(app: &AppHandle<Wry>, path: &str) -> Result<std::path::PathBuf, String> {
+    Ok(config_dir(app)?.join("history").join(path_hash(path)))
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Archive a revision of a reviewed file (no-op duplicate-safe).
+#[tauri::command]
+fn archive_revision(
+    app: AppHandle<Wry>,
+    path: String,
+    markdown: String,
+    rendered: String,
+) -> Result<u64, String> {
+    archive_in_dir(&history_dir(&app, &path)?, &markdown, &rendered, now_secs())
+}
+
+/// List archived revisions, newest first.
+#[tauri::command]
+fn list_revisions(app: AppHandle<Wry>, path: String) -> Result<Vec<RevisionMeta>, String> {
+    Ok(list_in_dir(&history_dir(&app, &path)?))
+}
+
+/// Read one archived revision (markdown + rendered text for diffing).
+#[tauri::command]
+fn read_revision(app: AppHandle<Wry>, path: String, seq: u64) -> Result<RevisionContent, String> {
+    read_revision_file(&history_dir(&app, &path)?, seq)
+}
+
 /// Read a UTF-8 text file from disk.
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
@@ -323,6 +489,15 @@ fn rebuild_menu(app: &AppHandle<Wry>) {
 fn set_recent_files(app: AppHandle<Wry>, paths: Vec<String>) {
     if let Some(state) = app.try_state::<RecentFiles>() {
         *state.0.lock().unwrap() = paths;
+    }
+    rebuild_menu(&app);
+}
+
+/// Replace the Revision History submenu contents (frontend owns the list).
+#[tauri::command]
+fn set_revision_menu(app: AppHandle<Wry>, entries: Vec<(u64, String)>) {
+    if let Some(state) = app.try_state::<RevisionMenu>() {
+        *state.0.lock().unwrap() = entries;
     }
     rebuild_menu(&app);
 }
@@ -495,7 +670,33 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
         }
         file_builder = file_builder.item(&recent_builder.build()?);
     }
+    let revisions = revision_entries(app);
+    if !revisions.is_empty() {
+        let mut revision_builder = SubmenuBuilder::new(app, "Revision History");
+        for (seq, label) in &revisions {
+            revision_builder = revision_builder.item(&menu_item(
+                app,
+                &format!("file.revision.{seq}"),
+                label,
+                None,
+            )?);
+        }
+        file_builder = file_builder.item(&revision_builder.build()?);
+    }
     let mut file_builder = file_builder
+        .separator()
+        .item(&menu_item(
+            app,
+            "file.back",
+            "Back",
+            Some("CmdOrCtrl+["),
+        )?)
+        .item(&menu_item(
+            app,
+            "file.forward",
+            "Forward",
+            Some("CmdOrCtrl+]"),
+        )?)
         .separator()
         .item(&menu_item(app, "file.save", "Save", Some("CmdOrCtrl+S"))?)
         .item(&menu_item(
@@ -511,6 +712,19 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
             "Auto-Reload External Changes",
             None,
             false,
+        )?)
+        .separator()
+        .item(&menu_item(
+            app,
+            "file.feedback",
+            "Export Review Feedback",
+            Some("Alt+CmdOrCtrl+R"),
+        )?)
+        .item(&menu_item(
+            app,
+            "file.clear-annotations",
+            "Clear Review Annotations",
+            None,
         )?)
         .separator()
         .item(
@@ -544,6 +758,13 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
         .copy()
         .paste()
         .select_all()
+        .separator()
+        .item(&menu_item(
+            app,
+            "edit.annotate",
+            "Annotate Selection…",
+            Some("Alt+CmdOrCtrl+A"),
+        )?)
         .build()?;
 
     let mut paragraph_builder = SubmenuBuilder::new(app, "Paragraph");
@@ -749,12 +970,13 @@ pub fn run() {
         .manage(pending)
         .manage(float_requested)
         .manage(RecentFiles::default())
+        .manage(RevisionMenu::default())
         .menu(|app| build_menu(app, false))
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
             // Only our dotted custom ids need frontend handling; predefined
             // items (undo, copy, fullscreen, …) already acted natively.
-            let is_custom = ["app.", "file.", "paragraph.", "format.", "view."]
+            let is_custom = ["app.", "file.", "edit.", "paragraph.", "format.", "view."]
                 .iter()
                 .any(|prefix| id.starts_with(prefix));
             if is_custom {
@@ -773,6 +995,10 @@ pub fn run() {
             take_float_mode,
             set_window_floating,
             set_recent_files,
+            set_revision_menu,
+            archive_revision,
+            list_revisions,
+            read_revision,
             register_default_markdown_handler
         ])
         .setup(|app| {
@@ -947,6 +1173,57 @@ mod tests {
 
         assert!(write_temp_markdown("   \n ", &dir).is_none());
         assert!(write_temp_markdown("", &dir).is_none());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    fn history_test_dir(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("folio-test-history-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn archive_stores_and_lists_revisions_newest_first() {
+        let dir = history_test_dir("basic");
+        archive_in_dir(&dir, "# v1\n", "v1 rendered", 1000).unwrap();
+        archive_in_dir(&dir, "# v2\n", "v2 rendered", 2000).unwrap();
+
+        let list = list_in_dir(&dir);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].seq, 2);
+        assert_eq!(list[0].archived_at, 2000);
+        assert!(list[0].preview.contains("v2 rendered"));
+        assert_eq!(list[1].seq, 1);
+
+        let content = read_revision_file(&dir, 1).unwrap();
+        assert_eq!(content.markdown, "# v1\n");
+        assert_eq!(content.rendered, "v1 rendered");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn archive_skips_duplicates_of_the_latest_revision() {
+        let dir = history_test_dir("dedupe");
+        let first = archive_in_dir(&dir, "# same\n", "same", 1000).unwrap();
+        let second = archive_in_dir(&dir, "# same\n", "same", 2000).unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(list_in_dir(&dir).len(), 1);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn archive_prunes_to_the_newest_twenty() {
+        let dir = history_test_dir("prune");
+        for i in 0..25 {
+            archive_in_dir(&dir, &format!("# v{i}\n"), "rendered", 1000 + i).unwrap();
+        }
+
+        let seqs = revision_seqs(&dir);
+        assert_eq!(seqs.len(), MAX_REVISIONS);
+        assert_eq!(seqs[0], 6, "oldest five revisions are pruned");
+        assert_eq!(list_in_dir(&dir)[0].seq, 25);
 
         fs::remove_dir_all(&dir).ok();
     }

@@ -38,7 +38,7 @@ export const diffViewPlugin = $prose(
 
 /** A text node of the rendered document, mapped between plain-text offsets
  *  (what the diff sees) and ProseMirror positions (what decorations need). */
-interface TextSegment {
+export interface TextSegment {
   textStart: number;
   pmFrom: number;
   text: string;
@@ -47,7 +47,7 @@ interface TextSegment {
 /** Plain text of the document plus the per-text-node mapping. Block
  *  boundaries become "\n" (consuming no ProseMirror position) so additions
  *  spanning blocks still map cleanly. */
-function docSegments(view: EditorView): { text: string; segments: TextSegment[] } {
+export function docSegments(view: EditorView): { text: string; segments: TextSegment[] } {
   const segments: TextSegment[] = [];
   let text = "";
   view.state.doc.descendants((node, pos) => {
@@ -63,7 +63,7 @@ function docSegments(view: EditorView): { text: string; segments: TextSegment[] 
 }
 
 /** Plain-text offset → ProseMirror position (clamped). */
-function pmPosAt(segments: TextSegment[], textOffset: number, docSize: number): number {
+export function pmPosAt(segments: TextSegment[], textOffset: number, docSize: number): number {
   for (const seg of segments) {
     if (textOffset <= seg.textStart + seg.text.length) {
       return Math.min(seg.pmFrom + Math.max(0, textOffset - seg.textStart), docSize);

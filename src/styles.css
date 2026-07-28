@@ -134,7 +134,8 @@ body {
 /* float-on-top pin / copy-for-agent — quiet until active, when they take
    the accent */
 #float-btn,
-#copy-agent-btn {
+#copy-agent-btn,
+#feedback-btn {
   border: none;
   background: transparent;
   color: var(--ink-faint);
@@ -149,7 +150,8 @@ body {
 }
 
 #float-btn:hover,
-#copy-agent-btn:hover {
+#copy-agent-btn:hover,
+#feedback-btn:hover {
   color: var(--ink);
   background: var(--paper-sunken);
 }
@@ -163,7 +165,8 @@ body {
 }
 
 /* brief accent flash confirming the copy landed */
-#copy-agent-btn.copied {
+#copy-agent-btn.copied,
+#feedback-btn.copied {
   color: var(--accent);
 }
 
@@ -212,6 +215,16 @@ body.is-dirty #doc-title::before {
   transition:
     background-color 140ms ease-out,
     color 140ms ease-out;
+}
+
+.toolbar-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.toolbar-actions button:disabled:hover {
+  background: transparent;
+  color: var(--ink-soft);
 }
 
 .toolbar-actions button:hover {
@@ -585,7 +598,8 @@ body.is-dirty #doc-title::before {
 
 /* ——— license dialog ——— */
 
-#license-overlay {
+#license-overlay,
+#annot-overlay {
   position: fixed;
   inset: 0;
   display: flex;
@@ -597,7 +611,8 @@ body.is-dirty #doc-title::before {
   animation: license-fade 180ms ease-out both;
 }
 
-#license-overlay[hidden] {
+#license-overlay[hidden],
+#annot-overlay[hidden] {
   display: none;
 }
 
@@ -610,7 +625,8 @@ body.is-dirty #doc-title::before {
   }
 }
 
-#license-dialog {
+#license-dialog,
+#annot-dialog {
   width: min(26rem, calc(100vw - 3rem));
   background: var(--paper-raised);
   border: 1px solid var(--hairline);
@@ -631,7 +647,8 @@ body.is-dirty #doc-title::before {
   }
 }
 
-#license-heading {
+#license-heading,
+#annot-heading {
   font-family: var(--font-prose);
   font-size: 1.45rem;
   font-weight: 600;
@@ -639,6 +656,76 @@ body.is-dirty #doc-title::before {
   letter-spacing: -0.01em;
   margin: 0 0 0.6rem;
   color: var(--ink);
+}
+
+/* annotation dialog */
+#annot-quote {
+  margin: 0 0 1rem;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  max-height: 6em;
+  overflow: hidden;
+}
+
+.annot-kinds {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 0.9rem;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.annot-kinds label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.annot-kinds input {
+  accent-color: var(--accent);
+}
+
+#annot-body {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 0.6rem 0.75rem;
+  margin: 0 0 1.1rem;
+}
+
+#annot-body:focus {
+  outline: 2px solid color-mix(in oklch, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+/* annotation marks in the document: dotted accent underline for comments,
+   strikethrough for deletions, accent ghost for suggested replacements */
+.milkdown .ProseMirror .annot-comment {
+  border-bottom: 2px dotted var(--accent);
+}
+
+.milkdown .ProseMirror .annot-delete {
+  text-decoration: line-through;
+  text-decoration-color: var(--accent);
+  opacity: 0.65;
+}
+
+.milkdown .ProseMirror .annot-replace {
+  color: var(--accent);
+  border-bottom: 1px solid var(--accent);
+  margin-left: 0.35em;
 }
 
 .license-copy {

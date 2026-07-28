@@ -112,5 +112,8 @@ The free tier's float mode is the top-of-funnel: engineers discover Folio as
 
 **Status (July 2026):** v0.5 shipped P0 items 2–4 (session restore,
 auto-reload everywhere, recent files) and all of P1 (rewrite diff view,
-`folio review` + stdin pipe, copy-for-agent). Next up: docx export (P0-1),
+`folio review` + stdin pipe, copy-for-agent). P1 follow-up shipped the
+[plannotator](https://plannotator.ai/)-style review loop: inline
+annotations (comment / delete / replace) with structured feedback export,
+and revision history with diffs. Next up: docx export (P0-1),
 the largest remaining item before the $10 launch.

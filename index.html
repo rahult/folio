@@ -19,6 +19,16 @@
   <body>
     <header id="toolbar">
       <div class="toolbar-actions">
+        <button id="nav-back-btn" type="button" title="Back (⌘[)" aria-label="Back" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <button id="nav-forward-btn" type="button" title="Forward (⌘])" aria-label="Forward" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
         <button id="open-btn" type="button" title="Open a Markdown file">
           Open<kbd>⌘O</kbd>
         </button>
@@ -28,6 +38,28 @@
       </div>
       <span id="doc-title">Untitled</span>
       <div class="toolbar-end">
+        <button
+          id="feedback-btn"
+          type="button"
+          title="Export review feedback for your agent (⌥⌘R)"
+          aria-label="Export review feedback"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <line x1="8" y1="8" x2="16" y2="8" />
+            <line x1="8" y1="11" x2="13" y2="11" />
+          </svg>
+        </button>
         <button
           id="copy-agent-btn"
           type="button"
@@ -85,6 +117,42 @@
       <span id="live-badge" hidden title="Floating on top — reloading when the file changes on disk">live</span>
       <span id="word-count"></span>
     </footer>
+    <div id="annot-overlay" hidden>
+      <div
+        id="annot-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="annot-heading"
+      >
+        <h2 id="annot-heading">Annotate selection</h2>
+        <blockquote id="annot-quote"></blockquote>
+        <div class="annot-kinds" role="radiogroup" aria-label="Annotation type">
+          <label>
+            <input type="radio" name="annot-kind" value="comment" checked />
+            Comment
+          </label>
+          <label>
+            <input type="radio" name="annot-kind" value="delete" />
+            Mark for deletion
+          </label>
+          <label>
+            <input type="radio" name="annot-kind" value="replace" />
+            Suggest replacement
+          </label>
+        </div>
+        <textarea
+          id="annot-body"
+          rows="3"
+          spellcheck="false"
+          placeholder="Your note for the agent…"
+          aria-label="Annotation text"
+        ></textarea>
+        <div class="license-actions">
+          <button id="annot-cancel-btn" type="button">Cancel</button>
+          <button id="annot-save-btn" type="button">Save annotation</button>
+        </div>
+      </div>
+    </div>
     <div id="license-overlay" hidden>
       <div
         id="license-dialog"

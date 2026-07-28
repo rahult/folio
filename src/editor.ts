@@ -27,6 +27,7 @@ import {
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from "./commands";
 import { diffViewPlugin } from "./diffview";
+import { annotationPlugin } from "./annotview";
 
 /**
  * Thin wrapper around the Crepe WYSIWYG markdown editor.
@@ -81,6 +82,9 @@ export class MarkdownEditor {
     this.crepe.editor.use(columnResizingPlugin);
     // Decoration host for the rewrite diff view (agent review highlights).
     this.crepe.editor.use(diffViewPlugin);
+    // Decoration host for review annotations (comments, deletions,
+    // replacements on the document being reviewed).
+    this.crepe.editor.use(annotationPlugin);
 
     await this.crepe.create();
   }

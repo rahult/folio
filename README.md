@@ -58,8 +58,42 @@ The same live reload works without floating too: **File → Auto-Reload
 External Changes** (on by default) reloads whenever the open file changes
 on disk — agent edits, git checkouts, another editor.
 
+### Annotate the plan, send it back
+
+Reviewing isn't just watching. Select text (or place the caret in a block)
+and **Edit → Annotate Selection…** (⌥⌘A) lets you comment on it, mark it
+for deletion, or suggest a replacement — quiet marks in the document that
+persist across agent rewrites. **File → Export Review Feedback** (⌥⌘R)
+serializes your annotations into structured Markdown the agent can act on —
+copied to the clipboard *and* written to `<plan>.feedback.md` beside the
+file, so file-driven agents pick it up with no copy-pasting.
+
+**File → Revision History** archives every on-disk version of the reviewed
+file (newest 20) and diffs any of them against the current document — see
+exactly what changed between v1 and v4 without leaving the editor.
+
+### One-step agent setup
+
+`scripts/install-agent-integrations.sh` wires Claude Code, Codex CLI, and
+Kimi Code to use Folio automatically:
+
+```bash
+sh scripts/install-agent-integrations.sh
+```
+
+It is idempotent and does three things: puts a `folio` CLI shim on PATH
+(`~/.local/bin/folio`), appends a plan-review instruction block to each
+agent's global instruction file (`~/.claude/CLAUDE.md`,
+`~/.codex/AGENTS.md`, `~/.agents/AGENTS.md`), and installs a Claude Code
+PostToolUse hook that opens every `.md` write in a floating Folio review
+window. From then on, any plan an agent writes lands in Folio, and your
+annotations come back to the agent via `<plan>.feedback.md`.
+
 Also on board: **File → Open Recent**, session restore (relaunch lands on
-your last file, caret, and scroll position), and resizable table columns.
+your last file, caret, and scroll position), resizable table columns, and
+link navigation — ⌘-click a Markdown link to open it inside Folio and walk
+back with **File → Back / Forward** (⌘[ / ⌘] or the toolbar chevrons);
+web URLs and other file types open in their default applications.
 
 ## Folio Pro
 
