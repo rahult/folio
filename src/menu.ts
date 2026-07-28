@@ -19,6 +19,8 @@ export type MenuAction =
   | { kind: "toggle-focus-mode" }
   | { kind: "toggle-typewriter-mode" }
   | { kind: "toggle-float" }
+  | { kind: "toggle-watch" }
+  | { kind: "open-recent"; index: number }
   | { kind: "set-theme"; theme: Theme }
   | { kind: "zoom"; direction: ZoomDirection }
   | { kind: "enter-license" }
@@ -56,6 +58,9 @@ export function actionForMenuId(id: string): MenuAction | null {
   const command = EDITOR_COMMAND_IDS[id];
   if (command) return { kind: "editor-command", command };
 
+  const recentMatch = /^file\.recent\.(\d+)$/.exec(id);
+  if (recentMatch) return { kind: "open-recent", index: Number(recentMatch[1]) };
+
   switch (id) {
     case "file.new":
       return { kind: "new-file" };
@@ -75,6 +80,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-typewriter-mode" };
     case "view.float-on-top":
       return { kind: "toggle-float" };
+    case "file.watch":
+      return { kind: "toggle-watch" };
     case "view.theme-paper":
       return { kind: "set-theme", theme: "paper" };
     case "view.theme-night":

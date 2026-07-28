@@ -13,8 +13,12 @@ import { canUse, looksLikeLicenseKey, type Feature } from "./license";
 import { normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
 import { shouldScroll, typewriterScrollTop } from "./modes";
+import { addRecent, loadRecent, saveRecent } from "./recent";
+import { loadSession, saveSession } from "./session";
+import { renderedText, showReloadDiff } from "./diffview";
 import { canApplyTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
+import { TextSelection } from "@milkdown/kit/prose/state";
 
 const doc = new DocumentState();
 
@@ -24,6 +28,7 @@ const wordCountEl = document.querySelector<HTMLSpanElement>("#word-count")!;
 const openBtn = document.querySelector<HTMLButtonElement>("#open-btn")!;
 const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
 const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
+const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn")!;
 const editorRoot = document.querySelector<HTMLElement>("#editor")!;
 const sourceEditor = document.querySelector<HTMLTextAreaElement>("#source-editor")!;
 const liveBadge = document.querySelector<HTMLSpanElement>("#live-badge")!;
@@ -81,6 +86,8 @@ async function loadFromPath(path: string): Promise<void> {
   const content = normalizeMarkdown(raw);
   diskContent = content;
   await loadContent(content, path);
+  recordRecent(path);
+  saveSessionNow();
   syncWatch();
 }
 
@@ -182,6 +189,8 @@ async function saveFile(saveAs = false): Promise<void> {
   doc.setPath(path);
   doc.markSaved(content);
   diskContent = normalizeMarkdown(content);
+  recordRecent(path);
+  saveSessionNow();
   renderTitle();
   syncWatch();
 }
@@ -196,6 +205,7 @@ async function newFile(): Promise<void> {
   }
   diskContent = null;
   await loadContent("", null);
+  saveSessionNow();
   syncWatch();
 }
 
@@ -296,6 +306,7 @@ function syncMenuState(): void {
     typewriter: typewriterMode,
     theme: appliedTheme,
     floating: floatMode,
+    watch: watchEnabled,
   });
 }
 
@@ -352,19 +363,35 @@ function toggleTypewriterMode(): void {
 // Focus dims, typewriter scrolls — both ride the same selection hook and
 // compose freely. Both are no-ops in source mode.
 editor.onSelectionUpdate(() => {
+  scheduleSessionSave();
   if (sourceMode) return;
   if (focusMode) markFocusBlock();
   if (typewriterMode) scrollCaretToTypewriterLine();
 });
 
+editorRoot.addEventListener("scroll", scheduleSessionSave);
+
 // ——— float mode + live file watching ———
 //
 // Floating review mode (View → Float on Top, or `folio --float file.md`):
 // the window pins above everything and the open file is polled for on-disk
-// changes, so a coding agent's rewrites appear live. The user's own unsaved
-// edits are never clobbered — watching pauses while the document is dirty.
+// changes, so a coding agent's rewrites appear live. File → Auto-Reload
+// External Changes enables the same watching in normal windows (on by
+// default). The user's own unsaved edits are never clobbered — watching
+// pauses while the document is dirty.
 
 let floatMode = false;
+
+const WATCH_STORAGE_KEY = "folio-watch";
+/** Auto-reload in normal windows; persisted, on unless explicitly disabled. */
+let watchEnabled = localStorage.getItem(WATCH_STORAGE_KEY) !== "off";
+
+function toggleWatch(): void {
+  watchEnabled = !watchEnabled;
+  localStorage.setItem(WATCH_STORAGE_KEY, watchEnabled ? "on" : "off");
+  syncMenuState();
+  syncWatch();
+}
 
 function setFloatMode(on: boolean): void {
   floatMode = on;
@@ -386,9 +413,9 @@ let diskContent: string | null = null;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Watch only while floating with a file open. */
+/** Watch while floating, or in any window when auto-reload is enabled. */
 function syncWatch(): void {
-  const shouldWatch = floatMode && doc.filePath !== null;
+  const shouldWatch = (floatMode || watchEnabled) && doc.filePath !== null;
   if (shouldWatch && watchTimer === null) {
     watchTimer = setInterval(() => void pollDisk(), 1500);
   } else if (!shouldWatch && watchTimer !== null) {
@@ -409,11 +436,85 @@ async function pollDisk(): Promise<void> {
   }
   const incoming = normalizeMarkdown(raw);
   if (incoming === diskContent) return;
+  // Capture the rendered text before the swap so the reload can highlight
+  // what the rewrite changed (skipped in source mode, where the rendered
+  // document is stale).
+  let previousText = "";
+  if (!sourceMode) {
+    editor.withView((view) => {
+      previousText = renderedText(view);
+    });
+  }
   diskContent = incoming;
   await loadContent(incoming, path);
+  if (!sourceMode) {
+    editor.withView((view) => {
+      showReloadDiff(view, previousText);
+    });
+  }
   liveBadge.setAttribute("data-flash", "");
   if (flashTimer !== null) clearTimeout(flashTimer);
   flashTimer = setTimeout(() => liveBadge.removeAttribute("data-flash"), 700);
+}
+
+// ——— recent files ———
+
+let recentFiles = loadRecent();
+
+/** Record an opened/saved file and mirror the list into the native menu. */
+function recordRecent(path: string): void {
+  recentFiles = addRecent(recentFiles, path);
+  saveRecent(recentFiles);
+  void invoke("set_recent_files", { paths: recentFiles });
+}
+
+// ——— session restore ———
+
+let sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Persist path/caret/scroll so relaunch lands where the user left off. */
+function saveSessionNow(): void {
+  const path = doc.filePath;
+  if (path === null) {
+    saveSession({ path: null, pos: 0, scroll: 0 });
+    return;
+  }
+  let pos = 0;
+  editor.withView((view) => {
+    pos = view.state.selection.from;
+  });
+  saveSession({ path, pos, scroll: editorRoot.scrollTop });
+}
+
+function scheduleSessionSave(): void {
+  if (sessionSaveTimer !== null) clearTimeout(sessionSaveTimer);
+  sessionSaveTimer = setTimeout(saveSessionNow, 800);
+}
+
+/** Reopen the last file with its caret and scroll position (no-op without
+ *  a persisted file, or when it has disappeared since). */
+async function restoreSession(): Promise<void> {
+  const session = loadSession();
+  if (!session?.path) return;
+  try {
+    await loadFromPath(session.path);
+  } catch {
+    saveSession({ path: null, pos: 0, scroll: 0 });
+    return;
+  }
+  requestAnimationFrame(() => {
+    editorRoot.scrollTop = session.scroll;
+    editor.withView((view) => {
+      try {
+        const pos = Math.min(session.pos, view.state.doc.content.size);
+        view.dispatch(
+          view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos))),
+        );
+      } catch {
+        // Stale position in a changed document — leave the caret alone.
+      }
+    });
+  });
 }
 
 // ——— themes ———
@@ -564,6 +665,14 @@ async function runMenuAction(action: MenuAction): Promise<void> {
     case "toggle-float":
       toggleFloatMode();
       return;
+    case "toggle-watch":
+      toggleWatch();
+      return;
+    case "open-recent": {
+      const path = recentFiles[action.index];
+      if (path) await guardDirty(() => loadFromPath(path));
+      return;
+    }
     case "set-theme":
       requestTheme(action.theme);
       return;
@@ -600,6 +709,26 @@ void listen<string>("file-open", (event) => {
 openBtn.addEventListener("click", () => void openFile());
 saveBtn.addEventListener("click", () => void saveFile());
 floatBtn.addEventListener("click", () => toggleFloatMode());
+copyAgentBtn.addEventListener("click", () => void copyForAgent());
+
+/** Copy the whole document as clean Markdown, ready to paste back into a
+ *  coding agent with review feedback. */
+async function copyForAgent(): Promise<void> {
+  const markdown = currentMarkdown();
+  try {
+    await navigator.clipboard.writeText(markdown);
+  } catch {
+    // WKWebView without clipboard permission: legacy fallback.
+    const ta = document.createElement("textarea");
+    ta.value = markdown;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  copyAgentBtn.classList.add("copied");
+  setTimeout(() => copyAgentBtn.classList.remove("copied"), 900);
+}
 
 window.addEventListener("keydown", (e) => {
   if (!(e.metaKey || e.ctrlKey)) return;
@@ -615,13 +744,23 @@ window.addEventListener("keydown", (e) => {
 
 void editor.create("").then(async () => {
   renderTitle();
+  // Mirror the persisted recent-files list into the native File menu.
+  void invoke("set_recent_files", { paths: recentFiles });
   // Cold-start opens (Finder double-click, CLI argument) were queued by
   // Rust before the webview existed; drain and load the first one. A fresh
-  // document is never dirty, so no confirm is needed here.
+  // document is never dirty, so no confirm is needed here. Otherwise pick
+  // up where the last session left off.
   const pending = await invoke<string[]>("take_pending_open_paths");
-  if (pending.length > 0) await loadFromPath(pending[0]);
+  if (pending.length > 0) {
+    await loadFromPath(pending[0]);
+  } else {
+    await restoreSession();
+  }
   // `folio --float [file.md]` — enter floating review mode on launch.
   if (await invoke<boolean>("take_float_mode")) setFloatMode(true);
+  // The recent-files push above rebuilds the native menu; re-assert the
+  // real view/watch state so no rebuild race can drop a checkmark.
+  syncMenuState();
 });
 // Establish license state, then align the native menu checkmarks with
 // the actual (possibly persisted) view-mode state.

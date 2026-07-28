@@ -26,6 +26,7 @@ import {
 } from "@milkdown/kit/preset/gfm";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from "./commands";
+import { diffViewPlugin } from "./diffview";
 
 /**
  * Thin wrapper around the Crepe WYSIWYG markdown editor.
@@ -78,6 +79,8 @@ export class MarkdownEditor {
     // GFM's column-resizing plugin is exported but not part of the preset's
     // default plugin set — enable it so table columns drag to resize.
     this.crepe.editor.use(columnResizingPlugin);
+    // Decoration host for the rewrite diff view (agent review highlights).
+    this.crepe.editor.use(diffViewPlugin);
 
     await this.crepe.create();
   }

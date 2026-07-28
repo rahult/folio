@@ -131,8 +131,10 @@ body {
   justify-content: flex-end;
 }
 
-/* float-on-top pin — quiet until active, when it takes the accent */
-#float-btn {
+/* float-on-top pin / copy-for-agent — quiet until active, when they take
+   the accent */
+#float-btn,
+#copy-agent-btn {
   border: none;
   background: transparent;
   color: var(--ink-faint);
@@ -146,7 +148,8 @@ body {
     color 140ms ease-out;
 }
 
-#float-btn:hover {
+#float-btn:hover,
+#copy-agent-btn:hover {
   color: var(--ink);
   background: var(--paper-sunken);
 }
@@ -157,6 +160,11 @@ body {
 
 #float-btn.active:hover {
   color: var(--accent-strong);
+}
+
+/* brief accent flash confirming the copy landed */
+#copy-agent-btn.copied {
+  color: var(--accent);
 }
 
 .toolbar-actions {
@@ -511,6 +519,21 @@ body.is-dirty #doc-title::before {
   #live-badge[data-flash] {
     animation: none;
   }
+}
+
+/* rewrite diff view — quiet marks for agent-review reloads: a soft green
+   wash for additions, struck-through ghosts for removals. Clears on the
+   next edit. */
+.milkdown .ProseMirror .diff-add {
+  background: oklch(0.72 0.1 155 / 0.22);
+  border-radius: 2px;
+}
+
+.milkdown .ProseMirror .diff-del {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  text-decoration-color: oklch(0.6 0.08 30 / 0.6);
+  opacity: 0.75;
 }
 
 /* ——— scrollbars ——— */

@@ -117,6 +117,13 @@ describe("actionForMenuId", () => {
       kind: "set-theme",
       theme: "newsprint",
     });
+    expect(actionForMenuId("file.watch")).toEqual({ kind: "toggle-watch" });
+  });
+
+  it("maps recent-file menu ids to their list index", () => {
+    expect(actionForMenuId("file.recent.0")).toEqual({ kind: "open-recent", index: 0 });
+    expect(actionForMenuId("file.recent.9")).toEqual({ kind: "open-recent", index: 9 });
+    expect(actionForMenuId("file.recent.x")).toBeNull();
   });
 
   it("returns null for ids it does not own (e.g. predefined items)", () => {

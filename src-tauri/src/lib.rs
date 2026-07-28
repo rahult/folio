@@ -23,6 +23,28 @@ struct PendingOpens(Mutex<Vec<String>>);
 #[derive(Default)]
 struct FloatRequested(Mutex<bool>);
 
+/// Recently opened files, newest first (max 10), pushed by the frontend and
+/// mirrored into the File → Open Recent submenu.
+#[derive(Default)]
+struct RecentFiles(Mutex<Vec<String>>);
+
+/// Recently opened files as stored in state (empty when not yet pushed).
+fn recent_files<R: Runtime, M: Manager<R>>(manager: &M) -> Vec<String> {
+    manager
+        .try_state::<RecentFiles>()
+        .map(|s| s.0.lock().unwrap().clone())
+        .unwrap_or_default()
+}
+
+/// Base name of a path for menu labels.
+fn file_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
 /// CLI invocation split into markdown files to open and whether the
 /// floating review window was requested.
 #[derive(Default)]
@@ -31,28 +53,62 @@ struct CliOptions {
     float: bool,
 }
 
+/// Write piped markdown to a temp file so it can be opened (and watched)
+/// like any other document. Returns None for empty input.
+fn write_temp_markdown(contents: &str, dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    if contents.trim().is_empty() {
+        return None;
+    }
+    let path = dir.join(format!("folio-review-{}.md", std::process::id()));
+    fs::write(&path, contents).ok()?;
+    Some(path)
+}
+
+/// Read piped stdin into a temp markdown file (`folio --float -`). Skipped
+/// when stdin is a terminal — otherwise an interactive launch would block
+/// waiting for input.
+fn stdin_to_temp() -> Option<std::path::PathBuf> {
+    use std::io::{IsTerminal, Read};
+    let mut stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        return None;
+    }
+    let mut contents = String::new();
+    stdin.read_to_string(&mut contents).ok()?;
+    write_temp_markdown(&contents, &std::env::temp_dir())
+}
+
 /// Filter CLI arguments down to existing markdown files, lifting out the
-/// `--float` / `-f` flag. Windows and Linux pass the opened file as argv[1];
-/// macOS may inject `-psn_…`, which the extension filter drops naturally.
+/// `--float` / `-f` flag, the `review` subcommand (implies float), and `-`
+/// (read markdown from stdin). Windows and Linux pass the opened file as
+/// argv[1]; macOS may inject `-psn_…`, which the extension filter drops
+/// naturally.
 fn parse_cli_args(args: impl IntoIterator<Item = String>) -> CliOptions {
     let mut float = false;
-    let paths = args
-        .into_iter()
-        .skip(1)
-        .filter(|arg| {
-            if arg == "--float" || arg == "-f" {
-                float = true;
-                return false;
+    let mut paths = Vec::new();
+    for arg in args.into_iter().skip(1) {
+        match arg.as_str() {
+            "--float" | "-f" => float = true,
+            "review" => float = true,
+            "-" => {
+                if let Some(path) = stdin_to_temp() {
+                    paths.push(path.to_string_lossy().into_owned());
+                }
             }
-            let path = std::path::Path::new(arg);
-            path.is_file()
-                && path
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| MARKDOWN_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
-                    .unwrap_or(false)
-        })
-        .collect();
+            _ => {
+                let path = std::path::Path::new(&arg);
+                let is_markdown = path.is_file()
+                    && path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| MARKDOWN_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
+                        .unwrap_or(false);
+                if is_markdown {
+                    paths.push(arg);
+                }
+            }
+        }
+    }
     CliOptions { paths, float }
 }
 
@@ -228,11 +284,47 @@ fn export_label(licensed: bool) -> &'static str {
 /// Rebuild the app menu with the current license state and replace it.
 /// (Menu-item label updates via `menu.get(...)` proved unreliable for
 /// submenu titles on macOS, so we rebuild and re-set the whole menu.)
-fn refresh_menu_license(app: &AppHandle<Wry>) {
+/// Checkmarks are carried over — a rebuild must not reset view/watch state.
+fn rebuild_menu(app: &AppHandle<Wry>) {
+    const CHECK_IDS: [&str; 7] = [
+        "view.focus-mode",
+        "view.typewriter-mode",
+        "view.float-on-top",
+        "file.watch",
+        "view.theme-paper",
+        "view.theme-night",
+        "view.theme-newsprint",
+    ];
     let licensed = is_licensed(app);
+    let mut checked: Vec<(String, bool)> = Vec::new();
+    if let Some(menu) = app.menu() {
+        if let Ok(items) = menu.items() {
+            for id in CHECK_IDS {
+                if let Some(item) = find_check_item(items.clone(), id) {
+                    checked.push((id.to_string(), item.is_checked().unwrap_or(false)));
+                }
+            }
+        }
+    }
     if let Ok(menu) = build_menu(app, licensed) {
+        if let Ok(items) = menu.items() {
+            for (id, is_checked) in checked {
+                if let Some(item) = find_check_item(items.clone(), &id) {
+                    let _ = item.set_checked(is_checked);
+                }
+            }
+        }
         let _ = app.set_menu(menu);
     }
+}
+
+/// Replace the Open Recent submenu contents (frontend owns the list).
+#[tauri::command]
+fn set_recent_files(app: AppHandle<Wry>, paths: Vec<String>) {
+    if let Some(state) = app.try_state::<RecentFiles>() {
+        *state.0.lock().unwrap() = paths;
+    }
+    rebuild_menu(&app);
 }
 
 /// Open the native print panel (macOS: includes Save as PDF).
@@ -244,21 +336,49 @@ fn print_document(app: AppHandle<Wry>) -> Result<(), String> {
     window.print().map_err(|e| e.to_string())
 }
 
+/// Find a check item by id anywhere in the menu tree (`Menu::get` is
+/// shallow and never descends into submenus).
+fn find_check_item(items: Vec<MenuItemKind<Wry>>, id: &str) -> Option<CheckMenuItem<Wry>> {
+    for item in items {
+        match item {
+            MenuItemKind::Check(item) if item.id() == id => return Some(item),
+            MenuItemKind::Submenu(submenu) => {
+                if let Ok(items) = submenu.items() {
+                    if let Some(found) = find_check_item(items, id) {
+                        return Some(found);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// The frontend owns view-mode state (gating decides what actually
 /// changed); it pushes the truth back so checkmarks never drift.
 #[tauri::command]
-fn sync_menu_state(app: AppHandle<Wry>, focus: bool, typewriter: bool, theme: String, floating: bool) {
+fn sync_menu_state(
+    app: AppHandle<Wry>,
+    focus: bool,
+    typewriter: bool,
+    theme: String,
+    floating: bool,
+    watch: bool,
+) {
     let Some(menu) = app.menu() else { return };
     let checks = [
         ("view.focus-mode", focus),
         ("view.typewriter-mode", typewriter),
         ("view.float-on-top", floating),
+        ("file.watch", watch),
         ("view.theme-paper", theme == "paper"),
         ("view.theme-night", theme == "night"),
         ("view.theme-newsprint", theme == "newsprint"),
     ];
+    let Ok(items) = menu.items() else { return };
     for (id, checked) in checks {
-        if let Some(MenuItemKind::Check(item)) = menu.get(id) {
+        if let Some(item) = find_check_item(items.clone(), id) {
             let _ = item.set_checked(checked);
         }
     }
@@ -273,7 +393,7 @@ fn verify_and_store_license(
     let payload = license::verify_license(&key).map_err(|e| e.to_string())?;
     let dir = config_dir(&app)?;
     license::store_license(&dir, &payload.email, key.trim())?;
-    refresh_menu_license(&app);
+    rebuild_menu(&app);
     Ok(license::LicenseInfo {
         valid: true,
         email: Some(payload.email),
@@ -298,7 +418,7 @@ fn get_license_state(app: AppHandle<Wry>) -> license::LicenseState {
 fn clear_license(app: AppHandle<Wry>) -> Result<(), String> {
     let dir = config_dir(&app)?;
     license::clear_stored_license(&dir)?;
-    refresh_menu_license(&app);
+    rebuild_menu(&app);
     Ok(())
 }
 
@@ -361,7 +481,21 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
 
     let mut file_builder = SubmenuBuilder::new(app, "File")
         .item(&menu_item(app, "file.new", "New", Some("CmdOrCtrl+N"))?)
-        .item(&menu_item(app, "file.open", "Open…", Some("CmdOrCtrl+O"))?)
+        .item(&menu_item(app, "file.open", "Open…", Some("CmdOrCtrl+O"))?);
+    let recent = recent_files(app);
+    if !recent.is_empty() {
+        let mut recent_builder = SubmenuBuilder::new(app, "Open Recent");
+        for (i, path) in recent.iter().enumerate() {
+            recent_builder = recent_builder.item(&menu_item(
+                app,
+                &format!("file.recent.{i}"),
+                &file_name(path),
+                None,
+            )?);
+        }
+        file_builder = file_builder.item(&recent_builder.build()?);
+    }
+    let mut file_builder = file_builder
         .separator()
         .item(&menu_item(app, "file.save", "Save", Some("CmdOrCtrl+S"))?)
         .item(&menu_item(
@@ -369,6 +503,14 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
             "file.save-as",
             "Save As…",
             Some("Shift+CmdOrCtrl+S"),
+        )?)
+        .separator()
+        .item(&check_item(
+            app,
+            "file.watch",
+            "Auto-Reload External Changes",
+            None,
+            false,
         )?)
         .separator()
         .item(
@@ -606,6 +748,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(pending)
         .manage(float_requested)
+        .manage(RecentFiles::default())
         .menu(|app| build_menu(app, false))
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
@@ -629,12 +772,13 @@ pub fn run() {
             take_pending_open_paths,
             take_float_mode,
             set_window_floating,
+            set_recent_files,
             register_default_markdown_handler
         ])
         .setup(|app| {
             // Now the path resolver is managed; rebuild the menu with the
             // persisted license state so Pro labels are correct.
-            refresh_menu_license(app.handle());
+            rebuild_menu(app.handle());
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -770,5 +914,40 @@ mod tests {
         }
 
         fs::remove_file(&md).ok();
+    }
+
+    #[test]
+    fn parse_cli_args_review_subcommand_implies_float() {
+        let md = temp_file("args-review", "md");
+        fs::write(&md, "# hi").unwrap();
+
+        let cli = parse_cli_args(
+            [
+                "folio".to_string(),
+                "review".to_string(),
+                md.to_string_lossy().into_owned(),
+            ]
+            .into_iter(),
+        );
+
+        assert!(cli.float);
+        assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
+
+        fs::remove_file(&md).ok();
+    }
+
+    #[test]
+    fn write_temp_markdown_writes_nonempty_content_only() {
+        let dir = std::env::temp_dir().join(format!("folio-test-tmp-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+
+        let path = write_temp_markdown("# piped\n", &dir).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "# piped\n");
+        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("md"));
+
+        assert!(write_temp_markdown("   \n ", &dir).is_none());
+        assert!(write_temp_markdown("", &dir).is_none());
+
+        fs::remove_dir_all(&dir).ok();
     }
 }

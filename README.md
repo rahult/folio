@@ -31,23 +31,35 @@ Codex, …) — no plugins or API keys needed, the file is the seam:
 
 ```bash
 folio --float plan.md        # or -f; opens plan.md in a floating window
+folio review plan.md         # same thing, reads better in scripts
+agent … | folio --float -    # pipe markdown straight into a review window
 ```
 
 The window pins above everything else at a compact review size, and while
 it floats Folio watches the open file: every time the agent rewrites it,
-the rendered document reloads in place and the **live** badge in the status
-bar pulses. Your own unsaved edits are never clobbered — watching pauses
-while the document is dirty and resumes when you save.
+the rendered document reloads in place with **the changes highlighted** —
+additions washed in green, removals shown as struck-through ghosts — and
+the **live** badge in the status bar pulses. Your own unsaved edits are
+never clobbered — watching pauses while the document is dirty and resumes
+when you save. Done reviewing? The copy button in the toolbar puts the
+document back on the clipboard as clean Markdown, ready to paste into the
+agent with your feedback.
 
 A typical agent loop looks like:
 
 ```bash
 kimi -p "write the migration plan to docs/plan.md" &
-folio --float docs/plan.md   # watch it render as the agent works
+folio review docs/plan.md    # watch it render as the agent works
 ```
 
 Any window can float: **View → Float on Top** (⌥⌘W) or the pin button at
 the top right of the window — click it again to return to a normal window.
+The same live reload works without floating too: **File → Auto-Reload
+External Changes** (on by default) reloads whenever the open file changes
+on disk — agent edits, git checkouts, another editor.
+
+Also on board: **File → Open Recent**, session restore (relaunch lands on
+your last file, caret, and scroll position), and resizable table columns.
 
 ## Folio Pro
 
