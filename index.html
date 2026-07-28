@@ -39,6 +39,32 @@
       <span id="doc-title">Untitled</span>
       <div class="toolbar-end">
         <button
+          id="annotations-btn"
+          type="button"
+          title="Show annotations"
+          aria-label="Show annotations"
+          aria-pressed="false"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+        </button>
+        <button
           id="feedback-btn"
           type="button"
           title="Export review feedback for your agent (⌥⌘R)"
@@ -105,7 +131,20 @@
         </button>
       </div>
     </header>
-    <main id="editor"></main>
+    <div id="main-row">
+      <main id="editor"></main>
+      <aside id="annot-sidebar" hidden aria-label="Review annotations">
+        <header id="annot-sidebar-header">
+          <span id="annot-sidebar-title">Annotations</span>
+          <button id="annot-sidebar-close" type="button" title="Hide annotations" aria-label="Hide annotations">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </header>
+        <div id="annot-list"></div>
+      </aside>
+    </div>
     <textarea
       id="source-editor"
       hidden

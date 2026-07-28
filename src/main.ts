@@ -18,7 +18,8 @@ import { shouldScroll, typewriterScrollTop } from "./modes";
 import { NavigationHistory } from "./navhistory";
 import { addRecent, loadRecent, saveRecent } from "./recent";
 import { loadSession, saveSession } from "./session";
-import { renderedText, showReloadDiff } from "./diffview";
+import { renderedText, showReloadDiff, docSegments } from "./diffview";
+import { findQuoteRange } from "./quotematch";
 import {
   buildFeedback,
   loadAnnotations,
@@ -43,6 +44,10 @@ const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
 const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
 const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn")!;
 const feedbackBtn = document.querySelector<HTMLButtonElement>("#feedback-btn")!;
+const annotationsBtn = document.querySelector<HTMLButtonElement>("#annotations-btn")!;
+const annotSidebar = document.querySelector<HTMLElement>("#annot-sidebar")!;
+const annotList = document.querySelector<HTMLDivElement>("#annot-list")!;
+const annotSidebarClose = document.querySelector<HTMLButtonElement>("#annot-sidebar-close")!;
 const annotOverlay = document.querySelector<HTMLDivElement>("#annot-overlay")!;
 const annotQuote = document.querySelector<HTMLElement>("#annot-quote")!;
 const annotBody = document.querySelector<HTMLTextAreaElement>("#annot-body")!;
@@ -652,7 +657,92 @@ async function loadAnnotationsForOpenFile(): Promise<void> {
 function renderAnnotationsNow(): void {
   if (sourceMode) return;
   editor.withView((view) => renderAnnotations(view, annotations));
+  renderSidebar();
 }
+
+// ——— annotations sidebar ———
+
+/** Session-only hide override; adding an annotation re-shows the panel. */
+let sidebarHidden = false;
+
+const ANNOT_KIND_LABEL: Record<AnnotationKind, string> = {
+  comment: "Comment",
+  delete: "Delete",
+  replace: "Replace",
+};
+
+function renderSidebar(): void {
+  const show = annotations.length > 0 && !sidebarHidden;
+  annotSidebar.hidden = !show;
+  annotationsBtn.classList.toggle("active", show);
+  annotationsBtn.setAttribute("aria-pressed", String(show));
+  annotList.replaceChildren(...annotations.map(renderSidebarItem));
+}
+
+function renderSidebarItem(annotation: Annotation): HTMLElement {
+  const item = document.createElement("div");
+  item.className = "annot-item";
+  item.addEventListener("click", () => jumpToAnnotation(annotation));
+
+  const kind = document.createElement("div");
+  kind.className = `annot-item-kind ${annotation.kind}`;
+  kind.textContent = ANNOT_KIND_LABEL[annotation.kind];
+
+  const quote = document.createElement("div");
+  quote.className = "annot-item-quote";
+  quote.textContent = annotation.quote.replace(/\s+/g, " ").trim();
+  item.append(kind, quote);
+
+  if (annotation.body) {
+    const body = document.createElement("div");
+    body.className = "annot-item-body";
+    body.textContent = annotation.body;
+    item.append(body);
+  }
+
+  const del = document.createElement("button");
+  del.className = "annot-item-delete";
+  del.type = "button";
+  del.title = "Remove annotation";
+  del.textContent = "×";
+  del.addEventListener("click", (e) => {
+    e.stopPropagation();
+    void deleteAnnotation(annotation);
+  });
+  item.append(del);
+  return item;
+}
+
+/** Scroll the document to an annotation and select its range. */
+function jumpToAnnotation(annotation: Annotation): void {
+  if (sourceMode) return;
+  editor.withView((view) => {
+    const { segments } = docSegments(view);
+    const range = findQuoteRange(segments, annotation.quote, view.state.doc.content.size);
+    if (!range) return;
+    view.dispatch(
+      view.state.tr
+        .setSelection(TextSelection.near(view.state.doc.resolve(range.from)))
+        .scrollIntoView(),
+    );
+  });
+}
+
+async function deleteAnnotation(annotation: Annotation): Promise<void> {
+  annotations = annotations.filter((a) => a.id !== annotation.id);
+  await invoke("delete_annotation", { id: annotation.id });
+  renderAnnotationsNow();
+}
+
+annotSidebarClose.addEventListener("click", () => {
+  sidebarHidden = true;
+  renderSidebar();
+});
+
+annotationsBtn.addEventListener("click", () => {
+  sidebarHidden = !sidebarHidden;
+  renderSidebar();
+});
 
 let pendingQuote = "";
 
@@ -662,10 +752,15 @@ function openAnnotateDialog(): void {
   if (sourceMode) return;
   editor.withView((view) => {
     const { $from, from, to } = view.state.selection;
-    pendingQuote =
-      from !== to
-        ? view.state.doc.textBetween(from, to, "\n", " ")
-        : view.state.doc.textBetween($from.start($from.depth), $from.end($from.depth), "\n", " ");
+    if (from !== to) {
+      pendingQuote = view.state.doc.textBetween(from, to, "\n", " ");
+    } else if ($from.depth > 0) {
+      // No selection: annotate the innermost block under the caret (depth 0
+      // would quote the whole document — never useful).
+      pendingQuote = view.state.doc.textBetween($from.start(), $from.end(), "\n", " ");
+    } else {
+      pendingQuote = "";
+    }
   });
   if (!pendingQuote.trim()) return;
   annotQuote.textContent = pendingQuote.replace(/\s+/g, " ").trim();
@@ -705,6 +800,7 @@ function saveAnnotation(): void {
   const annotation = makeAnnotation(kind, pendingQuote, body);
   annotations = [...annotations, annotation];
   void invoke("add_annotation", { path: doc.filePath, annotation });
+  sidebarHidden = false; // a fresh annotation re-shows the panel
   renderAnnotationsNow();
   closeAnnotateDialog();
 }

@@ -490,6 +490,11 @@ fn clear_annotations_in(conn: &rusqlite::Connection, path: &str) -> rusqlite::Re
     Ok(())
 }
 
+fn delete_annotation_in(conn: &rusqlite::Connection, id: &str) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM annotations WHERE id = ?1", [id])?;
+    Ok(())
+}
+
 /// Lazily opened annotation database.
 struct AnnotationDb(Mutex<Option<rusqlite::Connection>>);
 
@@ -541,6 +546,16 @@ fn clear_annotations(
     path: String,
 ) -> Result<(), String> {
     state.with(&app, |conn| clear_annotations_in(conn, &path).map_err(|e| e.to_string()))
+}
+
+/// Delete a single annotation by id.
+#[tauri::command]
+fn delete_annotation(
+    app: AppHandle<Wry>,
+    state: tauri::State<'_, AnnotationDb>,
+    id: String,
+) -> Result<(), String> {
+    state.with(&app, |conn| delete_annotation_in(conn, &id).map_err(|e| e.to_string()))
 }
 
 /// Read a UTF-8 text file from disk.
@@ -1128,6 +1143,7 @@ pub fn run() {
             list_annotations,
             add_annotation,
             clear_annotations,
+            delete_annotation,
             set_revision_menu,
             archive_revision,
             list_revisions,
@@ -1391,6 +1407,10 @@ mod tests {
         assert_eq!(list_annotations_in(&conn, "/a.md").unwrap().len(), 0);
         // clearing one path leaves the other untouched
         assert_eq!(list_annotations_in(&conn, "/b.md").unwrap().len(), 1);
+
+        // deleting a single annotation by id
+        delete_annotation_in(&conn, "b1").unwrap();
+        assert_eq!(list_annotations_in(&conn, "/b.md").unwrap().len(), 0);
     }
 
     #[test]

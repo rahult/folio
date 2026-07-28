@@ -10,7 +10,8 @@ import { $prose } from "@milkdown/kit/utils";
 import { Plugin, PluginKey } from "@milkdown/kit/prose/state";
 import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view";
 import type { Annotation } from "./annotations";
-import { docSegments, pmPosAt } from "./diffview";
+import { docSegments } from "./diffview";
+import { findQuoteRange } from "./quotematch";
 
 export const annotationKey = new PluginKey<DecorationSet>("FOLIO_ANNOTATIONS");
 
@@ -36,31 +37,14 @@ export const annotationPlugin = $prose(
     }),
 );
 
-/** First plain-text occurrence of `quote` → ProseMirror range. Quotes are
- *  captured from the rendered text (same separators docSegments produces),
- *  so an exact search maps back cleanly. */
-function findQuote(
-  view: EditorView,
-  segments: ReturnType<typeof docSegments>["segments"],
-  docText: string,
-  quote: string,
-): { from: number; to: number } | null {
-  if (!quote.trim()) return null;
-  const offset = docText.indexOf(quote);
-  if (offset === -1) return null;
-  const docSize = view.state.doc.content.size;
-  const from = pmPosAt(segments, offset, docSize);
-  const to = pmPosAt(segments, offset + quote.length, docSize);
-  return to > from ? { from, to } : null;
-}
-
 /** Render the current annotation list as decorations (replacing previous). */
 export function renderAnnotations(view: EditorView, annotations: Annotation[]): void {
-  const { text, segments } = docSegments(view);
+  const { segments } = docSegments(view);
+  const docSize = view.state.doc.content.size;
   const decorations: Decoration[] = [];
   let ghostIndex = 0;
   for (const annotation of annotations) {
-    const range = findQuote(view, segments, text, annotation.quote);
+    const range = findQuoteRange(segments, annotation.quote, docSize);
     if (!range) continue; // quote vanished in a rewrite — feedback keeps it
     if (annotation.kind === "comment") {
       decorations.push(Decoration.inline(range.from, range.to, { class: "annot-comment" }));

@@ -135,7 +135,8 @@ body {
    the accent */
 #float-btn,
 #copy-agent-btn,
-#feedback-btn {
+#feedback-btn,
+#annotations-btn {
   border: none;
   background: transparent;
   color: var(--ink-faint);
@@ -151,12 +152,14 @@ body {
 
 #float-btn:hover,
 #copy-agent-btn:hover,
-#feedback-btn:hover {
+#feedback-btn:hover,
+#annotations-btn:hover {
   color: var(--ink);
   background: var(--paper-sunken);
 }
 
-#float-btn.active {
+#float-btn.active,
+#annotations-btn.active {
   color: var(--accent);
 }
 
@@ -253,6 +256,12 @@ body.is-dirty #doc-title::before {
 }
 
 /* ——— editor canvas ——— */
+
+#main-row {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 #editor {
   flex: 1 1 auto;
@@ -726,6 +735,124 @@ body.is-dirty #doc-title::before {
   color: var(--accent);
   border-bottom: 1px solid var(--accent);
   margin-left: 0.35em;
+}
+
+/* ——— annotations sidebar ——— */
+
+#annot-sidebar {
+  width: 248px;
+  flex: 0 0 auto;
+  border-left: 1px solid var(--hairline);
+  background: var(--paper);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#annot-sidebar[hidden] {
+  display: none;
+}
+
+#annot-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  flex: 0 0 auto;
+}
+
+#annot-sidebar-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+#annot-sidebar-close {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 5px;
+  display: inline-flex;
+}
+
+#annot-sidebar-close:hover {
+  color: var(--ink);
+  background: var(--paper-sunken);
+}
+
+.annot-item {
+  position: relative;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.annot-item:hover {
+  background: var(--paper-sunken);
+}
+
+.annot-item-kind {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 3px;
+}
+
+.annot-item-kind.delete {
+  color: oklch(0.55 0.1 30);
+}
+
+.annot-item-kind.replace {
+  color: oklch(0.55 0.09 155);
+}
+
+.annot-item-quote {
+  color: var(--ink-soft);
+  font-family: var(--font-prose);
+  font-style: italic;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.annot-item-body {
+  color: var(--ink);
+  margin-top: 3px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.annot-item-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 5px;
+  display: inline-flex;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.annot-item-delete:hover {
+  color: var(--ink);
+  background: var(--hairline);
 }
 
 /* mermaid diagrams in code-block previews — centered, never overflowing */
