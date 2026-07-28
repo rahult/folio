@@ -728,6 +728,18 @@ body.is-dirty #doc-title::before {
   margin-left: 0.35em;
 }
 
+/* mermaid diagrams in code-block previews — centered, never overflowing */
+.milkdown .milkdown-code-block .mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  padding: 0.5em 0;
+}
+
+.milkdown .milkdown-code-block .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .license-copy {
   font-size: 13.5px;
   line-height: 1.55;

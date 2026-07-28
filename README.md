@@ -90,10 +90,12 @@ window. From then on, any plan an agent writes lands in Folio, and your
 annotations come back to the agent via `<plan>.feedback.md`.
 
 Also on board: **File → Open Recent**, session restore (relaunch lands on
-your last file, caret, and scroll position), resizable table columns, and
-link navigation — ⌘-click a Markdown link to open it inside Folio and walk
-back with **File → Back / Forward** (⌘[ / ⌘] or the toolbar chevrons);
-web URLs and other file types open in their default applications.
+your last file, caret, and scroll position), resizable table columns,
+Mermaid diagrams rendered inline (fenced `mermaid` blocks show as diagrams
+— Edit toggles the source), and link navigation — ⌘-click a Markdown link
+to open it inside Folio and walk back with **File → Back / Forward**
+(⌘[ / ⌘] or the toolbar chevrons); web URLs and other file types open in
+their default applications.
 
 ## Folio Pro
 

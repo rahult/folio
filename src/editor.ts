@@ -28,6 +28,7 @@ import type { EditorView } from "@milkdown/kit/prose/view";
 import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from "./commands";
 import { diffViewPlugin } from "./diffview";
 import { annotationPlugin } from "./annotview";
+import { mermaidRenderPreview } from "./mermaid";
 
 /**
  * Thin wrapper around the Crepe WYSIWYG markdown editor.
@@ -64,6 +65,13 @@ export class MarkdownEditor {
         [Crepe.Feature.Placeholder]: {
           text: "Start writing — or press ⌘O to open a file",
           mode: "doc",
+        },
+        [Crepe.Feature.CodeMirror]: {
+          // Mermaid blocks render as diagrams (preview-only by default);
+          // the Edit/Hide toggle is the click-to-edit surface.
+          renderPreview: mermaidRenderPreview,
+          previewOnlyByDefault: true,
+          previewLabel: "Diagram",
         },
       },
     });
