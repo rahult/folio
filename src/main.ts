@@ -23,7 +23,6 @@ import {
   buildFeedback,
   loadAnnotations,
   makeAnnotation,
-  saveAnnotations,
   type Annotation,
   type AnnotationKind,
 } from "./annotations";
@@ -109,7 +108,7 @@ async function loadFromPath(path: string, options?: { visit?: boolean }): Promis
   await loadContent(content, path);
   recordRecent(path);
   saveSessionNow();
-  loadAnnotationsForOpenFile();
+  void loadAnnotationsForOpenFile();
   void archiveCurrentRevision();
   if (options?.visit !== false) {
     nav.visit(path);
@@ -628,9 +627,25 @@ navForwardBtn.addEventListener("click", () => void navigateForward());
 
 let annotations: Annotation[] = [];
 
-/** Load the annotation list for the open file and render its marks. */
-function loadAnnotationsForOpenFile(): void {
-  annotations = doc.filePath ? loadAnnotations(doc.filePath) : [];
+/** Load the annotation list for the open file from the SQLite store and
+ *  render its marks. One-time migration: annotations saved by pre-SQLite
+ *  builds in localStorage are moved into the database. */
+async function loadAnnotationsForOpenFile(): Promise<void> {
+  const path = doc.filePath;
+  if (!path) {
+    annotations = [];
+    renderAnnotationsNow();
+    return;
+  }
+  annotations = await invoke<Annotation[]>("list_annotations", { path });
+  const legacy = loadAnnotations(path);
+  if (legacy.length > 0) {
+    for (const legacy_ of legacy) {
+      await invoke("add_annotation", { path, annotation: legacy_ });
+    }
+    annotations = [...annotations, ...legacy];
+    localStorage.removeItem(`folio-annotations:${path}`);
+  }
   renderAnnotationsNow();
 }
 
@@ -687,8 +702,9 @@ function saveAnnotation(): void {
     annotBody.focus();
     return;
   }
-  annotations = [...annotations, makeAnnotation(kind, pendingQuote, body)];
-  saveAnnotations(doc.filePath, annotations);
+  const annotation = makeAnnotation(kind, pendingQuote, body);
+  annotations = [...annotations, annotation];
+  void invoke("add_annotation", { path: doc.filePath, annotation });
   renderAnnotationsNow();
   closeAnnotateDialog();
 }
@@ -696,7 +712,7 @@ function saveAnnotation(): void {
 function clearReviewAnnotations(): void {
   if (!doc.filePath) return;
   annotations = [];
-  saveAnnotations(doc.filePath, annotations);
+  void invoke("clear_annotations", { path: doc.filePath });
   renderAnnotationsNow();
 }
 

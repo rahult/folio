@@ -414,6 +414,135 @@ fn read_revision(app: AppHandle<Wry>, path: String, seq: u64) -> Result<Revision
     read_revision_file(&history_dir(&app, &path)?, seq)
 }
 
+// ——— annotation store (embedded SQLite) ———
+//
+// Review annotations persist in <config>/folio.db so they survive webview
+// data clears and are queryable outside the app. Core logic takes a
+// &Connection so it is unit-testable in memory.
+
+/// One review annotation; field names match the frontend model exactly.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct Annotation {
+    id: String,
+    kind: String,
+    quote: String,
+    body: String,
+    created_at: String,
+}
+
+fn init_annotation_db(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS annotations (
+            id         TEXT PRIMARY KEY,
+            path       TEXT NOT NULL,
+            kind       TEXT NOT NULL,
+            quote      TEXT NOT NULL,
+            body       TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_annotations_path ON annotations(path);",
+    )
+}
+
+fn list_annotations_in(
+    conn: &rusqlite::Connection,
+    path: &str,
+) -> rusqlite::Result<Vec<Annotation>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, kind, quote, body, created_at FROM annotations
+         WHERE path = ?1 ORDER BY created_at, rowid",
+    )?;
+    let rows = stmt.query_map([path], |row| {
+        Ok(Annotation {
+            id: row.get(0)?,
+            kind: row.get(1)?,
+            quote: row.get(2)?,
+            body: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    })?;
+    rows.collect()
+}
+
+fn add_annotation_in(
+    conn: &rusqlite::Connection,
+    path: &str,
+    annotation: &Annotation,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO annotations (id, path, kind, quote, body, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![
+            annotation.id,
+            path,
+            annotation.kind,
+            annotation.quote,
+            annotation.body,
+            annotation.created_at
+        ],
+    )?;
+    Ok(())
+}
+
+fn clear_annotations_in(conn: &rusqlite::Connection, path: &str) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM annotations WHERE path = ?1", [path])?;
+    Ok(())
+}
+
+/// Lazily opened annotation database.
+struct AnnotationDb(Mutex<Option<rusqlite::Connection>>);
+
+impl AnnotationDb {
+    fn with<T>(
+        &self,
+        app: &AppHandle<Wry>,
+        f: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut guard = self.0.lock().unwrap();
+        if guard.is_none() {
+            let path = config_dir(app)?.join("folio.db");
+            let conn = rusqlite::Connection::open(path).map_err(|e| e.to_string())?;
+            init_annotation_db(&conn).map_err(|e| e.to_string())?;
+            *guard = Some(conn);
+        }
+        f(guard.as_ref().unwrap())
+    }
+}
+
+/// All annotations for a file, oldest first.
+#[tauri::command]
+fn list_annotations(
+    app: AppHandle<Wry>,
+    state: tauri::State<'_, AnnotationDb>,
+    path: String,
+) -> Result<Vec<Annotation>, String> {
+    state.with(&app, |conn| list_annotations_in(conn, &path).map_err(|e| e.to_string()))
+}
+
+/// Insert (or replace) one annotation for a file.
+#[tauri::command]
+fn add_annotation(
+    app: AppHandle<Wry>,
+    state: tauri::State<'_, AnnotationDb>,
+    path: String,
+    annotation: Annotation,
+) -> Result<(), String> {
+    state.with(&app, |conn| {
+        add_annotation_in(conn, &path, &annotation).map_err(|e| e.to_string())
+    })
+}
+
+/// Delete all annotations for a file.
+#[tauri::command]
+fn clear_annotations(
+    app: AppHandle<Wry>,
+    state: tauri::State<'_, AnnotationDb>,
+    path: String,
+) -> Result<(), String> {
+    state.with(&app, |conn| clear_annotations_in(conn, &path).map_err(|e| e.to_string()))
+}
+
 /// Read a UTF-8 text file from disk.
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
@@ -971,6 +1100,7 @@ pub fn run() {
         .manage(float_requested)
         .manage(RecentFiles::default())
         .manage(RevisionMenu::default())
+        .manage(AnnotationDb(Mutex::new(None)))
         .menu(|app| build_menu(app, false))
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
@@ -995,6 +1125,9 @@ pub fn run() {
             take_float_mode,
             set_window_floating,
             set_recent_files,
+            list_annotations,
+            add_annotation,
+            clear_annotations,
             set_revision_menu,
             archive_revision,
             list_revisions,
@@ -1226,5 +1359,52 @@ mod tests {
         assert_eq!(list_in_dir(&dir)[0].seq, 25);
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    fn test_annotation(id: &str, kind: &str) -> Annotation {
+        Annotation {
+            id: id.to_string(),
+            kind: kind.to_string(),
+            quote: "quoted text".to_string(),
+            body: "note body".to_string(),
+            created_at: "2026-07-28T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn annotation_db_stores_lists_and_clears_per_path() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        init_annotation_db(&conn).unwrap();
+
+        add_annotation_in(&conn, "/a.md", &test_annotation("a1", "comment")).unwrap();
+        add_annotation_in(&conn, "/a.md", &test_annotation("a2", "delete")).unwrap();
+        add_annotation_in(&conn, "/b.md", &test_annotation("b1", "replace")).unwrap();
+
+        let a = list_annotations_in(&conn, "/a.md").unwrap();
+        assert_eq!(a.len(), 2);
+        assert_eq!(a[0].id, "a1");
+        assert_eq!(a[1].kind, "delete");
+        assert_eq!(list_annotations_in(&conn, "/b.md").unwrap().len(), 1);
+        assert_eq!(list_annotations_in(&conn, "/c.md").unwrap().len(), 0);
+
+        clear_annotations_in(&conn, "/a.md").unwrap();
+        assert_eq!(list_annotations_in(&conn, "/a.md").unwrap().len(), 0);
+        // clearing one path leaves the other untouched
+        assert_eq!(list_annotations_in(&conn, "/b.md").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn annotation_db_replace_on_same_id_keeps_single_row() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        init_annotation_db(&conn).unwrap();
+
+        add_annotation_in(&conn, "/a.md", &test_annotation("a1", "comment")).unwrap();
+        let mut updated = test_annotation("a1", "comment");
+        updated.body = "edited note".to_string();
+        add_annotation_in(&conn, "/a.md", &updated).unwrap();
+
+        let list = list_annotations_in(&conn, "/a.md").unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].body, "edited note");
     }
 }

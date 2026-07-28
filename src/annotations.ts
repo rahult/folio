@@ -1,9 +1,10 @@
 /**
  * Review annotations on a document being reviewed (e.g. an agent-written
  * plan): select text, then comment on it, mark it for deletion, or suggest
- * a replacement. Annotations persist per file path in localStorage (draft
- * auto-save) and serialize into structured, agent-consumable feedback.
- * Pure and DOM-free so the model is unit-testable.
+ * a replacement. Annotations persist in an embedded SQLite database (see
+ * src-tauri) so they survive sessions, reloads, and webview data clears;
+ * the localStorage helpers here remain only to migrate annotations written
+ * by pre-SQLite builds. Pure and DOM-free so the model is unit-testable.
  */
 
 export type AnnotationKind = "comment" | "delete" | "replace";
