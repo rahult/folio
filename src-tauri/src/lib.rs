@@ -296,8 +296,11 @@ fn set_window_floating(window: WebviewWindow<Wry>, floating: bool) -> Result<(),
             let scale = monitor.scale_factor();
             let margin = (20.0 * scale) as i32;
             let width = (420.0 * scale) as i32;
-            let x = monitor.size().width as i32 - width - margin;
-            let y = (44.0 * scale) as i32;
+            // Monitor positions are global, so the origin has to be added
+            // back in — without it a window on a second display is parked
+            // relative to the primary one, which can put it off-screen.
+            let x = monitor.position().x + monitor.size().width as i32 - width - margin;
+            let y = monitor.position().y + (44.0 * scale) as i32;
             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
         }
         window
@@ -307,44 +310,82 @@ fn set_window_floating(window: WebviewWindow<Wry>, floating: bool) -> Result<(),
     Ok(())
 }
 
+/// How long AeroSpace gets to answer before we give up on it. This runs
+/// inside a Tauri command, so an unbounded wait would hang the app: a
+/// wedged `aerospace` CLI (its server can stop answering while the app
+/// itself keeps running) used to leave Folio frozen with no window and a
+/// stuck child process behind it.
+#[cfg(target_os = "macos")]
+const AEROSPACE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(400);
+
+/// Run an `aerospace` subcommand and return its stdout, or None if it fails
+/// or does not answer within `timeout` — in which case the child is killed
+/// rather than left running.
+#[cfg(target_os = "macos")]
+fn aerospace_output(args: &[&str], timeout: std::time::Duration) -> Option<String> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new("aerospace")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return None;
+                }
+                let mut out = String::new();
+                child.stdout.take()?.read_to_string(&mut out).ok()?;
+                return Some(out);
+            }
+            Ok(None) if std::time::Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(_) => return None,
+        }
+    }
+}
+
 /// The AeroSpace window id of the focused window, but only when that window
 /// belongs to us — the layout change must never hit another app's window.
 /// Folio can have several windows in one process, so the pid alone no longer
 /// identifies which one to retile; the focused one is the one being toggled.
 #[cfg(target_os = "macos")]
 fn aerospace_focused_own_window() -> Option<String> {
-    let out = std::process::Command::new("aerospace")
-        .args([
-            "list-windows",
-            "--focused",
-            "--format",
-            "%{window-id} %{app-pid}",
-        ])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let line = String::from_utf8_lossy(&out.stdout);
-    let (id, pid) = line.trim().split_once(char::is_whitespace)?;
+    let out = aerospace_output(
+        &["list-windows", "--focused", "--format", "%{window-id} %{app-pid}"],
+        AEROSPACE_TIMEOUT,
+    )?;
+    let (id, pid) = out.trim().split_once(char::is_whitespace)?;
     (pid.trim() == std::process::id().to_string()).then(|| id.to_owned())
 }
 
 /// Best effort: if AeroSpace (macOS tiling WM) is managing this window, ask
-/// it to float/retile the window. Silent no-op when the CLI is absent.
+/// it to float/retile the window. Silent no-op when the CLI is absent,
+/// unresponsive, or not managing us.
 #[cfg(target_os = "macos")]
 fn aerospace_layout(floating: bool) {
     let Some(id) = aerospace_focused_own_window() else {
         return;
     };
-    let _ = std::process::Command::new("aerospace")
-        .args([
+    let _ = aerospace_output(
+        &[
             "layout",
             "--window-id",
             &id,
             if floating { "floating" } else { "tiling" },
-        ])
-        .output();
+        ],
+        AEROSPACE_TIMEOUT,
+    );
 }
 
 #[cfg(not(target_os = "macos"))]

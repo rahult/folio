@@ -725,6 +725,11 @@ body.is-dirty #doc-title::before {
 
 /* annotation marks in the document: dotted accent underline for comments,
    strikethrough for deletions, accent ghost for suggested replacements */
+.milkdown .ProseMirror .annot-comment,
+.milkdown .ProseMirror .annot-delete,
+.milkdown .ProseMirror .annot-replace {
+  cursor: pointer;
+}
 .milkdown .ProseMirror .annot-comment {
   border-bottom: 2px dotted var(--accent);
 }
@@ -755,6 +760,13 @@ body.is-dirty #doc-title::before {
 
 #annot-sidebar[hidden] {
   display: none;
+}
+
+.annot-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-faint);
 }
 
 #annot-sidebar-header {

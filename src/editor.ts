@@ -30,6 +30,10 @@ import { diffViewPlugin } from "./diffview";
 import { annotationPlugin } from "./annotview";
 import { mermaidRenderPreview } from "./mermaid";
 
+/** Speech-bubble icon for the selection toolbar's annotate action (feather
+ *  "message-square", stroke style matching Crepe's built-in icons). */
+const ANNOTATE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+
 /**
  * Thin wrapper around the Crepe WYSIWYG markdown editor.
  * Crepe has no "set content" API, so replacing the document is done by
@@ -38,6 +42,7 @@ import { mermaidRenderPreview } from "./mermaid";
 export class MarkdownEditor {
   private crepe: Crepe | null = null;
   private selectionCb: (() => void) | null = null;
+  private annotateCb: (() => void) | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -73,6 +78,19 @@ export class MarkdownEditor {
           previewOnlyByDefault: true,
           previewLabel: "Diagram",
         },
+        [Crepe.Feature.Toolbar]: {
+          // Append an annotate action to the selection bubble: same flow as
+          // Edit → Annotate Selection…, one click instead of a menu trip.
+          buildToolbar: (builder) => {
+            builder.getGroup("function").addItem("annotate", {
+              icon: ANNOTATE_ICON,
+              active: () => false,
+              onRun: () => {
+                this.annotateCb?.();
+              },
+            });
+          },
+        },
       },
     });
 
@@ -101,6 +119,11 @@ export class MarkdownEditor {
    *  Re-registered automatically when the editor is recreated. */
   onSelectionUpdate(cb: () => void): void {
     this.selectionCb = cb;
+  }
+
+  /** Register the action behind the selection toolbar's annotate icon. */
+  onAnnotateRequest(cb: () => void): void {
+    this.annotateCb = cb;
   }
 
   /** Run `fn` against the live ProseMirror view (no-op before create). */

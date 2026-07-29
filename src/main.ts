@@ -31,7 +31,7 @@ import {
 import { renderAnnotations } from "./annotview";
 import { canApplyTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
-import { TextSelection } from "@milkdown/kit/prose/state";
+import { TextSelection, type Selection } from "@milkdown/kit/prose/state";
 import {
   initTelemetry,
   setTelemetryConsent,
@@ -101,6 +101,9 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
   wordCountEl.textContent = `${countWords(markdown)} words`;
   renderTitle();
 });
+// The selection bubble's annotate icon runs the same flow as
+// Edit → Annotate Selection… (function declaration, hoisted).
+editor.onAnnotateRequest(openAnnotateDialog);
 
 function renderTitle(): void {
   titleEl.textContent = doc.fileName;
@@ -711,6 +714,7 @@ async function loadAnnotationsForOpenFile(): Promise<void> {
   const path = doc.filePath;
   if (!path) {
     annotations = [];
+    sidebarOpen = false;
     renderAnnotationsNow();
     return;
   }
@@ -723,6 +727,8 @@ async function loadAnnotationsForOpenFile(): Promise<void> {
     annotations = [...annotations, ...legacy];
     localStorage.removeItem(`folio-annotations:${path}`);
   }
+  // Auto-open only when the incoming file actually has annotations.
+  sidebarOpen = annotations.length > 0;
   renderAnnotationsNow();
 }
 
@@ -734,8 +740,11 @@ function renderAnnotationsNow(): void {
 
 // ——— annotations sidebar ———
 
-/** Session-only hide override; adding an annotation re-shows the panel. */
-let sidebarHidden = false;
+/** Sidebar visibility. Opens automatically when a file loads with
+ *  annotations or a fresh one is added; the toolbar toggle and the close
+ *  button flip it manually at any time — including when empty, so the
+ *  toggle always gives visible feedback. */
+let sidebarOpen = false;
 
 const ANNOT_KIND_LABEL: Record<AnnotationKind, string> = {
   comment: "Comment",
@@ -744,10 +753,17 @@ const ANNOT_KIND_LABEL: Record<AnnotationKind, string> = {
 };
 
 function renderSidebar(): void {
-  const show = annotations.length > 0 && !sidebarHidden;
-  annotSidebar.hidden = !show;
-  annotationsBtn.classList.toggle("active", show);
-  annotationsBtn.setAttribute("aria-pressed", String(show));
+  annotSidebar.hidden = !sidebarOpen;
+  annotationsBtn.classList.toggle("active", sidebarOpen);
+  annotationsBtn.setAttribute("aria-pressed", String(sidebarOpen));
+  if (annotations.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "annot-empty";
+    empty.textContent =
+      "No annotations yet — select text and click the annotate icon in the selection popup, or use Edit → Annotate Selection…";
+    annotList.replaceChildren(empty);
+    return;
+  }
   annotList.replaceChildren(...annotations.map(renderSidebarItem));
 }
 
@@ -792,11 +808,16 @@ function jumpToAnnotation(annotation: Annotation): void {
     const { segments } = docSegments(view);
     const range = findQuoteRange(segments, annotation.quote, view.state.doc.content.size);
     if (!range) return;
-    view.dispatch(
-      view.state.tr
-        .setSelection(TextSelection.near(view.state.doc.resolve(range.from)))
-        .scrollIntoView(),
-    );
+    view.focus();
+    // Select the whole annotated range so the jump visibly highlights it;
+    // fall back to a caret if the range can't hold a text selection.
+    let selection: Selection;
+    try {
+      selection = TextSelection.create(view.state.doc, range.from, range.to);
+    } catch {
+      selection = TextSelection.near(view.state.doc.resolve(range.from));
+    }
+    view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
   });
 }
 
@@ -807,12 +828,12 @@ async function deleteAnnotation(annotation: Annotation): Promise<void> {
 }
 
 annotSidebarClose.addEventListener("click", () => {
-  sidebarHidden = true;
+  sidebarOpen = false;
   renderSidebar();
 });
 
 annotationsBtn.addEventListener("click", () => {
-  sidebarHidden = !sidebarHidden;
+  sidebarOpen = !sidebarOpen;
   renderSidebar();
 });
 
@@ -873,7 +894,7 @@ function saveAnnotation(): void {
   trackEvent("annotate");
   annotations = [...annotations, annotation];
   void invoke("add_annotation", { path: doc.filePath, annotation });
-  sidebarHidden = false; // a fresh annotation re-shows the panel
+  sidebarOpen = true; // a fresh annotation re-shows the panel
   renderAnnotationsNow();
   closeAnnotateDialog();
 }
@@ -923,6 +944,28 @@ annotOverlay.addEventListener("click", (e) => {
 for (const radio of document.querySelectorAll('input[name="annot-kind"]')) {
   radio.addEventListener("change", syncAnnotBodyVisibility);
 }
+
+// Clicking an annotation mark in the document opens the sidebar and
+// highlights the annotation under the caret.
+editorRoot.addEventListener("click", (e) => {
+  const mark = (e.target as HTMLElement).closest(
+    ".annot-comment, .annot-delete, .annot-replace",
+  );
+  if (!mark || annotations.length === 0) return;
+  sidebarOpen = true;
+  renderSidebar();
+  editor.withView((view) => {
+    const pos = view.posAtCoords({ left: e.clientX, top: e.clientY });
+    if (!pos) return;
+    const { segments } = docSegments(view);
+    const docSize = view.state.doc.content.size;
+    const hit = annotations.find((a) => {
+      const range = findQuoteRange(segments, a.quote, docSize);
+      return range !== null && pos.pos >= range.from && pos.pos <= range.to;
+    });
+    if (hit) jumpToAnnotation(hit);
+  });
+});
 
 // ——— revision history ———
 
