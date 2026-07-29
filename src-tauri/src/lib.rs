@@ -10,6 +10,7 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
 pub mod license;
+pub mod reviewgate;
 
 /// File extensions Folio opens; mirrors `fileAssociations` in tauri.conf.json.
 const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
@@ -460,7 +461,7 @@ struct RevisionMeta {
 }
 
 /// FNV-1a hex of the reviewed file's path — stable directory name.
-fn path_hash(path: &str) -> String {
+pub(crate) fn path_hash(path: &str) -> String {
     let mut hash: u64 = 0xcbf29ce484222325;
     for byte in path.as_bytes() {
         hash ^= u64::from(*byte);
