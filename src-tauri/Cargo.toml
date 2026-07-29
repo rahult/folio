@@ -1,6 +1,6 @@
 [package]
 name = "folio"
-version = "0.7.0"
+version = "0.8.0"
 description = "Folio — a calm, Typora-style Markdown editor"
 authors = ["rahult"]
 edition = "2021"
