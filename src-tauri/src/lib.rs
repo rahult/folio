@@ -66,6 +66,28 @@ fn file_name(path: &str) -> String {
         .to_string()
 }
 
+/// Gate flags from a `folio review --wait/--collect` invocation. Meaningful
+/// only to the invoking process, so they are skipped by serde: the spool
+/// entry and the per-window startup request stay exactly as they were.
+#[derive(Clone)]
+struct GateOptions {
+    wait: bool,
+    collect: bool,
+    timeout_secs: u64,
+    agent: String,
+}
+
+impl Default for GateOptions {
+    fn default() -> Self {
+        Self {
+            wait: false,
+            collect: false,
+            timeout_secs: reviewgate::DEFAULT_TIMEOUT_SECS,
+            agent: "agent".to_string(),
+        }
+    }
+}
+
 /// CLI invocation split into markdown files to open and whether the
 /// floating review window was requested. Doubles as the per-window startup
 /// request handed to a freshly created window.
@@ -74,6 +96,11 @@ fn file_name(path: &str) -> String {
 struct CliOptions {
     paths: Vec<String>,
     float: bool,
+    // Only read by tests today; Task 3's blocking CLI is the production
+    // consumer, at which point this allow can come out.
+    #[allow(dead_code)]
+    #[serde(skip)]
+    gate: GateOptions,
 }
 
 /// Write piped markdown to a temp file so it can be opened (and watched)
@@ -109,10 +136,29 @@ fn stdin_to_temp() -> Option<std::path::PathBuf> {
 fn parse_cli_args(args: impl IntoIterator<Item = String>) -> CliOptions {
     let mut float = false;
     let mut paths = Vec::new();
+    let mut gate = GateOptions::default();
+    // `--timeout 60` / `--agent claude` consume the next argument; this
+    // remembers which one is owed so the value is never read as a path.
+    let mut pending: Option<&'static str> = None;
     for arg in args.into_iter().skip(1) {
+        if let Some(flag) = pending.take() {
+            match flag {
+                "timeout" => {
+                    if let Ok(secs) = arg.parse::<u64>() {
+                        gate.timeout_secs = secs;
+                    }
+                }
+                _ => gate.agent = arg,
+            }
+            continue;
+        }
         match arg.as_str() {
             "--float" | "-f" => float = true,
             "review" => float = true,
+            "--wait" => gate.wait = true,
+            "--collect" => gate.collect = true,
+            "--timeout" => pending = Some("timeout"),
+            "--agent" => pending = Some("agent"),
             "-" => {
                 if let Some(path) = stdin_to_temp() {
                     paths.push(path.to_string_lossy().into_owned());
@@ -132,7 +178,7 @@ fn parse_cli_args(args: impl IntoIterator<Item = String>) -> CliOptions {
             }
         }
     }
-    CliOptions { paths, float }
+    CliOptions { paths, float, gate }
 }
 
 // ——— multiple windows ———
@@ -1414,6 +1460,7 @@ fn handle_run_event(app: &AppHandle<Wry>, event: RunEvent) {
             CliOptions {
                 paths: vec![path],
                 float: false,
+                ..Default::default()
             },
         );
     }
@@ -1577,10 +1624,12 @@ mod tests {
         let own = CliOptions {
             paths: vec!["/mine.md".to_string()],
             float: false,
+            ..Default::default()
         };
         let other = CliOptions {
             paths: vec!["/theirs.md".to_string()],
             float: true,
+            ..Default::default()
         };
         write_spool_in(&dir, 100, &own).unwrap();
         write_spool_in(&dir, 200, &other).unwrap();
@@ -1621,6 +1670,7 @@ mod tests {
             &CliOptions {
                 paths: vec!["/abandoned.md".to_string()],
                 float: false,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -1740,5 +1790,111 @@ mod tests {
         let list = list_annotations_in(&conn, "/a.md").unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].body, "edited note");
+    }
+
+    #[test]
+    fn parse_cli_args_lifts_out_the_wait_flag() {
+        let md = temp_file("args-wait", "md");
+        fs::write(&md, "# hi").unwrap();
+        let cli = parse_cli_args(
+            [
+                "folio".to_string(),
+                "review".to_string(),
+                "--wait".to_string(),
+                md.to_string_lossy().into_owned(),
+            ]
+            .into_iter(),
+        );
+        assert!(cli.gate.wait);
+        assert!(!cli.gate.collect);
+        assert!(cli.float);
+        assert_eq!(cli.paths.len(), 1);
+        assert_eq!(cli.gate.timeout_secs, reviewgate::DEFAULT_TIMEOUT_SECS);
+        assert_eq!(cli.gate.agent, "agent");
+
+        fs::remove_file(&md).ok();
+    }
+
+    #[test]
+    fn parse_cli_args_lifts_out_the_collect_flag() {
+        let md = temp_file("args-collect", "md");
+        let cli = parse_cli_args(
+            [
+                "folio".to_string(),
+                "review".to_string(),
+                "--collect".to_string(),
+                md.to_string_lossy().into_owned(),
+            ]
+            .into_iter(),
+        );
+        assert!(cli.gate.collect);
+        assert!(!cli.gate.wait);
+    }
+
+    #[test]
+    fn parse_cli_args_reads_timeout_and_agent_values() {
+        let md = temp_file("args-opts", "md");
+        fs::write(&md, "# hi").unwrap();
+        let cli = parse_cli_args(
+            [
+                "folio".to_string(),
+                "review".to_string(),
+                "--wait".to_string(),
+                "--timeout".to_string(),
+                "60".to_string(),
+                "--agent".to_string(),
+                "claude".to_string(),
+                md.to_string_lossy().into_owned(),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(cli.gate.timeout_secs, 60);
+        assert_eq!(cli.gate.agent, "claude");
+        // The values must not be mistaken for document paths.
+        assert_eq!(cli.paths.len(), 1);
+
+        fs::remove_file(&md).ok();
+    }
+
+    #[test]
+    fn parse_cli_args_ignores_a_malformed_timeout() {
+        let md = temp_file("args-badtimeout", "md");
+        let cli = parse_cli_args(
+            [
+                "folio".to_string(),
+                "review".to_string(),
+                "--wait".to_string(),
+                "--timeout".to_string(),
+                "soon".to_string(),
+                md.to_string_lossy().into_owned(),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(cli.gate.timeout_secs, reviewgate::DEFAULT_TIMEOUT_SECS);
+    }
+
+    #[test]
+    fn gate_flags_are_absent_from_a_plain_invocation() {
+        let md = temp_file("args-plain", "md");
+        let cli = parse_cli_args(
+            ["folio".to_string(), md.to_string_lossy().into_owned()].into_iter(),
+        );
+        assert!(!cli.gate.wait);
+        assert!(!cli.gate.collect);
+    }
+
+    #[test]
+    fn gate_options_do_not_travel_through_the_spool() {
+        let md = temp_file("args-spool", "md");
+        let mut cli = parse_cli_args(
+            ["folio".to_string(), md.to_string_lossy().into_owned()].into_iter(),
+        );
+        cli.gate.wait = true;
+        cli.gate.agent = "claude".to_string();
+        let json = serde_json::to_string(&cli).unwrap();
+        assert!(!json.contains("claude"));
+        let back: CliOptions = serde_json::from_str(&json).unwrap();
+        assert!(!back.gate.wait);
+        assert_eq!(back.paths, cli.paths);
     }
 }
