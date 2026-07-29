@@ -608,7 +608,8 @@ body.is-dirty #doc-title::before {
 /* ——— license dialog ——— */
 
 #license-overlay,
-#annot-overlay {
+#annot-overlay,
+#telemetry-overlay {
   position: fixed;
   inset: 0;
   display: flex;
@@ -621,7 +622,8 @@ body.is-dirty #doc-title::before {
 }
 
 #license-overlay[hidden],
-#annot-overlay[hidden] {
+#annot-overlay[hidden],
+#telemetry-overlay[hidden] {
   display: none;
 }
 
@@ -635,7 +637,8 @@ body.is-dirty #doc-title::before {
 }
 
 #license-dialog,
-#annot-dialog {
+#annot-dialog,
+#telemetry-dialog {
   width: min(26rem, calc(100vw - 3rem));
   background: var(--paper-raised);
   border: 1px solid var(--hairline);
@@ -657,7 +660,8 @@ body.is-dirty #doc-title::before {
 }
 
 #license-heading,
-#annot-heading {
+#annot-heading,
+#telemetry-heading {
   font-family: var(--font-prose);
   font-size: 1.45rem;
   font-weight: 600;

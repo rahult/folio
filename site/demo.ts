@@ -154,3 +154,44 @@ async function activate(view: "write" | "preview"): Promise<void> {
 
 writeTab.addEventListener("click", () => void activate("write"));
 previewTab.addEventListener("click", () => void activate("preview"));
+
+// ——— opt-in analytics (GA4; nothing loads before consent) ———
+const SITE_GA_ID = "G-94QD9WH44J";
+const GA_KEY = "folio-telemetry";
+
+const gaConsent = document.querySelector<HTMLElement>("#ga-consent")!;
+const gaAccept = document.querySelector<HTMLButtonElement>("#ga-accept")!;
+const gaDecline = document.querySelector<HTMLButtonElement>("#ga-decline")!;
+
+function loadSiteAnalytics(): void {
+  if (SITE_GA_ID === "G-XXXXXXXXXX") return; // not configured yet
+  const w = window as unknown as { dataLayer?: unknown[]; gtag?: (...a: unknown[]) => void };
+  w.dataLayer = w.dataLayer ?? [];
+  w.gtag = (...args: unknown[]) => {
+    w.dataLayer!.push(args);
+  };
+  w.gtag("js", new Date());
+  w.gtag("config", SITE_GA_ID, { anonymize_ip: true });
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${SITE_GA_ID}`;
+  document.head.appendChild(script);
+}
+
+const gaChoice = localStorage.getItem(GA_KEY);
+if (gaChoice === "on") {
+  loadSiteAnalytics();
+} else if (gaChoice === null) {
+  gaConsent.hidden = false;
+}
+
+gaAccept.addEventListener("click", () => {
+  localStorage.setItem(GA_KEY, "on");
+  gaConsent.hidden = true;
+  loadSiteAnalytics();
+});
+
+gaDecline.addEventListener("click", () => {
+  localStorage.setItem(GA_KEY, "off");
+  gaConsent.hidden = true;
+});

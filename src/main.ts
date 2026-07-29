@@ -3,6 +3,7 @@ import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, message, ask, open, save } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -31,8 +32,30 @@ import { renderAnnotations } from "./annotview";
 import { canApplyTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
 import { TextSelection } from "@milkdown/kit/prose/state";
+import {
+  initTelemetry,
+  setTelemetryConsent,
+  telemetryConsent,
+  telemetryEnabled,
+  trackEvent,
+} from "./telemetry";
 
 const doc = new DocumentState();
+
+/** Folio runs one process with many windows; this is the Tauri label of the
+ *  window this script instance drives. "main" is the window the app starts
+ *  with — every other one was opened by File → New Window, a Finder
+ *  double-click, or a second `folio` invocation handed over by the running
+ *  process. Only the starting window owns the restored session: otherwise
+ *  every new window would reopen the same document, and a throwaway review
+ *  window would overwrite where the user actually left off. */
+const isPrimaryWindow = getCurrentWindow().label === "main";
+
+/** What Rust wants this window to do the moment it comes up. */
+interface StartupRequest {
+  paths: string[];
+  float: boolean;
+}
 
 const titleEl = document.querySelector<HTMLSpanElement>("#doc-title")!;
 const pathEl = document.querySelector<HTMLSpanElement>("#doc-path")!;
@@ -48,6 +71,9 @@ const annotationsBtn = document.querySelector<HTMLButtonElement>("#annotations-b
 const annotSidebar = document.querySelector<HTMLElement>("#annot-sidebar")!;
 const annotList = document.querySelector<HTMLDivElement>("#annot-list")!;
 const annotSidebarClose = document.querySelector<HTMLButtonElement>("#annot-sidebar-close")!;
+const telemetryOverlay = document.querySelector<HTMLDivElement>("#telemetry-overlay")!;
+const telemetryAcceptBtn = document.querySelector<HTMLButtonElement>("#telemetry-accept-btn")!;
+const telemetryDeclineBtn = document.querySelector<HTMLButtonElement>("#telemetry-decline-btn")!;
 const annotOverlay = document.querySelector<HTMLDivElement>("#annot-overlay")!;
 const annotQuote = document.querySelector<HTMLElement>("#annot-quote")!;
 const annotBody = document.querySelector<HTMLTextAreaElement>("#annot-body")!;
@@ -309,6 +335,7 @@ async function exportHtmlFile(): Promise<void> {
   if (!requirePro("export")) return;
   // The rendered DOM is the export source, so leave source mode first.
   if (sourceMode) await exitSourceMode();
+  trackEvent("export_html");
   const html = buildHtmlDocument(doc.fileName, editor.exportHtml(), collectCssText());
   const selected = await save({
     defaultPath: htmlExportTarget(doc.filePath),
@@ -321,6 +348,7 @@ async function exportHtmlFile(): Promise<void> {
 async function exportPdf(): Promise<void> {
   if (!requirePro("export")) return;
   if (sourceMode) await exitSourceMode();
+  trackEvent("export_pdf");
   // Native print panel (macOS: Save as PDF). Print CSS hides the chrome.
   await invoke("print_document");
 }
@@ -341,7 +369,48 @@ function syncMenuState(): void {
     theme: appliedTheme,
     floating: floatMode,
     watch: watchEnabled,
+    telemetry: telemetryOn,
   });
+}
+
+// ——— opt-in telemetry (GA4; nothing loads before consent) ———
+
+let telemetryOn = telemetryEnabled();
+
+function toggleTelemetry(): void {
+  telemetryOn = !telemetryOn;
+  setTelemetryConsent(telemetryOn);
+  syncMenuState();
+  if (telemetryOn) {
+    initTelemetry();
+    trackEvent("telemetry_opt_in");
+  }
+}
+
+telemetryAcceptBtn.addEventListener("click", () => {
+  telemetryOn = true;
+  setTelemetryConsent(true);
+  telemetryOverlay.hidden = true;
+  initTelemetry();
+  trackEvent("telemetry_opt_in");
+  syncMenuState();
+});
+
+telemetryDeclineBtn.addEventListener("click", () => {
+  telemetryOn = false;
+  setTelemetryConsent(false);
+  telemetryOverlay.hidden = true;
+  syncMenuState();
+});
+
+/** First launch: ask once. Subsequent launches respect the stored choice. */
+function initTelemetryFlow(): void {
+  if (telemetryConsent() === null) {
+    telemetryOverlay.hidden = false;
+    return;
+  }
+  initTelemetry();
+  trackEvent("app_launch");
 }
 
 /** Mark the top-level block containing the caret for Focus Mode. */
@@ -434,6 +503,7 @@ function setFloatMode(on: boolean): void {
   floatBtn.setAttribute("aria-pressed", String(on));
   liveBadge.hidden = !on;
   void invoke("set_window_floating", { floating: on });
+  trackEvent("float_mode", { on });
   syncMenuState();
   syncWatch();
 }
@@ -509,8 +579,10 @@ function recordRecent(path: string): void {
 
 let sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Persist path/caret/scroll so relaunch lands where the user left off. */
+/** Persist path/caret/scroll so relaunch lands where the user left off.
+ *  Secondary windows stay out of it — the session is the starting window's. */
 function saveSessionNow(): void {
+  if (!isPrimaryWindow) return;
   const path = doc.filePath;
   if (path === null) {
     saveSession({ path: null, pos: 0, scroll: 0 });
@@ -798,6 +870,7 @@ function saveAnnotation(): void {
     return;
   }
   const annotation = makeAnnotation(kind, pendingQuote, body);
+  trackEvent("annotate");
   annotations = [...annotations, annotation];
   void invoke("add_annotation", { path: doc.filePath, annotation });
   sidebarHidden = false; // a fresh annotation re-shows the panel
@@ -829,6 +902,7 @@ async function copyText(text: string): Promise<void> {
 /** File → Export Review Feedback: structured, agent-consumable Markdown to
  *  the clipboard and a `<file>.feedback.md` beside the reviewed file. */
 async function exportReviewFeedback(): Promise<void> {
+  trackEvent("export_feedback");
   const feedback = buildFeedback(doc.fileName, annotations);
   await copyText(feedback);
   if (doc.filePath) {
@@ -1050,6 +1124,9 @@ async function runMenuAction(action: MenuAction): Promise<void> {
     case "toggle-watch":
       toggleWatch();
       return;
+    case "toggle-telemetry":
+      toggleTelemetry();
+      return;
     case "open-recent": {
       const path = recentFiles[action.index];
       if (path) await guardDirty(() => loadFromPath(path));
@@ -1134,28 +1211,47 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+/** Take ownership of the shared native menu: one menu bar serves every
+ *  window, so its Open Recent / Revision History contents and its checkmarks
+ *  have to be re-pushed whenever focus lands here, or they would still
+ *  describe whichever window was focused before. */
+async function claimNativeMenu(): Promise<void> {
+  // Another window may have opened files since this one started.
+  recentFiles = loadRecent();
+  await invoke("set_recent_files", { paths: recentFiles });
+  await refreshRevisionMenu();
+  // Both pushes above rebuild the native menu; re-assert the real
+  // view/watch state last so no rebuild race can drop a checkmark.
+  syncMenuState();
+}
+
 void editor.create("").then(async () => {
   renderTitle();
   // Mirror the persisted recent-files list into the native File menu.
   void invoke("set_recent_files", { paths: recentFiles });
-  // Cold-start opens (Finder double-click, CLI argument) were queued by
-  // Rust before the webview existed; drain and load the first one. A fresh
-  // document is never dirty, so no confirm is needed here. Otherwise pick
-  // up where the last session left off.
-  const pending = await invoke<string[]>("take_pending_open_paths");
-  if (pending.length > 0) {
-    await loadFromPath(pending[0]);
-  } else {
+  // Rust queued this window's job before the webview existed: a Finder
+  // double-click, a CLI argument, or a `folio` invocation handed over by
+  // the already-running process. A fresh document is never dirty, so no
+  // confirm is needed here. With nothing queued the starting window picks
+  // up where the last session left off; a new window stays blank.
+  const startup = await invoke<StartupRequest>("take_startup_request");
+  if (startup.paths.length > 0) {
+    await loadFromPath(startup.paths[0]);
+  } else if (isPrimaryWindow) {
     await restoreSession();
   }
   // `folio --float [file.md]` — enter floating review mode on launch.
-  if (await invoke<boolean>("take_float_mode")) setFloatMode(true);
-  // The recent-files push above rebuilds the native menu; re-assert the
-  // real view/watch state so no rebuild race can drop a checkmark.
+  if (startup.float) setFloatMode(true);
   syncMenuState();
+});
+
+void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+  if (focused) void claimNativeMenu();
 });
 // Establish license state, then align the native menu checkmarks with
 // the actual (possibly persisted) view-mode state.
 void updateLicenseUi().then(syncMenuState);
+// Ask for telemetry consent on first launch; otherwise honor the choice.
+initTelemetryFlow();
 // Silent update check on launch; failures (offline, no release) are ignored.
 void checkForUpdates(false);

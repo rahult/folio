@@ -156,6 +156,26 @@
       <span id="live-badge" hidden title="Floating on top — reloading when the file changes on disk">live</span>
       <span id="word-count"></span>
     </footer>
+    <div id="telemetry-overlay" hidden>
+      <div
+        id="telemetry-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="telemetry-heading"
+      >
+        <h2 id="telemetry-heading">Usage statistics</h2>
+        <p class="license-copy">
+          Help improve Folio by sharing anonymous usage statistics — feature
+          usage only, never document content or file paths. Google Analytics
+          loads only if you opt in, and you can change your mind any time in
+          View → Usage Statistics.
+        </p>
+        <div class="license-actions">
+          <button id="telemetry-decline-btn" type="button">No thanks</button>
+          <button id="telemetry-accept-btn" type="button">Enable statistics</button>
+        </div>
+      </div>
+    </div>
     <div id="annot-overlay" hidden>
       <div
         id="annot-dialog"

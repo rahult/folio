@@ -20,6 +20,7 @@ export type MenuAction =
   | { kind: "toggle-typewriter-mode" }
   | { kind: "toggle-float" }
   | { kind: "toggle-watch" }
+  | { kind: "toggle-telemetry" }
   | { kind: "open-recent"; index: number }
   | { kind: "annotate" }
   | { kind: "export-feedback" }
@@ -89,6 +90,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-typewriter-mode" };
     case "view.float-on-top":
       return { kind: "toggle-float" };
+    case "view.telemetry":
+      return { kind: "toggle-telemetry" };
     case "file.watch":
       return { kind: "toggle-watch" };
     case "edit.annotate":

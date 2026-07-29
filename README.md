@@ -24,6 +24,16 @@
 - **Zoom** — ⇧⌘= / ⇧⌘- / ⇧⌘0
 - Small footprint (~5 MB DMG), no Electron
 
+## Privacy / telemetry
+
+Folio collects **no data by default**. Optional, anonymous usage statistics
+(Google Analytics 4) exist to guide development — feature usage events only,
+never document content or file paths, IP anonymized. The app asks once on
+first launch and the site shows a consent banner; nothing loads before you
+opt in, and you can change your mind any time in **View → Usage
+Statistics**. (Developers: set `GA_MEASUREMENT_ID` in `src/telemetry.ts`
+and `SITE_GA_ID` in `site/demo.ts` to your own GA4 property.)
+
 ## Reviewing agent output (Float on Top)
 
 Folio doubles as a live review pane for coding agents (Kimi, Claude Code,

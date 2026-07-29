@@ -123,6 +123,7 @@ describe("actionForMenuId", () => {
     expect(actionForMenuId("file.clear-annotations")).toEqual({ kind: "clear-annotations" });
     expect(actionForMenuId("file.back")).toEqual({ kind: "nav-back" });
     expect(actionForMenuId("file.forward")).toEqual({ kind: "nav-forward" });
+    expect(actionForMenuId("view.telemetry")).toEqual({ kind: "toggle-telemetry" });
   });
 
   it("maps revision menu ids to their sequence number", () => {

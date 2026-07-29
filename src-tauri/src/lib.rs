@@ -1,27 +1,34 @@
+use std::collections::HashMap;
 use std::fs;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use tauri::menu::{
     AboutMetadata, CheckMenuItem, CheckMenuItemBuilder, Menu, MenuBuilder, MenuItem,
     MenuItemBuilder, MenuItemKind, Submenu, SubmenuBuilder,
 };
-use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Wry};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
 pub mod license;
 
 /// File extensions Folio opens; mirrors `fileAssociations` in tauri.conf.json.
 const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
 
-/// Paths handed to us by the OS before the webview is ready to receive
-/// "file-open" events (cold start via Finder double-click or CLI argument).
-/// The frontend drains this queue on startup.
+/// What a window should do the moment its webview comes up: which files to
+/// open and whether to start in floating review mode. Keyed by window label
+/// so two windows opening at once never drain each other's request.
 #[derive(Default)]
-struct PendingOpens(Mutex<Vec<String>>);
+struct WindowRequests(Mutex<HashMap<String, CliOptions>>);
 
-/// `--float` was passed on the command line: the frontend asks once on
-/// startup and switches the window into floating review mode.
+/// Suffix source for generated window labels (the first window is the
+/// declarative "main" from tauri.conf.json).
 #[derive(Default)]
-struct FloatRequested(Mutex<bool>);
+struct WindowCounter(AtomicU32);
+
+/// Set once the first window has drained its request. Before that, an OS
+/// file-open event is seeding the starting window; after, it opens a new one.
+#[derive(Default)]
+struct Started(AtomicBool);
 
 /// Recently opened files, newest first (max 10), pushed by the frontend and
 /// mirrored into the File → Open Recent submenu.
@@ -59,8 +66,10 @@ fn file_name(path: &str) -> String {
 }
 
 /// CLI invocation split into markdown files to open and whether the
-/// floating review window was requested.
-#[derive(Default)]
+/// floating review window was requested. Doubles as the per-window startup
+/// request handed to a freshly created window.
+#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CliOptions {
     paths: Vec<String>,
     float: bool,
@@ -125,29 +134,148 @@ fn parse_cli_args(args: impl IntoIterator<Item = String>) -> CliOptions {
     CliOptions { paths, float }
 }
 
-/// Drain the queue of paths the OS asked us to open before the webview was
-/// listening. Called once by the frontend on startup.
-#[tauri::command]
-fn take_pending_open_paths(state: tauri::State<PendingOpens>) -> Vec<String> {
-    std::mem::take(&mut *state.0.lock().unwrap())
+// ——— multiple windows ———
+//
+// Folio runs as a single process with as many windows as the user wants.
+// Launching the binary again (`folio review plan.md` from a second terminal)
+// no longer starts a second app: tauri-plugin-single-instance hands the
+// invocation to the running process, which opens a new window for it.
+//
+// The handoff goes through a spool directory rather than the plugin's argv,
+// because argv can't carry piped stdin — `folio review -` has already been
+// resolved to a temp file inside the child process by the time the plugin
+// fires. Every invocation writes its *resolved* request to <temp>/
+// folio-cli-spool/<pid>.json; the primary drains everyone else's entries and
+// deletes its own once `setup` proves it is the primary.
+
+const SPOOL_STALE_SECS: u64 = 60;
+
+fn spool_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("folio-cli-spool")
 }
 
-/// Whether `--float` was passed on the command line. Called once by the
-/// frontend on startup; the flag is cleared by reading it.
+/// Leave this invocation's resolved request where a running instance can
+/// find it. Returns the path so the primary can remove its own entry.
+fn write_spool(pid: u32, cli: &CliOptions) -> Option<std::path::PathBuf> {
+    write_spool_in(&spool_dir(), pid, cli)
+}
+
+fn write_spool_in(dir: &std::path::Path, pid: u32, cli: &CliOptions) -> Option<std::path::PathBuf> {
+    fs::create_dir_all(dir).ok()?;
+    let path = dir.join(format!("{pid}.json"));
+    fs::write(&path, serde_json::to_string(cli).ok()?).ok()?;
+    Some(path)
+}
+
+/// Whether a spool entry is recent enough to still be worth acting on. An
+/// invocation that died before the handoff must not pop a window minutes
+/// later, so old entries are dropped rather than replayed. `max_age_secs`
+/// is an exclusive bound, so 0 means "nothing counts as fresh".
+fn spool_is_fresh(entry: &fs::DirEntry, max_age_secs: u64) -> bool {
+    entry
+        .metadata()
+        .and_then(|m| m.modified())
+        .and_then(|t| t.elapsed().map_err(std::io::Error::other))
+        .map(|age| age.as_secs() < max_age_secs)
+        .unwrap_or(false)
+}
+
+/// Take every spool entry except our own — the primary serves its own
+/// request in-process — removing each file as it is read.
+fn drain_spool(own_pid: u32) -> Vec<CliOptions> {
+    drain_spool_in(&spool_dir(), own_pid, SPOOL_STALE_SECS)
+}
+
+fn drain_spool_in(dir: &std::path::Path, own_pid: u32, max_age_secs: u64) -> Vec<CliOptions> {
+    let own = std::ffi::OsString::from(format!("{own_pid}.json"));
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut requests = Vec::new();
+    for entry in entries.filter_map(|e| e.ok()) {
+        if entry.file_name() == own {
+            continue;
+        }
+        let fresh = spool_is_fresh(&entry, max_age_secs);
+        let parsed = fs::read_to_string(entry.path())
+            .ok()
+            .and_then(|raw| serde_json::from_str::<CliOptions>(&raw).ok());
+        // Read once, then gone: a stale or corrupt entry must not be
+        // replayed by the next handoff either.
+        let _ = fs::remove_file(entry.path());
+        if let (true, Some(request)) = (fresh, parsed) {
+            requests.push(request);
+        }
+    }
+    requests
+}
+
+/// Open a new app window for `request`. The request is registered under the
+/// new window's label *before* the webview is built so the frontend's
+/// startup drain can never lose the race.
+fn open_window(app: &AppHandle<Wry>, request: CliOptions) -> tauri::Result<WebviewWindow<Wry>> {
+    let n = app
+        .state::<WindowCounter>()
+        .0
+        .fetch_add(1, Ordering::Relaxed)
+        + 1;
+    let label = format!("folio-{n}");
+    app.state::<WindowRequests>()
+        .0
+        .lock()
+        .unwrap()
+        .insert(label.clone(), request);
+    // Cascade so a stack of review windows stays individually reachable.
+    let offset = f64::from((n % 8) * 24);
+    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::default())
+        .title("Folio")
+        .inner_size(800.0, 600.0)
+        .position(80.0 + offset, 80.0 + offset)
+        .build()
+}
+
+/// The window a global action (menu command, OS file-open) applies to: the
+/// focused one, falling back to the first window so a command issued while
+/// no window holds focus still lands somewhere sensible.
+fn target_window_label(app: &AppHandle<Wry>) -> Option<String> {
+    let windows = app.webview_windows();
+    if let Some(focused) = windows
+        .values()
+        .find(|w| w.is_focused().unwrap_or(false))
+        .map(|w| w.label().to_string())
+    {
+        return Some(focused);
+    }
+    if windows.contains_key("main") {
+        return Some("main".to_string());
+    }
+    windows.keys().next().cloned()
+}
+
+/// What this window should do on startup: files to open plus whether to
+/// enter floating review mode. Draining is one-shot per window.
 #[tauri::command]
-fn take_float_mode(state: tauri::State<FloatRequested>) -> bool {
-    std::mem::take(&mut *state.0.lock().unwrap())
+fn take_startup_request(
+    window: tauri::Window<Wry>,
+    requests: tauri::State<WindowRequests>,
+    started: tauri::State<Started>,
+) -> CliOptions {
+    started.0.store(true, Ordering::Relaxed);
+    requests
+        .0
+        .lock()
+        .unwrap()
+        .remove(window.label())
+        .unwrap_or_default()
 }
 
 /// Toggle the floating review chrome: always-on-top while floating; when
 /// entering, park the window at the monitor's top-right at a compact review
 /// size (the size is left alone when leaving — the user can resize freely
-/// either way).
+/// either way). Acts on the calling window, so each window floats
+/// independently.
 #[tauri::command]
-fn set_window_floating(app: AppHandle<Wry>, floating: bool) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
+fn set_window_floating(window: WebviewWindow<Wry>, floating: bool) -> Result<(), String> {
     window
         .set_always_on_top(floating)
         .map_err(|e| e.to_string())?;
@@ -179,32 +307,36 @@ fn set_window_floating(app: AppHandle<Wry>, floating: bool) -> Result<(), String
     Ok(())
 }
 
+/// The AeroSpace window id of the focused window, but only when that window
+/// belongs to us — the layout change must never hit another app's window.
+/// Folio can have several windows in one process, so the pid alone no longer
+/// identifies which one to retile; the focused one is the one being toggled.
+#[cfg(target_os = "macos")]
+fn aerospace_focused_own_window() -> Option<String> {
+    let out = std::process::Command::new("aerospace")
+        .args([
+            "list-windows",
+            "--focused",
+            "--format",
+            "%{window-id} %{app-pid}",
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let line = String::from_utf8_lossy(&out.stdout);
+    let (id, pid) = line.trim().split_once(char::is_whitespace)?;
+    (pid.trim() == std::process::id().to_string()).then(|| id.to_owned())
+}
+
 /// Best effort: if AeroSpace (macOS tiling WM) is managing this window, ask
 /// it to float/retile the window. Silent no-op when the CLI is absent.
 #[cfg(target_os = "macos")]
 fn aerospace_layout(floating: bool) {
-    let pid = std::process::id().to_string();
-    let Ok(out) = std::process::Command::new("aerospace")
-        .args([
-            "list-windows",
-            "--pid",
-            &pid,
-            "--monitor",
-            "all",
-            "--format",
-            "%{window-id}",
-        ])
-        .output()
-    else {
+    let Some(id) = aerospace_focused_own_window() else {
         return;
     };
-    if !out.status.success() {
-        return;
-    }
-    let id = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-    if id.is_empty() {
-        return;
-    }
     let _ = std::process::Command::new("aerospace")
         .args([
             "layout",
@@ -596,11 +728,12 @@ fn export_label(licensed: bool) -> &'static str {
 /// submenu titles on macOS, so we rebuild and re-set the whole menu.)
 /// Checkmarks are carried over — a rebuild must not reset view/watch state.
 fn rebuild_menu(app: &AppHandle<Wry>) {
-    const CHECK_IDS: [&str; 7] = [
+    const CHECK_IDS: [&str; 8] = [
         "view.focus-mode",
         "view.typewriter-mode",
         "view.float-on-top",
         "file.watch",
+        "view.telemetry",
         "view.theme-paper",
         "view.theme-night",
         "view.theme-newsprint",
@@ -646,12 +779,10 @@ fn set_revision_menu(app: AppHandle<Wry>, entries: Vec<(u64, String)>) {
     rebuild_menu(&app);
 }
 
-/// Open the native print panel (macOS: includes Save as PDF).
+/// Open the native print panel (macOS: includes Save as PDF) for the
+/// calling window's document.
 #[tauri::command]
-fn print_document(app: AppHandle<Wry>) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
+fn print_document(window: WebviewWindow<Wry>) -> Result<(), String> {
     window.print().map_err(|e| e.to_string())
 }
 
@@ -684,6 +815,7 @@ fn sync_menu_state(
     theme: String,
     floating: bool,
     watch: bool,
+    telemetry: bool,
 ) {
     let Some(menu) = app.menu() else { return };
     let checks = [
@@ -691,6 +823,7 @@ fn sync_menu_state(
         ("view.typewriter-mode", typewriter),
         ("view.float-on-top", floating),
         ("file.watch", watch),
+        ("view.telemetry", telemetry),
         ("view.theme-paper", theme == "paper"),
         ("view.theme-night", theme == "night"),
         ("view.theme-newsprint", theme == "newsprint"),
@@ -800,6 +933,12 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
 
     let mut file_builder = SubmenuBuilder::new(app, "File")
         .item(&menu_item(app, "file.new", "New", Some("CmdOrCtrl+N"))?)
+        .item(&menu_item(
+            app,
+            "file.new-window",
+            "New Window",
+            Some("Shift+CmdOrCtrl+N"),
+        )?)
         .item(&menu_item(app, "file.open", "Open…", Some("CmdOrCtrl+O"))?);
     let recent = recent_files(app);
     if !recent.is_empty() {
@@ -1046,6 +1185,14 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
             Some("Alt+CmdOrCtrl+W"),
             false,
         )?)
+        .separator()
+        .item(&check_item(
+            app,
+            "view.telemetry",
+            "Usage Statistics",
+            None,
+            false,
+        )?)
         .item(
             &SubmenuBuilder::new(app, "Themes")
                 .item(&check_item(app, "view.theme-paper", "Paper", None, true)?)
@@ -1097,35 +1244,62 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Resolved before the builder runs: a second invocation gets this far
+    // before tauri-plugin-single-instance sends it away, which is what lets
+    // it resolve piped stdin into a real path the primary can open.
+    let cli = parse_cli_args(std::env::args());
+    let own_pid = std::process::id();
+    let own_spool = write_spool(own_pid, &cli);
+
     // Managed before build: on a macOS cold start the Opened event can fire
     // before setup runs, and a state registered only in setup would be too
-    // late to catch it. Seeded with CLI args (Windows/Linux file-open).
-    let cli = parse_cli_args(std::env::args());
-    let pending = PendingOpens::default();
-    *pending.0.lock().unwrap() = cli.paths;
-    let float_requested = FloatRequested::default();
-    *float_requested.0.lock().unwrap() = cli.float;
+    // late to catch it.
+    let requests = WindowRequests::default();
+    requests
+        .0
+        .lock()
+        .unwrap()
+        .insert("main".to_string(), cli);
 
     tauri::Builder::default()
+        // Must be registered first so a second launch is turned away before
+        // it can build a window of its own.
+        .plugin(tauri_plugin_single_instance::init(move |app, _argv, _cwd| {
+            // argv is deliberately ignored — the spool carries the *resolved*
+            // request, including markdown piped into the other invocation.
+            for request in drain_spool(own_pid) {
+                let _ = open_window(app, request);
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .manage(pending)
-        .manage(float_requested)
+        .manage(requests)
+        .manage(WindowCounter::default())
+        .manage(Started::default())
         .manage(RecentFiles::default())
         .manage(RevisionMenu::default())
         .manage(AnnotationDb(Mutex::new(None)))
         .menu(|app| build_menu(app, false))
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
+            if id == "file.new-window" {
+                let _ = open_window(app, CliOptions::default());
+                return;
+            }
             // Only our dotted custom ids need frontend handling; predefined
             // items (undo, copy, fullscreen, …) already acted natively.
             let is_custom = ["app.", "file.", "edit.", "paragraph.", "format.", "view."]
                 .iter()
                 .any(|prefix| id.starts_with(prefix));
-            if is_custom {
-                let _ = app.emit("menu", id);
+            if !is_custom {
+                return;
+            }
+            // The menu bar is shared by every window, so a broadcast would
+            // run the command in all of them — send it to the focused one.
+            if let Some(label) = target_window_label(app) {
+                let _ = app.emit_to(label.as_str(), "menu", id);
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -1136,8 +1310,7 @@ pub fn run() {
             clear_license,
             print_document,
             sync_menu_state,
-            take_pending_open_paths,
-            take_float_mode,
+            take_startup_request,
             set_window_floating,
             set_recent_files,
             list_annotations,
@@ -1150,10 +1323,15 @@ pub fn run() {
             read_revision,
             register_default_markdown_handler
         ])
-        .setup(|app| {
+        .setup(move |app| {
             // Now the path resolver is managed; rebuild the menu with the
             // persisted license state so Pro labels are correct.
             rebuild_menu(app.handle());
+            // Reaching setup proves we are the primary instance, so our own
+            // spool entry will never be needed for a handoff.
+            if let Some(path) = &own_spool {
+                let _ = fs::remove_file(path);
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -1166,17 +1344,36 @@ pub fn run() {
 #[cfg(target_os = "macos")]
 fn handle_run_event(app: &AppHandle<Wry>, event: RunEvent) {
     // macOS sends files opened via Finder here — including the cold start
-    // that launched the app. Queue every path (the webview may not exist
-    // yet) and also emit for an already-running frontend.
-    if let RunEvent::Opened { urls } = event {
-        for url in urls {
-            let Ok(path) = url.to_file_path() else { continue };
-            let path = path.to_string_lossy().into_owned();
-            if let Some(state) = app.try_state::<PendingOpens>() {
-                state.0.lock().unwrap().push(path.clone());
-            }
-            let _ = app.emit("file-open", path);
+    // that launched the app.
+    let RunEvent::Opened { urls } = event else {
+        return;
+    };
+    let paths: Vec<String> = urls
+        .iter()
+        .filter_map(|url| url.to_file_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect();
+    if paths.is_empty() {
+        return;
+    }
+    // Cold start: the starting window has not drained its request yet, so
+    // seed it rather than opening a second window on top of a blank one.
+    if !app.state::<Started>().0.load(Ordering::Relaxed) {
+        if let Some(request) = app.state::<WindowRequests>().0.lock().unwrap().get_mut("main") {
+            request.paths.extend(paths);
+            return;
         }
+    }
+    // Already running: each file gets its own window, the way a document
+    // app is expected to behave.
+    for path in paths {
+        let _ = open_window(
+            app,
+            CliOptions {
+                paths: vec![path],
+                float: false,
+            },
+        );
     }
 }
 
@@ -1324,6 +1521,81 @@ mod tests {
         assert!(write_temp_markdown("", &dir).is_none());
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    fn spool_test_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("folio-test-spool-{name}-{}", std::process::id()));
+        fs::remove_dir_all(&dir).ok();
+        dir
+    }
+
+    #[test]
+    fn spool_hands_other_invocations_requests_to_the_primary() {
+        let dir = spool_test_dir("handoff");
+        let own = CliOptions {
+            paths: vec!["/mine.md".to_string()],
+            float: false,
+        };
+        let other = CliOptions {
+            paths: vec!["/theirs.md".to_string()],
+            float: true,
+        };
+        write_spool_in(&dir, 100, &own).unwrap();
+        write_spool_in(&dir, 200, &other).unwrap();
+
+        // The primary already holds its own request in memory, so draining
+        // must hand back only the other invocation's.
+        let drained = drain_spool_in(&dir, 100, 60);
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].paths, vec!["/theirs.md".to_string()]);
+        assert!(drained[0].float);
+
+        // Draining consumes: a second handoff must not reopen the window.
+        assert!(drain_spool_in(&dir, 100, 60).is_empty());
+        // …and our own entry is left for `setup` to remove.
+        assert!(dir.join("100.json").exists());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spool_drops_corrupt_entries_but_still_consumes_them() {
+        let dir = spool_test_dir("corrupt");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("400.json"), "not json").unwrap();
+
+        assert!(drain_spool_in(&dir, 999, 60).is_empty());
+        assert!(!dir.join("400.json").exists(), "a corrupt entry is not left to be retried");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spool_drops_stale_entries_left_by_a_dead_invocation() {
+        let dir = spool_test_dir("stale");
+        write_spool_in(
+            &dir,
+            300,
+            &CliOptions {
+                paths: vec!["/abandoned.md".to_string()],
+                float: false,
+            },
+        )
+        .unwrap();
+
+        // An exclusive max age of 0 makes even a just-written entry stale,
+        // standing in for one whose invocation died long ago: it must be
+        // discarded, not opened in a window.
+        assert!(drain_spool_in(&dir, 999, 0).is_empty());
+        assert!(!dir.join("300.json").exists());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn draining_a_missing_spool_dir_is_not_an_error() {
+        let dir = spool_test_dir("absent");
+        assert!(drain_spool_in(&dir, 1, 60).is_empty());
     }
 
     fn history_test_dir(name: &str) -> std::path::PathBuf {
