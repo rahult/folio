@@ -1327,6 +1327,38 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
         .build()
 }
 
+// ——— review gate ———
+
+/// The pending or decided review request for a path, if any. Polled by the
+/// window so the review bar can appear the moment an agent starts waiting.
+#[tauri::command]
+fn review_request_state(path: String) -> Option<reviewgate::ReviewRequest> {
+    reviewgate::read_request_in(&reviewgate::review_dir(), &path)
+}
+
+/// Record the user's verdict, unblocking a waiting `folio review --wait`.
+#[tauri::command]
+fn resolve_review(
+    path: String,
+    verdict: String,
+    feedback: String,
+    document_edited: bool,
+) -> Result<(), String> {
+    let state = match verdict.as_str() {
+        "approved" => reviewgate::ReviewState::Approved,
+        "changes" => reviewgate::ReviewState::Changes,
+        other => return Err(format!("unknown verdict: {other}")),
+    };
+    reviewgate::resolve_in(
+        &reviewgate::review_dir(),
+        &path,
+        state,
+        &feedback,
+        document_edited,
+    )
+    .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Resolved before the builder runs: a second invocation gets this far
@@ -1419,7 +1451,9 @@ pub fn run() {
             archive_revision,
             list_revisions,
             read_revision,
-            register_default_markdown_handler
+            register_default_markdown_handler,
+            review_request_state,
+            resolve_review
         ])
         .setup(move |app| {
             // Now the path resolver is managed; rebuild the menu with the
@@ -1430,6 +1464,9 @@ pub fn run() {
             if let Some(path) = &own_spool {
                 let _ = fs::remove_file(path);
             }
+            // Handshakes left by invocations that died must not resurrect a
+            // review bar days later.
+            reviewgate::sweep_stale_in(&reviewgate::review_dir(), reviewgate::STALE_SECS);
             Ok(())
         })
         .build(tauri::generate_context!())
