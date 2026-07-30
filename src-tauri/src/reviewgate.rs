@@ -144,6 +144,94 @@ pub fn exit_code(state: ReviewState) -> i32 {
     }
 }
 
+/// Block until the request for `path` is decided, or the timeout expires.
+/// Returns the decided request, or None on timeout — the request file is
+/// deliberately left in place so the verdict can still be collected later.
+///
+/// `poll_ms` of 0 makes this a single check, which keeps the tests instant.
+pub fn wait_for_verdict_in(
+    dir: &Path,
+    path: &str,
+    timeout_secs: u64,
+    poll_ms: u64,
+) -> Option<ReviewRequest> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    loop {
+        if let Some(req) = read_request_in(dir, path) {
+            if req.state != ReviewState::Waiting {
+                return Some(req);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(poll_ms));
+    }
+}
+
+/// Open a review window for `path` in the running app — or start the app if
+/// nothing is running. Spawned detached and *without* the gate flags, so the
+/// child is an ordinary `folio review <path>` invocation that the existing
+/// spool handoff routes to the primary instance.
+fn spawn_review_window(path: &str) {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let _ = std::process::Command::new(exe)
+        .args(["review", path])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+}
+
+/// `folio review --wait|--collect <path>`. Prints the feedback Markdown to
+/// stdout on a decision and returns the process exit code.
+pub fn run_cli(paths: &[String], wait: bool, agent: &str, timeout_secs: u64) -> i32 {
+    let Some(path) = paths.first() else {
+        eprintln!("folio: no markdown file to review");
+        return 4;
+    };
+    let dir = review_dir();
+    sweep_stale_in(&dir, STALE_SECS);
+
+    if wait {
+        let req = ReviewRequest::waiting(path, agent, std::process::id());
+        if write_request_in(&dir, &req).is_err() {
+            eprintln!("folio: could not open a review request");
+            return 4;
+        }
+        spawn_review_window(path);
+        match wait_for_verdict_in(&dir, path, timeout_secs, 200) {
+            Some(decided) => {
+                print!("{}", decided.feedback.as_deref().unwrap_or_default());
+                clear_in(&dir, path);
+                exit_code(decided.state)
+            }
+            None => {
+                eprintln!("folio: review still open in Folio — collect it later with `folio review --collect {path}`");
+                3
+            }
+        }
+    } else {
+        match read_request_in(&dir, path) {
+            None => {
+                eprintln!("folio: no review was requested for {path}");
+                4
+            }
+            Some(req) if req.state == ReviewState::Waiting => {
+                eprintln!("folio: review still open in Folio");
+                3
+            }
+            Some(decided) => {
+                print!("{}", decided.feedback.as_deref().unwrap_or_default());
+                clear_in(&dir, path);
+                exit_code(decided.state)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,5 +334,32 @@ mod tests {
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("tmp"))
             .collect();
         assert!(leftovers.is_empty());
+    }
+
+    #[test]
+    fn waiting_returns_immediately_when_already_decided() {
+        let dir = temp_dir("wait-decided");
+        write_request_in(&dir, &ReviewRequest::waiting("/docs/plan.md", "claude", 1)).unwrap();
+        resolve_in(&dir, "/docs/plan.md", ReviewState::Approved, "ok", false).unwrap();
+        let got = wait_for_verdict_in(&dir, "/docs/plan.md", 30, 0).unwrap();
+        assert_eq!(got.state, ReviewState::Approved);
+    }
+
+    #[test]
+    fn waiting_gives_up_at_the_timeout_and_leaves_the_request() {
+        let dir = temp_dir("wait-timeout");
+        write_request_in(&dir, &ReviewRequest::waiting("/docs/plan.md", "claude", 1)).unwrap();
+        assert!(wait_for_verdict_in(&dir, "/docs/plan.md", 0, 0).is_none());
+        // The verdict can still be recorded and collected later.
+        assert_eq!(
+            read_request_in(&dir, "/docs/plan.md").unwrap().state,
+            ReviewState::Waiting
+        );
+    }
+
+    #[test]
+    fn waiting_gives_up_when_there_is_no_request_at_all() {
+        let dir = temp_dir("wait-none");
+        assert!(wait_for_verdict_in(&dir, "/docs/absent.md", 0, 0).is_none());
     }
 }

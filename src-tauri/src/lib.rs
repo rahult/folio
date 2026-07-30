@@ -96,9 +96,6 @@ impl Default for GateOptions {
 struct CliOptions {
     paths: Vec<String>,
     float: bool,
-    // Only read by tests today; Task 3's blocking CLI is the production
-    // consumer, at which point this allow can come out.
-    #[allow(dead_code)]
     #[serde(skip)]
     gate: GateOptions,
 }
@@ -1336,6 +1333,19 @@ pub fn run() {
     // before tauri-plugin-single-instance sends it away, which is what lets
     // it resolve piped stdin into a real path the primary can open.
     let cli = parse_cli_args(std::env::args());
+
+    // `--wait` / `--collect` never become the app: they branch out here,
+    // before the Tauri builder, so the review CLI is a plain blocking poller
+    // and never contends with the single-instance plugin.
+    if cli.gate.wait || cli.gate.collect {
+        std::process::exit(reviewgate::run_cli(
+            &cli.paths,
+            cli.gate.wait,
+            &cli.gate.agent,
+            cli.gate.timeout_secs,
+        ));
+    }
+
     let own_pid = std::process::id();
     let own_spool = write_spool(own_pid, &cli);
 
