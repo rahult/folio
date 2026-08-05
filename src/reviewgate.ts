@@ -23,20 +23,24 @@ export interface ReviewRequest {
 }
 
 export interface BarModel {
-  visible: boolean;
-  label: string;
+  readonly visible: boolean;
+  readonly label: string;
   /** Which button gets visual weight — follows the annotation count. */
-  primary: Verdict;
+  readonly primary: Verdict;
 }
 
-const HIDDEN: BarModel = { visible: false, label: "", primary: "approved" };
+const HIDDEN: BarModel = Object.freeze({ visible: false, label: "", primary: "approved" });
 
 /**
  * The bar exists only while an agent is actually blocked: a decided request
  * (or none at all) leaves the window free of review chrome.
+ *
+ * Always returns a fresh object — never `HIDDEN` by reference — so a caller
+ * that mutates one `BarModel` can't corrupt the shared hidden sentinel for
+ * every subsequent hidden call.
  */
 export function barModel(request: ReviewRequest | null, annotationCount: number): BarModel {
-  if (request === null || request.state !== "waiting") return HIDDEN;
+  if (request === null || request.state !== "waiting") return { ...HIDDEN };
   const count =
     annotationCount === 0
       ? "no annotations"

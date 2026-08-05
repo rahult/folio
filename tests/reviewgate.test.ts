@@ -53,6 +53,14 @@ describe("review bar model", () => {
     expect(barModel(request("waiting"), 1).label).toContain("1 annotation");
     expect(barModel(request("waiting"), 1).label).not.toContain("annotations");
   });
+
+  it("returns a fresh hidden object each call, not a shared reference", () => {
+    const a = barModel(null, 0);
+    const b = barModel(null, 0);
+    expect(a).not.toBe(b);
+    (a as { visible: boolean }).visible = true;
+    expect(b.visible).toBe(false);
+  });
 });
 
 describe("edit note", () => {
