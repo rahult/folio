@@ -964,20 +964,26 @@ export interface ReviewRequest {
 }
 
 export interface BarModel {
-  visible: boolean;
-  label: string;
+  readonly visible: boolean;
+  readonly label: string;
   /** Which button gets visual weight — follows the annotation count. */
-  primary: Verdict;
+  readonly primary: Verdict;
 }
 
-const HIDDEN: BarModel = { visible: false, label: "", primary: "approved" };
+/** Field source for the hidden case. Frozen and spread rather than returned
+ *  by reference, so a caller can never corrupt later calls. */
+const HIDDEN: BarModel = Object.freeze({
+  visible: false,
+  label: "",
+  primary: "approved" as Verdict,
+});
 
 /**
  * The bar exists only while an agent is actually blocked: a decided request
  * (or none at all) leaves the window free of review chrome.
  */
 export function barModel(request: ReviewRequest | null, annotationCount: number): BarModel {
-  if (request === null || request.state !== "waiting") return HIDDEN;
+  if (request === null || request.state !== "waiting") return { ...HIDDEN };
   const count =
     annotationCount === 0
       ? "no annotations"
