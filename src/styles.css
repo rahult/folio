@@ -543,6 +543,75 @@ body.is-dirty #doc-title::before {
   }
 }
 
+/* ——— review bar ——— */
+
+/* Shown only while an agent is blocked on `folio review --wait`. A window
+   being written in never grows this chrome. */
+#review-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--hairline);
+  background: var(--accent-wash);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-soft);
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+#review-bar[hidden] {
+  display: none;
+}
+
+#review-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#review-bar-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+#review-bar-actions button {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 4px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+#review-bar-actions button:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+/* The primary action follows the annotation count — request changes on a
+   marked-up document, approve on a clean one. */
+#review-bar-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: var(--paper);
+  font-weight: 500;
+}
+
+#review-bar-actions button.primary:hover {
+  background: var(--accent-strong);
+  color: var(--paper);
+}
+
+#review-bar.sent #review-bar-actions {
+  display: none;
+}
+
 /* rewrite diff view — quiet marks for agent-review reloads: a soft green
    wash for additions, struck-through ghosts for removals. Clears on the
    next edit. */

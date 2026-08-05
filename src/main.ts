@@ -29,6 +29,7 @@ import {
   type AnnotationKind,
 } from "./annotations";
 import { renderAnnotations } from "./annotview";
+import { barModel, feedbackWithEditNote, type ReviewRequest, type Verdict } from "./reviewgate";
 import { canApplyTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
 import { TextSelection, type Selection } from "@milkdown/kit/prose/state";
@@ -67,6 +68,10 @@ const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
 const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
 const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn")!;
 const feedbackBtn = document.querySelector<HTMLButtonElement>("#feedback-btn")!;
+const reviewBar = document.querySelector<HTMLElement>("#review-bar")!;
+const reviewBarLabel = document.querySelector<HTMLElement>("#review-bar-label")!;
+const reviewChangesBtn = document.querySelector<HTMLButtonElement>("#review-changes-btn")!;
+const reviewApproveBtn = document.querySelector<HTMLButtonElement>("#review-approve-btn")!;
 const annotationsBtn = document.querySelector<HTMLButtonElement>("#annotations-btn")!;
 const annotSidebar = document.querySelector<HTMLElement>("#annot-sidebar")!;
 const annotList = document.querySelector<HTMLDivElement>("#annot-list")!;
@@ -98,6 +103,7 @@ function countWords(markdown: string): number {
 
 const editor = new MarkdownEditor(editorRoot, (markdown) => {
   doc.updateDirty(markdown);
+  if (doc.dirty && reviewRequest !== null) documentEditedDuringReview = true;
   wordCountEl.textContent = `${countWords(markdown)} words`;
   renderTitle();
 });
@@ -305,6 +311,7 @@ function toggleSourceMode(): Promise<void> {
 // Typing in the source view is a document edit like any other.
 sourceEditor.addEventListener("input", () => {
   doc.updateDirty(sourceEditor.value);
+  if (doc.dirty && reviewRequest !== null) documentEditedDuringReview = true;
   wordCountEl.textContent = `${countWords(sourceEditor.value)} words`;
   renderTitle();
 });
@@ -730,6 +737,8 @@ async function loadAnnotationsForOpenFile(): Promise<void> {
   // Auto-open only when the incoming file actually has annotations.
   sidebarOpen = annotations.length > 0;
   renderAnnotationsNow();
+  documentEditedDuringReview = false;
+  void refreshReviewRequest();
 }
 
 function renderAnnotationsNow(): void {
@@ -762,9 +771,11 @@ function renderSidebar(): void {
     empty.textContent =
       "No annotations yet — select text and click the annotate icon in the selection popup, or use Edit → Annotate Selection…";
     annotList.replaceChildren(empty);
+    renderReviewBar();
     return;
   }
   annotList.replaceChildren(...annotations.map(renderSidebarItem));
+  renderReviewBar();
 }
 
 function renderSidebarItem(annotation: Annotation): HTMLElement {
@@ -935,6 +946,75 @@ async function exportReviewFeedback(): Promise<void> {
   feedbackBtn.classList.add("copied");
   setTimeout(() => feedbackBtn.classList.remove("copied"), 900);
 }
+
+// ——— review gate ———
+//
+// `folio review --wait <path>` leaves a handshake in the temp dir and blocks
+// on it. Poll for one while a file is open so the bar appears the moment an
+// agent starts waiting, and resolve it when the user picks a verdict.
+
+let reviewRequest: ReviewRequest | null = null;
+/** Set when the user answers by editing rather than annotating, so the
+ *  feedback can tell the agent to re-read the file. */
+let documentEditedDuringReview = false;
+
+const REVIEW_POLL_MS = 1500;
+
+async function refreshReviewRequest(): Promise<void> {
+  const path = doc.filePath;
+  if (!path) {
+    reviewRequest = null;
+    renderReviewBar();
+    return;
+  }
+  reviewRequest = await invoke<ReviewRequest | null>("review_request_state", { path });
+  renderReviewBar();
+}
+
+function renderReviewBar(): void {
+  const model = barModel(reviewRequest, annotations.length);
+  reviewBar.hidden = !model.visible;
+  if (!model.visible) {
+    reviewBar.classList.remove("sent");
+    return;
+  }
+  reviewBarLabel.textContent = `⏳ ${model.label}`;
+  reviewApproveBtn.classList.toggle("primary", model.primary === "approved");
+  reviewChangesBtn.classList.toggle("primary", model.primary === "changes");
+}
+
+/** Send the verdict back to the blocked agent: the same structured feedback
+ *  `Export Review Feedback` writes, plus the handshake resolution that
+ *  unblocks `folio review --wait`. */
+async function submitVerdict(verdict: Verdict): Promise<void> {
+  const path = doc.filePath;
+  if (!path) return;
+  trackEvent("review_verdict", { verdict });
+  const feedback = feedbackWithEditNote(
+    buildFeedback(doc.fileName, annotations),
+    documentEditedDuringReview,
+  );
+  await invoke("write_text_file", { path: `${path}.feedback.md`, contents: feedback });
+  await invoke("resolve_review", {
+    path,
+    verdict,
+    feedback,
+    documentEdited: documentEditedDuringReview,
+  });
+  reviewRequest = null;
+  documentEditedDuringReview = false;
+  reviewBar.hidden = false;
+  reviewBar.classList.add("sent");
+  reviewBarLabel.textContent = verdict === "approved" ? "sent ✓ approved" : "sent ✓ changes requested";
+  setTimeout(() => {
+    reviewBar.classList.remove("sent");
+    renderReviewBar();
+  }, 1600);
+}
+
+reviewApproveBtn.addEventListener("click", () => void submitVerdict("approved"));
+reviewChangesBtn.addEventListener("click", () => void submitVerdict("changes"));
+setInterval(() => void refreshReviewRequest(), REVIEW_POLL_MS);
 
 annotSaveBtn.addEventListener("click", saveAnnotation);
 annotCancelBtn.addEventListener("click", closeAnnotateDialog);
