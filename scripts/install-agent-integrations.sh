@@ -34,17 +34,46 @@ echo "shim: $SHIM"
 BLOCK='<!-- folio:plan-review -->
 ## Markdown plan review with Folio
 
-When you write or substantially revise a plan, spec, or other Markdown document the user should review:
-1. Save it to a file and open it in Folio'"'"'s floating review window: `folio review <path>` (fallback: `/Applications/Folio.app/Contents/MacOS/folio review <path>`). The window live-reloads with change highlights on every rewrite — keep using it for subsequent revisions of that file.
-2. Tell the user the plan is open in Folio. They can annotate it (Edit -> Annotate Selection, Cmd+Opt+A) and send structured feedback back (File -> Export Review Feedback, Cmd+Opt+R).
-3. Before your next revision of that file, re-read it (the user may have edited it directly in Folio) and read `<path>.feedback.md` if it exists — apply that feedback, then delete the feedback file.
+When you write or substantially revise a plan, spec, or other Markdown document the user should review, hand it to Folio and wait for the verdict:
+
+```bash
+folio review --wait --agent claude <path>
+```
+
+This opens the document in a floating review window and blocks until the user approves it or requests changes. The review feedback is printed to stdout; the exit code says what to do next:
+
+- `0` — approved. Proceed with the work.
+- `2` — changes requested. The feedback is on stdout; revise the document and run the command again.
+- `3` — the review is still open (the wait timed out after 9 minutes). Tell the user the plan is waiting for them in Folio, end your turn, and on your next turn run `folio review --collect <path>` to pick up the verdict — it is preserved, nothing is lost.
+- `4` — no review could be opened. Fall back to telling the user the path.
+
+The user annotates by selecting text (Edit -> Annotate Selection, Cmd+Opt+A) and sends the verdict from the review bar at the bottom of the window. Feedback is also written to `<path>.feedback.md` beside the document — read it if you ever need it outside the `--wait` flow, then delete it.
+
+Before revising, re-read the document: the user may have answered by editing it directly rather than annotating.
+
+Fallback if `folio` is not on PATH: `/Applications/Folio.app/Contents/MacOS/folio`.
 <!-- /folio:plan-review -->'
 
 for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.agents/AGENTS.md"; do
   mkdir -p "$(dirname "$f")"
   touch "$f"
   if grep -q "$MARKER" "$f"; then
-    echo "instructions already present: $f"
+    # Upgrade in place: replace everything between the markers so re-running
+    # the installer is an upgrade rather than a no-op.
+    BLOCK="$BLOCK" python3 - "$f" <<'PYEOF'
+import os, re, sys
+
+path = sys.argv[1]
+with open(path) as fh:
+    text = fh.read()
+block = os.environ["BLOCK"]
+pattern = re.compile(
+    r"<!-- folio:plan-review -->.*?<!-- /folio:plan-review -->", re.DOTALL
+)
+with open(path, "w") as fh:
+    fh.write(pattern.sub(lambda _: block, text))
+PYEOF
+    echo "instructions upgraded: $f"
   else
     printf '\n%s\n' "$BLOCK" >> "$f"
     echo "instructions appended: $f"
