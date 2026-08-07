@@ -1018,9 +1018,48 @@ function renderReviewBar(): void {
     reviewBar.classList.remove("sent");
     return;
   }
+  // Drop any confirmation left over from a verdict on a previous document:
+  // `.sent` hides the buttons, so without this an incoming document's live
+  // review bar would show its label with nothing to click until the other
+  // document's 1600ms timer happened to fire.
+  reviewBar.classList.remove("sent");
   reviewBarLabel.textContent = `⏳ ${model.label}`;
   reviewApproveBtn.classList.toggle("primary", model.primary === "approved");
   reviewChangesBtn.classList.toggle("primary", model.primary === "changes");
+}
+
+/** Called once when a verdict's round trip settles, whichever way it went.
+ *
+ *  Clears the in-flight flag unconditionally so an abandoned or failed send
+ *  can never wedge the buttons, and reports whether the document the verdict
+ *  was for is still the open one. Everything the caller does afterwards —
+ *  the sticky error, the "sent ✓" confirmation, nulling `reviewRequest` —
+ *  is bookkeeping about *the open document*, and this is a multi-document,
+ *  multi-agent workflow: another file may be open by now with its own live
+ *  `folio review --wait` blocked on it. Writing A's outcome over B's state
+ *  would tear down a real, actionable review bar and tell the user a verdict
+ *  was sent that B's agent never received. The verdict itself already
+ *  reached the agent either way — only the local UI must not leak across
+ *  documents. */
+function settleVerdict(path: string): boolean {
+  verdictInFlight = false;
+  return doc.filePath === path;
+}
+
+/** The verdict is away and the agent unblocked; flash a confirmation where
+ *  the buttons were and drop the now-answered request. */
+function showVerdictConfirmation(verdict: Verdict): void {
+  reviewRequest = null;
+  documentEditedDuringReview = false;
+  reviewBarConfirming = true;
+  reviewBar.hidden = false;
+  reviewBar.classList.add("sent");
+  reviewBarLabel.textContent = verdict === "approved" ? "sent ✓ approved" : "sent ✓ changes requested";
+  setTimeout(() => {
+    reviewBarConfirming = false;
+    reviewBar.classList.remove("sent");
+    renderReviewBar();
+  }, 1600);
 }
 
 /** Send the verdict back to the blocked agent: the same structured feedback
@@ -1060,13 +1099,7 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
       documentEdited: documentEditedDuringReview,
     });
   } catch {
-    verdictInFlight = false;
-    // The user may have switched documents (or closed this one) while the
-    // request was in flight. Only attribute the failure to the document it
-    // was actually for — a rejection landing late must not force a stuck
-    // error onto whatever the user has since opened, including a blank
-    // document that never had a review request at all.
-    if (doc.filePath !== path) return;
+    if (!settleVerdict(path)) return;
     // The agent is blocked on `folio review --wait` with no other way to
     // learn something went wrong. Stick the error in the bar — cleared only
     // by a retry or a document change — instead of a plain label the next
@@ -1075,18 +1108,8 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
     renderReviewBar();
     return;
   }
-  verdictInFlight = false;
-  reviewRequest = null;
-  documentEditedDuringReview = false;
-  reviewBarConfirming = true;
-  reviewBar.hidden = false;
-  reviewBar.classList.add("sent");
-  reviewBarLabel.textContent = verdict === "approved" ? "sent ✓ approved" : "sent ✓ changes requested";
-  setTimeout(() => {
-    reviewBarConfirming = false;
-    reviewBar.classList.remove("sent");
-    renderReviewBar();
-  }, 1600);
+  if (!settleVerdict(path)) return;
+  showVerdictConfirmation(verdict);
 }
 
 reviewApproveBtn.addEventListener("click", () => void submitVerdict("approved"));
