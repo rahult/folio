@@ -24,6 +24,7 @@ export type MenuAction =
   | { kind: "open-recent"; index: number }
   | { kind: "annotate" }
   | { kind: "export-feedback" }
+  | { kind: "approve-review" }
   | { kind: "clear-annotations" }
   | { kind: "open-revision"; seq: number }
   | { kind: "nav-back" }
@@ -96,6 +97,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-watch" };
     case "edit.annotate":
       return { kind: "annotate" };
+    case "file.approve-review":
+      return { kind: "approve-review" };
     case "file.feedback":
       return { kind: "export-feedback" };
     case "file.clear-annotations":

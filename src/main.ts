@@ -1081,6 +1081,17 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
     return;
   }
   if (verdictInFlight) return;
+  // A verdict can only answer a review that is actually pending. Without
+  // this, the ~1600ms "sent ✓" confirmation window is a gap: `verdictInFlight`
+  // is already false there and `reviewRequest` is already null, so nothing
+  // stops a second call from firing another write_text_file + resolve_review
+  // against an already-decided handshake. The review bar's buttons are
+  // hidden by CSS during that window, but the menu item (and its shortcut)
+  // are not, so the check has to live here rather than at a single call
+  // site. This mirrors the same condition `barModel` uses to decide the
+  // bar — and therefore its buttons — are visible, so it never blocks the
+  // buttons' own clicks.
+  if (reviewRequest === null || reviewRequest.state !== "waiting") return;
   verdictInFlight = true;
   // A click is either the first attempt or a retry after a failure — either
   // way, any previous sticky error no longer describes the current attempt.
@@ -1366,6 +1377,8 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return;
     case "export-feedback":
       return exportReviewFeedback();
+    case "approve-review":
+      return submitVerdict("approved");
     case "clear-annotations":
       clearReviewAnnotations();
       return;

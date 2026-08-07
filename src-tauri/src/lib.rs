@@ -1084,6 +1084,12 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
         .separator()
         .item(&menu_item(
             app,
+            "file.approve-review",
+            "Approve Review",
+            Some("Shift+CmdOrCtrl+R"),
+        )?)
+        .item(&menu_item(
+            app,
             "file.feedback",
             "Export Review Feedback",
             Some("Alt+CmdOrCtrl+R"),

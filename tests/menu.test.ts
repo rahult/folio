@@ -137,6 +137,10 @@ describe("actionForMenuId", () => {
     expect(actionForMenuId("file.recent.x")).toBeNull();
   });
 
+  it("maps the approve-review item", () => {
+    expect(actionForMenuId("file.approve-review")).toEqual({ kind: "approve-review" });
+  });
+
   it("returns null for ids it does not own (e.g. predefined items)", () => {
     expect(actionForMenuId("undo")).toBeNull();
     expect(actionForMenuId("")).toBeNull();
