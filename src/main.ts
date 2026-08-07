@@ -277,6 +277,7 @@ async function newFile(): Promise<void> {
   await loadContent("", null);
   annotations = [];
   documentEditedDuringReview = false;
+  reviewBarError = null;
   void refreshReviewRequest();
   void invoke("set_revision_menu", { entries: [] });
   saveSessionNow();
@@ -745,6 +746,7 @@ async function loadAnnotationsForOpenFile(): Promise<void> {
   sidebarOpen = annotations.length > 0;
   renderAnnotationsNow();
   documentEditedDuringReview = false;
+  reviewBarError = null;
   void refreshReviewRequest();
 }
 
@@ -973,22 +975,43 @@ let verdictInFlight = false;
  *  tick would otherwise re-fetch a decided (still non-null) request and have
  *  `renderReviewBar()` cut the confirmation short. */
 let reviewBarConfirming = false;
+/** Non-null when the last verdict failed to send. Sticky — cleared only by
+ *  a retry or a document change, never by a poll tick — because a blocked
+ *  `folio review --wait` process is hanging and silently reverting to the
+ *  ordinary "waiting" label would tell the user nothing went wrong. */
+let reviewBarError: string | null = null;
 
 const REVIEW_POLL_MS = 1500;
 
-async function refreshReviewRequest(): Promise<void> {
-  if (reviewBarConfirming) return;
+/** `fromPoll` distinguishes the background interval from the two
+ *  user-initiated call sites (opening a file, starting a new document): only
+ *  the interval's refresh should ever be suppressed by an in-progress "sent"
+ *  confirmation — a document switch must always take effect immediately. */
+async function refreshReviewRequest(fromPoll = false): Promise<void> {
+  if (fromPoll && reviewBarConfirming) return;
   const path = doc.filePath;
   if (!path) {
     reviewRequest = null;
     renderReviewBar();
     return;
   }
-  reviewRequest = await invoke<ReviewRequest | null>("review_request_state", { path });
+  const result = await invoke<ReviewRequest | null>("review_request_state", { path });
+  // Re-check after the await: a click may have started the "sent ✓"
+  // confirmation while this poll's request was still in flight.
+  if (fromPoll && reviewBarConfirming) return;
+  reviewRequest = result;
   renderReviewBar();
 }
 
 function renderReviewBar(): void {
+  if (reviewBarError !== null) {
+    // Sticky failure state: keep the bar up with both buttons live for a
+    // retry, and don't let barModel's view of reviewRequest override it.
+    reviewBar.hidden = false;
+    reviewBar.classList.remove("sent");
+    reviewBarLabel.textContent = reviewBarError;
+    return;
+  }
   const model = barModel(reviewRequest, annotations.length);
   reviewBar.hidden = !model.visible;
   if (!model.visible) {
@@ -1007,6 +1030,9 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
   const path = doc.filePath;
   if (!path || verdictInFlight) return;
   verdictInFlight = true;
+  // A click is either the first attempt or a retry after a failure — either
+  // way, any previous sticky error no longer describes the current attempt.
+  reviewBarError = null;
   trackEvent("review_verdict", { verdict });
   const feedback = feedbackWithEditNote(
     buildFeedback(doc.fileName, annotations),
@@ -1022,10 +1048,12 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
     });
   } catch {
     // The agent is blocked on `folio review --wait` with no other way to
-    // learn something went wrong — surface it in the bar itself, and leave
-    // local state (and the buttons) alone so the user can just try again.
+    // learn something went wrong. Stick the error in the bar — cleared only
+    // by a retry or a document change — instead of a plain label the next
+    // poll tick would quietly overwrite with the ordinary "waiting" text.
     verdictInFlight = false;
-    reviewBarLabel.textContent = "could not send — check the file is writable";
+    reviewBarError = "could not send — check the file is writable";
+    renderReviewBar();
     return;
   }
   verdictInFlight = false;
@@ -1044,7 +1072,7 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
 
 reviewApproveBtn.addEventListener("click", () => void submitVerdict("approved"));
 reviewChangesBtn.addEventListener("click", () => void submitVerdict("changes"));
-setInterval(() => void refreshReviewRequest(), REVIEW_POLL_MS);
+setInterval(() => void refreshReviewRequest(true), REVIEW_POLL_MS);
 
 annotSaveBtn.addEventListener("click", saveAnnotation);
 annotCancelBtn.addEventListener("click", closeAnnotateDialog);
