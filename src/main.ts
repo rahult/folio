@@ -1028,7 +1028,20 @@ function renderReviewBar(): void {
  *  unblocks `folio review --wait`. */
 async function submitVerdict(verdict: Verdict): Promise<void> {
   const path = doc.filePath;
-  if (!path || verdictInFlight) return;
+  if (!path) {
+    // No document open. Nothing to submit — and if a stale error from a
+    // document the user has since left was still showing, clear it here too
+    // so the bar can never end up stuck with a message and no live button
+    // to answer it. (Belt-and-suspenders: the catch below is
+    // document-scoped and shouldn't set one in this state, but this keeps
+    // the invariant true even if that ever changes.)
+    if (reviewBarError !== null) {
+      reviewBarError = null;
+      renderReviewBar();
+    }
+    return;
+  }
+  if (verdictInFlight) return;
   verdictInFlight = true;
   // A click is either the first attempt or a retry after a failure — either
   // way, any previous sticky error no longer describes the current attempt.
@@ -1047,11 +1060,17 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
       documentEdited: documentEditedDuringReview,
     });
   } catch {
+    verdictInFlight = false;
+    // The user may have switched documents (or closed this one) while the
+    // request was in flight. Only attribute the failure to the document it
+    // was actually for — a rejection landing late must not force a stuck
+    // error onto whatever the user has since opened, including a blank
+    // document that never had a review request at all.
+    if (doc.filePath !== path) return;
     // The agent is blocked on `folio review --wait` with no other way to
     // learn something went wrong. Stick the error in the bar — cleared only
     // by a retry or a document change — instead of a plain label the next
     // poll tick would quietly overwrite with the ordinary "waiting" text.
-    verdictInFlight = false;
     reviewBarError = "could not send — check the file is writable";
     renderReviewBar();
     return;
