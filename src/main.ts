@@ -103,7 +103,10 @@ function countWords(markdown: string): number {
 
 const editor = new MarkdownEditor(editorRoot, (markdown) => {
   doc.updateDirty(markdown);
-  if (doc.dirty && reviewRequest !== null) documentEditedDuringReview = true;
+  // `resolve_review` rewrites the handshake to a decided state rather than
+  // deleting it, so `reviewRequest` stays non-null after a verdict — only
+  // "waiting" means an agent is actually blocked on this edit.
+  if (doc.dirty && reviewRequest?.state === "waiting") documentEditedDuringReview = true;
   wordCountEl.textContent = `${countWords(markdown)} words`;
   renderTitle();
 });
@@ -273,6 +276,8 @@ async function newFile(): Promise<void> {
   diskContent = null;
   await loadContent("", null);
   annotations = [];
+  documentEditedDuringReview = false;
+  void refreshReviewRequest();
   void invoke("set_revision_menu", { entries: [] });
   saveSessionNow();
   syncWatch();
@@ -311,7 +316,9 @@ function toggleSourceMode(): Promise<void> {
 // Typing in the source view is a document edit like any other.
 sourceEditor.addEventListener("input", () => {
   doc.updateDirty(sourceEditor.value);
-  if (doc.dirty && reviewRequest !== null) documentEditedDuringReview = true;
+  // See the matching guard in the WYSIWYG change handler above: only
+  // "waiting" means an agent is actually blocked on this edit.
+  if (doc.dirty && reviewRequest?.state === "waiting") documentEditedDuringReview = true;
   wordCountEl.textContent = `${countWords(sourceEditor.value)} words`;
   renderTitle();
 });
@@ -957,10 +964,20 @@ let reviewRequest: ReviewRequest | null = null;
 /** Set when the user answers by editing rather than annotating, so the
  *  feedback can tell the agent to re-read the file. */
 let documentEditedDuringReview = false;
+/** True while a verdict is being sent — guards against a double-click firing
+ *  `submitVerdict` twice concurrently (the write + resolve round trip is not
+ *  idempotent-safe to race). */
+let verdictInFlight = false;
+/** True while the "sent ✓" confirmation is showing. `resolve_review`
+ *  rewrites the handshake rather than deleting it, so the very next poll
+ *  tick would otherwise re-fetch a decided (still non-null) request and have
+ *  `renderReviewBar()` cut the confirmation short. */
+let reviewBarConfirming = false;
 
 const REVIEW_POLL_MS = 1500;
 
 async function refreshReviewRequest(): Promise<void> {
+  if (reviewBarConfirming) return;
   const path = doc.filePath;
   if (!path) {
     reviewRequest = null;
@@ -988,25 +1005,38 @@ function renderReviewBar(): void {
  *  unblocks `folio review --wait`. */
 async function submitVerdict(verdict: Verdict): Promise<void> {
   const path = doc.filePath;
-  if (!path) return;
+  if (!path || verdictInFlight) return;
+  verdictInFlight = true;
   trackEvent("review_verdict", { verdict });
   const feedback = feedbackWithEditNote(
     buildFeedback(doc.fileName, annotations),
     documentEditedDuringReview,
   );
-  await invoke("write_text_file", { path: `${path}.feedback.md`, contents: feedback });
-  await invoke("resolve_review", {
-    path,
-    verdict,
-    feedback,
-    documentEdited: documentEditedDuringReview,
-  });
+  try {
+    await invoke("write_text_file", { path: `${path}.feedback.md`, contents: feedback });
+    await invoke("resolve_review", {
+      path,
+      verdict,
+      feedback,
+      documentEdited: documentEditedDuringReview,
+    });
+  } catch {
+    // The agent is blocked on `folio review --wait` with no other way to
+    // learn something went wrong — surface it in the bar itself, and leave
+    // local state (and the buttons) alone so the user can just try again.
+    verdictInFlight = false;
+    reviewBarLabel.textContent = "could not send — check the file is writable";
+    return;
+  }
+  verdictInFlight = false;
   reviewRequest = null;
   documentEditedDuringReview = false;
+  reviewBarConfirming = true;
   reviewBar.hidden = false;
   reviewBar.classList.add("sent");
   reviewBarLabel.textContent = verdict === "approved" ? "sent ✓ approved" : "sent ✓ changes requested";
   setTimeout(() => {
+    reviewBarConfirming = false;
     reviewBar.classList.remove("sent");
     renderReviewBar();
   }, 1600);
