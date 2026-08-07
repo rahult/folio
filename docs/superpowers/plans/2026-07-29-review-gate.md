@@ -1184,6 +1184,13 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
   const path = doc.filePath;
   if (!path) return;
   trackEvent("review_verdict", { verdict });
+  // Both invokes must be guarded: a rejection here would otherwise leave the
+  // blocked `folio review --wait` process hanging forever with nothing shown
+  // to the reviewer. An in-flight guard keeps a double-click from firing two
+  // concurrent submissions. The poll must also be suppressed while the
+  // "sent ✓" confirmation shows — a 1500ms tick otherwise lands inside the
+  // 1600ms timeout, re-renders against the now-decided request, and erases
+  // the confirmation on essentially every verdict.
   const feedback = feedbackWithEditNote(
     buildFeedback(doc.fileName, annotations),
     documentEditedDuringReview,
@@ -1231,10 +1238,25 @@ Three call sites in `src/main.ts`:
 
 Note the early `return` in the empty-list branch (line 765) — add `renderReviewBar();` before that `return` too, so clearing every annotation still flips the primary button back to Approve.
 
-3. Wherever the document is marked dirty, record that the reviewer edited it. Find the assignment that sets the dirty flag on editor changes and add beside it:
+3. Record that the reviewer edited the document, at the two genuine user-edit sites — and only those. `src/main.ts` has three `doc.updateDirty(...)` calls:
+
+- the editor change handler (~line 100) — **a user edit**
+- the source-mode toggle path (~line 297) — a round-trip normalization, **not** a user edit; do not touch it
+- the `sourceEditor.addEventListener("input", …)` handler (~line 307) — **a user edit**
+
+At the two user-edit sites add:
 
 ```typescript
-  if (reviewRequest !== null) documentEditedDuringReview = true;
+  if (doc.dirty && reviewRequest?.state === "waiting") documentEditedDuringReview = true;
+```
+
+The guard must test `state === "waiting"`, not `reviewRequest !== null`. `resolve_in` *rewrites* the handshake with the verdict rather than deleting it, so a decided request stays non-null and a bare null check would mark ordinary later editing as review edits — telling the next agent to re-read a file the user never touched.
+
+4. `newFile()` must clear the review state the same way `loadAnnotationsForOpenFile()` does, or a stale clickable bar survives over a blank document:
+
+```typescript
+  documentEditedDuringReview = false;
+  void refreshReviewRequest();
 ```
 
 - [ ] **Step 6: Typecheck and test**
