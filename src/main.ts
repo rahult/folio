@@ -11,7 +11,6 @@ import { openUrl, openPath } from "@tauri-apps/plugin-opener";
 import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
 import { buildHtmlDocument, htmlExportTarget } from "./export";
-import { canUse, looksLikeLicenseKey, type Feature } from "./license";
 import { classifyLink } from "./links";
 import { normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
@@ -30,7 +29,7 @@ import {
 } from "./annotations";
 import { renderAnnotations } from "./annotview";
 import { barModel, feedbackWithEditNote, type ReviewRequest, type Verdict } from "./reviewgate";
-import { canApplyTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
+import { storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
 import { TextSelection, type Selection } from "@milkdown/kit/prose/state";
 import {
@@ -350,7 +349,6 @@ function collectCssText(): string {
 }
 
 async function exportHtmlFile(): Promise<void> {
-  if (!requirePro("export")) return;
   // The rendered DOM is the export source, so leave source mode first.
   if (sourceMode) await exitSourceMode();
   trackEvent("export_html");
@@ -364,7 +362,6 @@ async function exportHtmlFile(): Promise<void> {
 }
 
 async function exportPdf(): Promise<void> {
-  if (!requirePro("export")) return;
   if (sourceMode) await exitSourceMode();
   trackEvent("export_pdf");
   // Native print panel (macOS: Save as PDF). Print CSS hides the chrome.
@@ -379,7 +376,7 @@ let typewriterMode = false;
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 /** Push the real view-mode state to the native menu so checkmarks never
- *  drift — including after a gated (unlicensed) click. */
+ *  drift. */
 function syncMenuState(): void {
   void invoke("sync_menu_state", {
     focus: focusMode,
@@ -445,10 +442,6 @@ function markFocusBlock(): void {
 }
 
 function toggleFocusMode(): void {
-  if (!focusMode && !requirePro("focus-mode")) {
-    syncMenuState();
-    return;
-  }
   focusMode = !focusMode;
   document.body.classList.toggle("focus-mode", focusMode);
   if (focusMode) markFocusBlock();
@@ -471,10 +464,6 @@ function scrollCaretToTypewriterLine(): void {
 }
 
 function toggleTypewriterMode(): void {
-  if (!typewriterMode && !requirePro("typewriter-mode")) {
-    syncMenuState();
-    return;
-  }
   typewriterMode = !typewriterMode;
   document.body.classList.toggle("typewriter-mode", typewriterMode);
   if (typewriterMode) scrollCaretToTypewriterLine();
@@ -1216,115 +1205,12 @@ function applyTheme(theme: Theme, persist = true): void {
 }
 
 function requestTheme(theme: Theme): void {
-  // Paper is always free; alternates are gated.
-  if (!canApplyTheme(theme, licenseState.licensed)) {
-    requirePro("themes");
-    syncMenuState();
-    return;
-  }
   applyTheme(theme);
   syncMenuState();
 }
 
-// ——— licensing ———
-
-interface LicenseState {
-  licensed: boolean;
-  email: string | null;
-}
-
-interface LicenseInfo {
-  valid: boolean;
-  email?: string;
-  error?: string;
-}
-
-let licenseState: LicenseState = { licensed: false, email: null };
-
-const licenseOverlay = document.querySelector<HTMLDivElement>("#license-overlay")!;
-const licenseEnterView = document.querySelector<HTMLDivElement>("#license-enter-view")!;
-const licenseActiveView = document.querySelector<HTMLDivElement>("#license-active-view")!;
-const licenseKeyInput = document.querySelector<HTMLTextAreaElement>("#license-key-input")!;
-const licenseError = document.querySelector<HTMLParagraphElement>("#license-error")!;
-const licenseEmail = document.querySelector<HTMLElement>("#license-email")!;
-const licenseUnlockBtn = document.querySelector<HTMLButtonElement>("#license-unlock-btn")!;
-const licenseCancelBtn = document.querySelector<HTMLButtonElement>("#license-cancel-btn")!;
-const licenseRemoveBtn = document.querySelector<HTMLButtonElement>("#license-remove-btn")!;
-const licenseDoneBtn = document.querySelector<HTMLButtonElement>("#license-done-btn")!;
-
-/**
- * Gate a Pro feature. Returns true when the feature may run; otherwise
- * opens the unlock dialog and returns false. One-liner for follow-up
- * Pro features: `if (!requirePro("export")) return;`
- */
-export function requirePro(feature: Feature): boolean {
-  if (canUse(feature, licenseState.licensed)) return true;
-  openLicenseDialog();
-  return false;
-}
-
-/** Re-read license state from Rust and refresh everything that shows it. */
-async function updateLicenseUi(): Promise<void> {
-  licenseState = await invoke<LicenseState>("get_license_state");
-  licenseEmail.textContent = licenseState.email ?? "";
-  // Swap dialog views if the dialog is open or about to open.
-  licenseEnterView.hidden = licenseState.licensed;
-  licenseActiveView.hidden = !licenseState.licensed;
-}
-
-function openLicenseDialog(): void {
-  licenseEnterView.hidden = licenseState.licensed;
-  licenseActiveView.hidden = !licenseState.licensed;
-  licenseError.hidden = true;
-  licenseKeyInput.value = "";
-  licenseOverlay.hidden = false;
-  (licenseState.licensed ? licenseDoneBtn : licenseKeyInput).focus();
-}
-
-function closeLicenseDialog(): void {
-  licenseOverlay.hidden = true;
-}
-
-async function submitLicenseKey(): Promise<void> {
-  const key = licenseKeyInput.value.trim();
-  if (!looksLikeLicenseKey(key)) {
-    licenseError.textContent = "That doesn't look like a Folio license key.";
-    licenseError.hidden = false;
-    return;
-  }
-  try {
-    const info = await invoke<LicenseInfo>("verify_and_store_license", { key });
-    licenseState = { licensed: info.valid, email: info.email ?? null };
-    licenseEmail.textContent = licenseState.email ?? "";
-    licenseEnterView.hidden = true;
-    licenseActiveView.hidden = false;
-    licenseDoneBtn.focus();
-  } catch (e) {
-    licenseError.textContent = typeof e === "string" ? e : "Invalid license key.";
-    licenseError.hidden = false;
-  }
-}
-
-async function removeLicense(): Promise<void> {
-  await invoke("clear_license");
-  await updateLicenseUi();
-  licenseKeyInput.value = "";
-  licenseKeyInput.focus();
-}
-
-licenseUnlockBtn.addEventListener("click", () => void submitLicenseKey());
-licenseCancelBtn.addEventListener("click", closeLicenseDialog);
-licenseDoneBtn.addEventListener("click", closeLicenseDialog);
-licenseRemoveBtn.addEventListener("click", () => void removeLicense());
-licenseKeyInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitLicenseKey();
-});
-licenseOverlay.addEventListener("click", (e) => {
-  if (e.target === licenseOverlay) closeLicenseDialog();
-});
 window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (!licenseOverlay.hidden) closeLicenseDialog();
   if (!annotOverlay.hidden) closeAnnotateDialog();
 });
 
@@ -1387,9 +1273,6 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return;
     case "zoom":
       applyZoom(action.direction);
-      return;
-    case "enter-license":
-      openLicenseDialog();
       return;
     case "make-default-app":
       return makeDefaultApp();
@@ -1484,9 +1367,9 @@ void editor.create("").then(async () => {
 void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
   if (focused) void claimNativeMenu();
 });
-// Establish license state, then align the native menu checkmarks with
-// the actual (possibly persisted) view-mode state.
-void updateLicenseUi().then(syncMenuState);
+// Align the native menu checkmarks with the actual (possibly persisted)
+// view-mode state.
+syncMenuState();
 // Ask for telemetry consent on first launch; otherwise honor the choice.
 initTelemetryFlow();
 // Silent update check on launch; failures (offline, no release) are ignored.

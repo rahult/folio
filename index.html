@@ -171,13 +171,13 @@
         aria-labelledby="telemetry-heading"
       >
         <h2 id="telemetry-heading">Usage statistics</h2>
-        <p class="license-copy">
+        <p class="dialog-copy">
           Help improve Folio by sharing anonymous usage statistics — feature
           usage only, never document content or file paths. Google Analytics
           loads only if you opt in, and you can change your mind any time in
           View → Usage Statistics.
         </p>
-        <div class="license-actions">
+        <div class="dialog-actions">
           <button id="telemetry-decline-btn" type="button">No thanks</button>
           <button id="telemetry-accept-btn" type="button">Enable statistics</button>
         </div>
@@ -213,47 +213,9 @@
           placeholder="Your note for the agent…"
           aria-label="Annotation text"
         ></textarea>
-        <div class="license-actions">
+        <div class="dialog-actions">
           <button id="annot-cancel-btn" type="button">Cancel</button>
           <button id="annot-save-btn" type="button">Save annotation</button>
-        </div>
-      </div>
-    </div>
-    <div id="license-overlay" hidden>
-      <div
-        id="license-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="license-heading"
-      >
-        <h2 id="license-heading">Folio Pro</h2>
-        <div id="license-enter-view">
-          <p class="license-copy">
-            Enter your license key to unlock Pro features — export, focus
-            mode, and more.
-          </p>
-          <textarea
-            id="license-key-input"
-            rows="3"
-            spellcheck="false"
-            placeholder="FOLIO1-…"
-            aria-label="License key"
-          ></textarea>
-          <p id="license-error" role="alert" hidden></p>
-          <div class="license-actions">
-            <button id="license-cancel-btn" type="button">Cancel</button>
-            <button id="license-unlock-btn" type="button">Unlock</button>
-          </div>
-        </div>
-        <div id="license-active-view" hidden>
-          <p class="license-copy">
-            Folio Pro is unlocked for
-            <strong id="license-email"></strong>.
-          </p>
-          <div class="license-actions">
-            <button id="license-remove-btn" type="button">Remove license</button>
-            <button id="license-done-btn" type="button">Done</button>
-          </div>
         </div>
       </div>
     </div>

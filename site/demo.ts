@@ -20,12 +20,12 @@ line into a heading.
 
 ## A table, rendered live
 
-| Feature        | Free | Pro |
-| -------------- | ---- | --- |
-| Full editor    | ✓    | ✓   |
-| Source mode    | ✓    | ✓   |
-| Export & PDF   |      | ✓   |
-| Focus mode     |      | ✓   |
+| Feature        | Shortcut |
+| -------------- | -------- |
+| Source mode    | ⌘/       |
+| Export         | ⌘E       |
+| Focus mode     | ⌥⌘F      |
+| Typewriter     | ⌥⌘Y      |
 
 \`\`\`rust
 fn main() {

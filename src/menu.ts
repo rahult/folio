@@ -31,7 +31,6 @@ export type MenuAction =
   | { kind: "nav-forward" }
   | { kind: "set-theme"; theme: Theme }
   | { kind: "zoom"; direction: ZoomDirection }
-  | { kind: "enter-license" }
   | { kind: "make-default-app" }
   | { kind: "check-updates" }
   | { kind: "editor-command"; command: EditorCommand };
@@ -113,8 +112,6 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "set-theme", theme: "night" };
     case "view.theme-newsprint":
       return { kind: "set-theme", theme: "newsprint" };
-    case "app.enter-license":
-      return { kind: "enter-license" };
     case "app.check-updates":
       return { kind: "check-updates" };
     case "file.make-default":

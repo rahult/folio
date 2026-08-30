@@ -95,8 +95,7 @@ describe("actionForMenuId", () => {
     expect(actionForMenuId("view.zoom-reset")).toEqual({ kind: "zoom", direction: "reset" });
   });
 
-  it("maps license, export, and view-mode menu ids", () => {
-    expect(actionForMenuId("app.enter-license")).toEqual({ kind: "enter-license" });
+  it("maps export and view-mode menu ids", () => {
     expect(actionForMenuId("app.check-updates")).toEqual({ kind: "check-updates" });
     expect(actionForMenuId("file.export-html")).toEqual({ kind: "export-html" });
     expect(actionForMenuId("file.export-pdf")).toEqual({ kind: "export-pdf" });

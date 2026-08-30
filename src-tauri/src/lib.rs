@@ -9,7 +9,6 @@ use tauri::menu::{
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
-pub mod license;
 pub mod reviewgate;
 
 /// File extensions Folio opens; mirrors `fileAssociations` in tauri.conf.json.
@@ -787,31 +786,16 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
     fs::write(&path, contents).map_err(|e| format!("failed to write {path}: {e}"))
 }
 
-// ——— licensing ———
-
 fn config_dir(app: &AppHandle<Wry>) -> Result<std::path::PathBuf, String> {
     app.path()
         .app_config_dir()
         .map_err(|e| format!("failed to resolve app config dir: {e}"))
 }
 
-/// Whether a valid license is currently persisted (used for menu labels).
-fn is_licensed(app: &AppHandle<Wry>) -> bool {
-    config_dir(app)
-        .map(|dir| license::load_license_state(&dir).licensed)
-        .unwrap_or(false)
-}
-
-/// The Export submenu is Pro-gated; its label carries the "(Pro)" marker
-/// until a license is unlocked.
-fn export_label(licensed: bool) -> &'static str {
-    if licensed { "Export" } else { "Export (Pro)" }
-}
-
-/// Rebuild the app menu with the current license state and replace it.
-/// (Menu-item label updates via `menu.get(...)` proved unreliable for
-/// submenu titles on macOS, so we rebuild and re-set the whole menu.)
-/// Checkmarks are carried over — a rebuild must not reset view/watch state.
+/// Rebuild the app menu and replace it. (Menu-item label updates via
+/// `menu.get(...)` proved unreliable for submenu titles on macOS, so we
+/// rebuild and re-set the whole menu.) Checkmarks are carried over — a
+/// rebuild must not reset view/watch state.
 fn rebuild_menu(app: &AppHandle<Wry>) {
     const CHECK_IDS: [&str; 8] = [
         "view.focus-mode",
@@ -823,7 +807,6 @@ fn rebuild_menu(app: &AppHandle<Wry>) {
         "view.theme-night",
         "view.theme-newsprint",
     ];
-    let licensed = is_licensed(app);
     let mut checked: Vec<(String, bool)> = Vec::new();
     if let Some(menu) = app.menu() {
         if let Ok(items) = menu.items() {
@@ -834,7 +817,7 @@ fn rebuild_menu(app: &AppHandle<Wry>) {
             }
         }
     }
-    if let Ok(menu) = build_menu(app, licensed) {
+    if let Ok(menu) = build_menu(app) {
         if let Ok(items) = menu.items() {
             for (id, is_checked) in checked {
                 if let Some(item) = find_check_item(items.clone(), &id) {
@@ -921,44 +904,6 @@ fn sync_menu_state(
     }
 }
 
-/// Validate a license key; on success persist it to the app config dir.
-#[tauri::command]
-fn verify_and_store_license(
-    app: AppHandle<Wry>,
-    key: String,
-) -> Result<license::LicenseInfo, String> {
-    let payload = license::verify_license(&key).map_err(|e| e.to_string())?;
-    let dir = config_dir(&app)?;
-    license::store_license(&dir, &payload.email, key.trim())?;
-    rebuild_menu(&app);
-    Ok(license::LicenseInfo {
-        valid: true,
-        email: Some(payload.email),
-        error: None,
-    })
-}
-
-/// Current license state, re-verified from the persisted file.
-#[tauri::command]
-fn get_license_state(app: AppHandle<Wry>) -> license::LicenseState {
-    match config_dir(&app) {
-        Ok(dir) => license::load_license_state(&dir),
-        Err(_) => license::LicenseState {
-            licensed: false,
-            email: None,
-        },
-    }
-}
-
-/// Remove the persisted license.
-#[tauri::command]
-fn clear_license(app: AppHandle<Wry>) -> Result<(), String> {
-    let dir = config_dir(&app)?;
-    license::clear_stored_license(&dir)?;
-    rebuild_menu(&app);
-    Ok(())
-}
-
 /// Build a custom menu item whose id is forwarded to the frontend.
 fn menu_item<R: Runtime, M: Manager<R>>(
     manager: &M,
@@ -991,13 +936,9 @@ fn check_item<R: Runtime, M: Manager<R>>(
 /// The native application menu (Typora-flavored). Custom items carry
 /// dotted ids ("paragraph.heading-1", …) that `on_menu_event` forwards
 /// to the webview as `menu` events; predefined items act natively.
-/// `licensed` is passed in (not read from disk) because the path resolver
-/// is only managed once the app is set up — resolving the config dir
-/// during initial menu construction panics.
-fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> {
+fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
 
     let app_menu = SubmenuBuilder::new(app, "Folio")
-        .item(&menu_item(app, "app.enter-license", "Enter License…", None)?)
         .item(&menu_item(
             app,
             "app.check-updates",
@@ -1102,7 +1043,7 @@ fn build_menu(app: &AppHandle<Wry>, licensed: bool) -> tauri::Result<Menu<Wry>> 
         )?)
         .separator()
         .item(
-            &SubmenuBuilder::with_id(app, "file.export", export_label(licensed))
+            &SubmenuBuilder::with_id(app, "file.export", "Export")
                 .item(&menu_item(
                     app,
                     "file.export-html",
@@ -1417,7 +1358,7 @@ pub fn run() {
         .manage(RecentFiles::default())
         .manage(RevisionMenu::default())
         .manage(AnnotationDb(Mutex::new(None)))
-        .menu(|app| build_menu(app, false))
+        .menu(build_menu)
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
             if id == "file.new-window" {
@@ -1441,9 +1382,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_text_file,
             write_text_file,
-            verify_and_store_license,
-            get_license_state,
-            clear_license,
             print_document,
             sync_menu_state,
             take_startup_request,
@@ -1462,9 +1400,6 @@ pub fn run() {
             resolve_review
         ])
         .setup(move |app| {
-            // Now the path resolver is managed; rebuild the menu with the
-            // persisted license state so Pro labels are correct.
-            rebuild_menu(app.handle());
             // Reaching setup proves we are the primary instance, so our own
             // spool entry will never be needed for a handoff.
             if let Some(path) = &own_spool {
