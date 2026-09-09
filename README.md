@@ -78,6 +78,28 @@ serializes your annotations into structured Markdown the agent can act on —
 copied to the clipboard *and* written to `<plan>.feedback.md` beside the
 file, so file-driven agents pick it up with no copy-pasting.
 
+### Ask your agent to open a review: the `/folio` skill
+
+`skills/folio/` is an [Agent Skill](https://agentskills.io) that teaches a
+coding agent the blocking review loop above — open the document in Folio,
+wait for the verdict, apply the feedback, resubmit until approved. It is
+**user-invoked only**: the agent never opens Folio on its own, you type
+`/folio` (optionally with a path) when you want to read something properly.
+
+```bash
+# Claude Code — user-wide, or drop it in a repo's .claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/folio ~/.claude/skills/
+
+# Codex, Copilot CLI, Gemini CLI, and others that read ~/.agents/skills/
+mkdir -p ~/.agents/skills && cp -r skills/folio ~/.agents/skills/
+```
+
+The skill expects `folio` on PATH (or falls back to the app bundle):
+
+```bash
+mkdir -p ~/.local/bin && printf '#!/bin/sh\nexec /Applications/Folio.app/Contents/MacOS/folio "$@"\n' > ~/.local/bin/folio && chmod +x ~/.local/bin/folio
+```
+
 **File → Revision History** archives every on-disk version of the reviewed
 file (newest 20) and diffs any of them against the current document — see
 exactly what changed between v1 and v4 without leaving the editor.
@@ -92,11 +114,12 @@ their default applications.
 
 ## More features
 
-- **Export** — File → Export (⌘E) writes a standalone HTML file of the
-  rendered document with the app's styles inlined (fonts fall back to
-  system fonts outside the app — webfont binaries don't travel with the
-  export). Export → PDF… opens the native macOS print panel (Save as PDF)
-  with the app chrome hidden via print CSS
+- **Export** — File → Export (⌘E) writes a self-contained HTML file:
+  the document rendered from its Markdown (never from the editor, so the
+  result does not depend on what was on screen), syntax-highlighted code,
+  Mermaid diagrams as SVG, local images and the app's typefaces embedded.
+  Export → PDF… prints the same rendering through the native macOS print
+  panel (Save as PDF)
 - **Focus Mode** — View → Focus Mode (⌥⌘F) dims every block except the
   one holding the caret
 - **Typewriter Mode** — View → Typewriter Mode (⌥⌘Y) keeps the caret on
