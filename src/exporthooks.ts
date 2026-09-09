@@ -53,7 +53,10 @@ export async function embedLocalImage(src: string, filePath: string | null): Pro
   if (path === null) return null;
   const response = await fetch(convertFileSrc(path));
   if (!response.ok) return null;
-  return blobToDataUrl(await response.blob());
+  const blob = await response.blob();
+  // Belt and braces with the extension check: never embed a non-image.
+  if (!blob.type.startsWith("image/")) return null;
+  return blobToDataUrl(blob);
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {

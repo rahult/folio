@@ -21,6 +21,16 @@ describe("localImagePath", () => {
     expect(localImagePath("my%20image.png", BASE)).toBe("/docs/plans/my image.png");
   });
 
+  it("refuses anything that is not an image file", () => {
+    // A document can name any path; only image files may be resolved
+    // (and, on export, embedded) through the asset protocol.
+    expect(localImagePath("../.ssh/id_rsa", BASE)).toBeNull();
+    expect(localImagePath("/etc/passwd", BASE)).toBeNull();
+    expect(localImagePath("notes.md", BASE)).toBeNull();
+    expect(localImagePath("photo.JPG", BASE)).toBe("/docs/plans/photo.JPG");
+    expect(localImagePath("pic.webp?v=2", BASE)).toBe("/docs/plans/pic.webp");
+  });
+
   it("returns null for remote, data, and unresolvable srcs", () => {
     expect(localImagePath("https://example.com/a.png", BASE)).toBeNull();
     expect(localImagePath("data:image/png;base64,AAAA", BASE)).toBeNull();

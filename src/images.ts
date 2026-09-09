@@ -8,10 +8,15 @@
 
 import { resolveRelativePath } from "./links";
 
+/** File types the asset protocol may serve into an <img> or an export.
+ *  Anything else a document names (a key file, a config) is refused, so a
+ *  crafted Markdown file cannot pull arbitrary files into an export. */
+const IMAGE_EXTENSION = /\.(png|jpe?g|gif|svg|webp|avif|bmp|ico|tiff?)$/i;
+
 /**
  * Absolute filesystem path for a local image reference, or null when the
- * src is remote, inline (data:/blob:), empty, or relative to an untitled
- * document that has no folder to resolve against.
+ * src is remote, inline (data:/blob:), empty, not an image file type, or
+ * relative to an untitled document that has no folder to resolve against.
  */
 export function localImagePath(src: string, filePath: string | null): string | null {
   if (!src) return null;
@@ -22,6 +27,7 @@ export function localImagePath(src: string, filePath: string | null): string | n
     return null; // http(s), data, blob, mailto, …
   }
   raw = safeDecode(raw.split("#")[0].split("?")[0]);
+  if (!IMAGE_EXTENSION.test(raw)) return null;
   const isAbsolute = raw.replace(/\\/g, "/").startsWith("/");
   if (!isAbsolute && filePath === null) return null;
   return resolveRelativePath(filePath ?? "", raw);
