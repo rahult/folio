@@ -1,7 +1,7 @@
 import "@fontsource-variable/instrument-sans";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, message, ask, open, save } from "@tauri-apps/plugin-dialog";
@@ -11,6 +11,7 @@ import { openUrl, openPath } from "@tauri-apps/plugin-opener";
 import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
 import { buildHtmlDocument, htmlExportTarget } from "./export";
+import { resolveImageSrc } from "./images";
 import { classifyLink } from "./links";
 import { normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
@@ -108,6 +109,9 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
   if (doc.dirty && reviewRequest?.state === "waiting") documentEditedDuringReview = true;
   wordCountEl.textContent = `${countWords(markdown)} words`;
   renderTitle();
+}, {
+  // Consulted when each image node renders, so it must read the live path.
+  resolveImageSrc: (src) => resolveImageSrc(src, doc.filePath, convertFileSrc),
 });
 // The selection bubble's annotate icon runs the same flow as
 // Edit → Annotate Selection… (function declaration, hoisted).
@@ -131,6 +135,9 @@ async function loadContent(content: string, path: string | null): Promise<void> 
     sourceEditor.value = content;
     doc.load(path, content);
   } else {
+    // Image nodes resolve relative srcs against the document's folder as
+    // they render, so the path must be in place before the editor builds.
+    doc.setPath(path);
     await editor.setContent(content);
     // The dirty baseline is the editor's serialized markdown, not the raw
     // file text: Milkdown normalizes formatting (list markers, spacing), so

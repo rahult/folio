@@ -30,6 +30,12 @@ import { diffViewPlugin } from "./diffview";
 import { annotationPlugin } from "./annotview";
 import { mermaidRenderPreview } from "./mermaid";
 
+export interface MarkdownEditorOptions {
+  /** Maps an image's Markdown src to the URL the <img> should display
+   *  (display only — the serialized Markdown keeps the original src). */
+  resolveImageSrc?: (src: string) => string;
+}
+
 /** Speech-bubble icon for the selection toolbar's annotate action (feather
  *  "message-square", stroke style matching Crepe's built-in icons). */
 const ANNOTATE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
@@ -47,6 +53,7 @@ export class MarkdownEditor {
   constructor(
     private root: HTMLElement,
     private onMarkdownUpdated: (markdown: string) => void,
+    private options: MarkdownEditorOptions = {},
   ) {}
 
   /** Create (or recreate) the editor with the given markdown content. */
@@ -77,6 +84,11 @@ export class MarkdownEditor {
           renderPreview: mermaidRenderPreview,
           previewOnlyByDefault: true,
           previewLabel: "Diagram",
+        },
+        [Crepe.Feature.ImageBlock]: {
+          // Relative image paths resolve against the open file, not the
+          // webview origin; see src/images.ts.
+          proxyDomURL: this.options.resolveImageSrc,
         },
         [Crepe.Feature.Toolbar]: {
           // Append an annotate action to the selection bubble: same flow as

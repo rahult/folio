@@ -42,8 +42,9 @@ export class DocumentState {
     this.isDirty = false;
   }
 
-  /** Update the associated path (used after "Save As"). */
-  setPath(path: string): void {
+  /** Update the associated path (after "Save As", or ahead of a load so
+   *  path-relative rendering sees the file being opened). */
+  setPath(path: string | null): void {
     this.path = path;
   }
 
