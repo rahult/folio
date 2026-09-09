@@ -12,6 +12,7 @@ import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
 import { buildHtmlDocument, htmlExportTarget } from "./export";
 import { resolveImageSrc } from "./images";
+import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
 import { classifyLink } from "./links";
 import { normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
@@ -295,16 +296,31 @@ async function newFile(): Promise<void> {
 let sourceMode = false;
 
 async function enterSourceMode(): Promise<void> {
-  sourceEditor.value = editor.getMarkdown();
+  // Carry the caret across: the anchor is read before the editor is hidden.
+  const anchor = editor.caretAnchor();
+  const markdown = editor.getMarkdown();
+  sourceEditor.value = markdown;
   sourceMode = true;
   document.body.classList.add("source-mode");
   editorRoot.hidden = true;
   sourceEditor.hidden = false;
   sourceEditor.focus();
+  if (anchor) placeSourceCaret(offsetFromAnchor(markdown, anchor));
+}
+
+/** Put the textarea caret at `offset` and scroll it ~40% down the view —
+ *  setSelectionRange alone does not scroll in WebKit. */
+function placeSourceCaret(offset: number): void {
+  sourceEditor.setSelectionRange(offset, offset);
+  const line = sourceEditor.value.slice(0, offset).split("\n").length - 1;
+  const lineHeight = parseFloat(getComputedStyle(sourceEditor).lineHeight) || 24;
+  const paddingTop = parseFloat(getComputedStyle(sourceEditor).paddingTop) || 0;
+  sourceEditor.scrollTop = Math.max(0, paddingTop + line * lineHeight - sourceEditor.clientHeight * 0.4);
 }
 
 async function exitSourceMode(): Promise<void> {
   const markdown = sourceEditor.value;
+  const anchor = anchorFromMarkdown(markdown, sourceEditor.selectionStart);
   sourceMode = false;
   document.body.classList.remove("source-mode");
   sourceEditor.hidden = true;
@@ -314,6 +330,7 @@ async function exitSourceMode(): Promise<void> {
   // must reflect the editor's serialized form, not the raw textarea text.
   doc.updateDirty(editor.getMarkdown());
   renderTitle();
+  editor.setCaretAnchor(anchor);
 }
 
 function toggleSourceMode(): Promise<void> {

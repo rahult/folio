@@ -29,6 +29,8 @@ import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from ".
 import { diffViewPlugin } from "./diffview";
 import { annotationPlugin } from "./annotview";
 import { mermaidRenderPreview } from "./mermaid";
+import { alnumCount, positionForAnchor, type CaretAnchor, type TextSegment } from "./caretmap";
+import { TextSelection } from "@milkdown/kit/prose/state";
 
 export interface MarkdownEditorOptions {
   /** Maps an image's Markdown src to the URL the <img> should display
@@ -143,6 +145,52 @@ export class MarkdownEditor {
     if (!this.crepe) return;
     this.crepe.editor.action((ctx) => {
       fn(ctx.get(editorViewCtx));
+    });
+  }
+
+  /** Where the caret is, in view-independent terms (see src/caretmap.ts);
+   *  null before create. */
+  caretAnchor(): CaretAnchor | null {
+    let anchor: CaretAnchor | null = null;
+    this.withView((view) => {
+      const { doc } = view.state;
+      const { $from } = view.state.selection;
+      if ($from.depth === 0) {
+        // Between top-level blocks: anchor to the start of the block after.
+        anchor = { block: Math.min($from.index(0), Math.max(0, doc.childCount - 1)), alnum: 0, wordStart: false };
+        return;
+      }
+      const block = $from.index(0);
+      const before = doc.textBetween($from.start(1), $from.pos, "\n");
+      const after = doc.textBetween($from.pos, $from.end(1), "\n");
+      anchor = {
+        block,
+        alnum: alnumCount(before),
+        wordStart: after.length > 0 && alnumCount([...after][0]) === 1,
+      };
+    });
+    return anchor;
+  }
+
+  /** Put the caret at an anchor (clamped to the document) and scroll to it. */
+  setCaretAnchor(anchor: CaretAnchor): void {
+    this.withView((view) => {
+      const { doc } = view.state;
+      if (doc.childCount === 0) return;
+      const block = Math.min(Math.max(0, anchor.block), doc.childCount - 1);
+      let before = 0;
+      for (let i = 0; i < block; i++) before += doc.child(i).nodeSize;
+      const node = doc.child(block);
+      const segments: TextSegment[] = [];
+      node.descendants((child, pos) => {
+        if (child.isText) segments.push({ pmFrom: before + 1 + pos, text: child.text ?? "" });
+        return true;
+      });
+      const pos = Math.min(positionForAnchor(segments, anchor, before + 1), doc.content.size);
+      view.dispatch(
+        view.state.tr.setSelection(TextSelection.near(doc.resolve(pos))).scrollIntoView(),
+      );
+      view.focus();
     });
   }
 
