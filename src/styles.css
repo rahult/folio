@@ -263,6 +263,12 @@ body.is-dirty #doc-title::before {
   min-height: 0;
 }
 
+/* Source mode swaps the row for the textarea; an empty row would otherwise
+   keep its share of the height and push the source view down. */
+body.source-mode #main-row {
+  display: none;
+}
+
 #editor {
   flex: 1 1 auto;
   overflow-y: auto;

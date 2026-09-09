@@ -107,6 +107,11 @@
 .folio-export img {
   max-width: 100%;
   height: auto;
+  vertical-align: middle;
+}
+
+/* an image standing alone in its paragraph is a figure; inline ones flow */
+.folio-export p > img:only-child {
   display: block;
   margin: 1.6em auto;
 }
