@@ -11,6 +11,10 @@ import { openUrl, openPath } from "@tauri-apps/plugin-opener";
 import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
 import { buildHtmlDocument, htmlExportTarget } from "./export";
+import exportCss from "./export.css?raw";
+import "./export.css";
+import { collectExportFonts, exportHooksFor } from "./exporthooks";
+import { renderExportHtml } from "./exportrender";
 import { resolveImageSrc } from "./images";
 import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
 import { classifyLink } from "./links";
@@ -358,25 +362,19 @@ function applyZoom(direction: ZoomDirection): void {
 
 // ——— export ———
 
-/** Serialize every readable stylesheet (the app bundle CSS in production,
- *  Vite's injected <style> tags in dev) for inlining into the export. */
-function collectCssText(): string {
-  const chunks: string[] = [];
-  for (const sheet of Array.from(document.styleSheets)) {
-    try {
-      chunks.push(Array.from(sheet.cssRules).map((rule) => rule.cssText).join("\n"));
-    } catch {
-      // Cross-origin stylesheets are unreadable; skip them.
-    }
-  }
-  return chunks.join("\n\n");
+const printRoot = document.querySelector<HTMLElement>("#print-root")!;
+
+/** The document rendered for export — from the Markdown, never the editor
+ *  DOM, so the result does not depend on scroll position or which code
+ *  blocks happen to be mounted. */
+function renderForExport(): Promise<string> {
+  return renderExportHtml(currentMarkdown(), exportHooksFor(doc.filePath));
 }
 
 async function exportHtmlFile(): Promise<void> {
-  // The rendered DOM is the export source, so leave source mode first.
-  if (sourceMode) await exitSourceMode();
   trackEvent("export_html");
-  const html = buildHtmlDocument(doc.fileName, editor.exportHtml(), collectCssText());
+  const [body, fonts] = await Promise.all([renderForExport(), collectExportFonts()]);
+  const html = buildHtmlDocument(doc.fileName, body, `${fonts}\n${exportCss}`);
   const selected = await save({
     defaultPath: htmlExportTarget(doc.filePath),
     filters: [{ name: "HTML", extensions: ["html"] }],
@@ -386,9 +384,10 @@ async function exportHtmlFile(): Promise<void> {
 }
 
 async function exportPdf(): Promise<void> {
-  if (sourceMode) await exitSourceMode();
   trackEvent("export_pdf");
-  // Native print panel (macOS: Save as PDF). Print CSS hides the chrome.
+  // The print root is the only thing print CSS shows; it holds the same
+  // rendering the HTML export gets. Native print panel: macOS → Save as PDF.
+  printRoot.innerHTML = await renderForExport();
   await invoke("print_document");
 }
 

@@ -29,7 +29,7 @@ describe("buildHtmlDocument", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("<title>notes.md</title>");
     expect(html).toContain("body { color: red; }");
-    expect(html).toContain('<main id="editor"><p>Hello</p></main>');
+    expect(html).toContain('<main class="folio-export"><p>Hello</p></main>');
   });
 
   it("escapes the title", () => {

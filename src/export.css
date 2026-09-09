@@ -1,0 +1,326 @@
+/* Folio export — a static page in the paper palette. Everything is scoped
+   under .folio-export so the same sheet styles the standalone HTML file
+   and the in-app print root without touching editor chrome. */
+
+.folio-export {
+  --paper: oklch(0.981 0.007 88);
+  --paper-sunken: oklch(0.961 0.009 88);
+  --ink: oklch(0.295 0.014 72);
+  --ink-soft: oklch(0.46 0.013 72);
+  --ink-faint: oklch(0.62 0.011 75);
+  --hairline: oklch(0.913 0.008 85);
+  --accent: oklch(0.47 0.105 33);
+  --font-ui: "Instrument Sans Variable", system-ui, sans-serif;
+  --font-prose: "Newsreader Variable", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, Menlo, monospace;
+
+  box-sizing: border-box;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 7vh, 4.5rem) clamp(1.25rem, 5vw, 3rem) 6rem;
+  color: var(--ink);
+  font-family: var(--font-prose);
+  font-size: 1.1875rem;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+
+.folio-export *,
+.folio-export *::before,
+.folio-export *::after {
+  box-sizing: inherit;
+}
+
+/* headings — editorial scale */
+.folio-export h1 {
+  font-size: clamp(1.9rem, 1.6rem + 1vw, 2.4rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 2.6em 0 0.55em;
+}
+
+.folio-export h2 {
+  font-size: 1.55rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  margin: 2.2em 0 0.5em;
+}
+
+.folio-export h3 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.3;
+  margin: 1.9em 0 0.45em;
+}
+
+.folio-export h4,
+.folio-export h5,
+.folio-export h6 {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 1.8em 0 0.4em;
+}
+
+.folio-export > :first-child {
+  margin-top: 0;
+}
+
+.folio-export p {
+  margin: 0 0 1.1em;
+}
+
+.folio-export a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--accent) 40%, transparent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.folio-export blockquote {
+  margin: 1.6em 0;
+  padding: 0.1em 0 0.1em 1.25em;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.folio-export blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.folio-export hr {
+  border: none;
+  width: 4rem;
+  border-top: 1px solid var(--ink-faint);
+  margin: 3rem auto;
+}
+
+.folio-export img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1.6em auto;
+}
+
+/* lists */
+.folio-export ul,
+.folio-export ol {
+  margin: 0 0 1.1em;
+  padding-left: 1.4em;
+}
+
+.folio-export li {
+  margin: 0.15em 0;
+}
+
+.folio-export li > p {
+  margin-bottom: 0.5em;
+}
+
+.folio-export li::marker {
+  color: var(--ink-faint);
+}
+
+.folio-export ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.2em;
+}
+
+.folio-export .task-list-item input[type="checkbox"] {
+  appearance: none;
+  width: 0.85em;
+  height: 0.85em;
+  margin: 0 0.55em 0 0;
+  vertical-align: -0.08em;
+  border: 1px solid var(--ink-faint);
+  border-radius: 3px;
+  background: var(--paper);
+}
+
+.folio-export .task-list-item input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 100%;
+}
+
+/* inline code */
+.folio-export :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  background: var(--paper-sunken);
+  padding: 0.12em 0.34em;
+  border-radius: 4px;
+}
+
+/* tables — chrome in quiet sans, editorial header */
+.folio-export table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  line-height: 1.5;
+  margin: 1.6em 0;
+}
+
+.folio-export th,
+.folio-export td {
+  padding: 0.55em 0.75em;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  vertical-align: top;
+}
+
+.folio-export th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom-color: var(--ink-faint);
+}
+
+.folio-export th[align="center"],
+.folio-export td[align="center"] {
+  text-align: center;
+}
+
+.folio-export th[align="right"],
+.folio-export td[align="right"] {
+  text-align: right;
+}
+
+/* code blocks — sunken paper, wrapped lines, the editor's token colours */
+.folio-export pre.code {
+  background: var(--paper-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  margin: 1.6em 0;
+  padding: 0.9em 1.1em;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.folio-export pre.code code {
+  font: inherit;
+  background: none;
+  padding: 0;
+}
+
+.folio-export .tok-keyword,
+.folio-export .tok-operatorKeyword,
+.folio-export .tok-controlKeyword,
+.folio-export .tok-definitionKeyword,
+.folio-export .tok-moduleKeyword {
+  color: oklch(0.5 0.16 300);
+}
+
+.folio-export .tok-string,
+.folio-export .tok-special {
+  color: oklch(0.52 0.12 150);
+}
+
+.folio-export .tok-comment,
+.folio-export .tok-lineComment,
+.folio-export .tok-blockComment,
+.folio-export .tok-docComment {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.folio-export .tok-number,
+.folio-export .tok-bool,
+.folio-export .tok-atom,
+.folio-export .tok-literal {
+  color: oklch(0.55 0.15 55);
+}
+
+.folio-export .tok-variableName,
+.folio-export .tok-propertyName,
+.folio-export .tok-attributeName {
+  color: var(--ink);
+}
+
+.folio-export .tok-definition,
+.folio-export .tok-function,
+.folio-export .tok-macroName,
+.folio-export .tok-className,
+.folio-export .tok-typeName,
+.folio-export .tok-namespace {
+  color: oklch(0.48 0.12 245);
+}
+
+.folio-export .tok-tagName,
+.folio-export .tok-heading {
+  color: var(--accent);
+}
+
+.folio-export .tok-punctuation,
+.folio-export .tok-bracket,
+.folio-export .tok-operator,
+.folio-export .tok-separator {
+  color: var(--ink-soft);
+}
+
+.folio-export .tok-invalid {
+  color: oklch(0.5 0.18 25);
+}
+
+/* mermaid diagrams */
+.folio-export figure.mermaid {
+  margin: 1.6em 0;
+  padding: 1.2em;
+  background: var(--paper-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.folio-export figure.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* print — the same sheet drives PDF export */
+@page {
+  margin: 18mm 16mm;
+}
+
+@media print {
+  .folio-export {
+    max-width: none;
+    padding: 0;
+    font-size: 11pt;
+  }
+
+  .folio-export pre.code,
+  .folio-export figure.mermaid,
+  .folio-export table,
+  .folio-export img,
+  .folio-export blockquote {
+    break-inside: avoid;
+  }
+
+  .folio-export h1,
+  .folio-export h2,
+  .folio-export h3 {
+    break-after: avoid;
+  }
+
+  .folio-export a {
+    color: inherit;
+    text-decoration: none;
+  }
+}

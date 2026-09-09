@@ -23,10 +23,9 @@ export function escapeHtml(text: string): string {
 }
 
 /**
- * Assemble a standalone HTML document around the rendered editor content.
- * `contentHtml` is the cleaned .milkdown DOM; `cssText` is the app's
- * serialized CSS. Font files are app assets and do not travel with the
- * export, so @font-face rules degrade to system fonts outside the app.
+ * Assemble a standalone HTML document around rendered content.
+ * `contentHtml` is the body produced by `renderExportHtml`; `cssText` is
+ * the export stylesheet (plus embedded font faces when available).
  */
 export function buildHtmlDocument(
   title: string,
@@ -43,15 +42,11 @@ export function buildHtmlDocument(
 ${cssText}
     </style>
     <style>
-      /* export-only page frame: the app chrome does not exist here */
-      body { height: auto; overflow: visible; }
-      #editor { overflow: visible; }
-      #editor .milkdown { animation: none; }
-      #editor .milkdown .ProseMirror { padding-bottom: 3rem; }
+      body { margin: 0; background: oklch(0.981 0.007 88); }
     </style>
   </head>
   <body>
-    <main id="editor">${contentHtml}</main>
+    <main class="folio-export">${contentHtml}</main>
   </body>
 </html>
 `;

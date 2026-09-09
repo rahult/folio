@@ -194,33 +194,6 @@ export class MarkdownEditor {
     });
   }
 
-  /** The rendered document as clean HTML, for export: editing artifacts
-   *  (contenteditable, drag handles, tool buttons, trailing breaks,
-   *  placeholder widgets) removed. */
-  exportHtml(): string {
-    const live = this.root.querySelector(".milkdown");
-    if (!live) return "";
-    const clone = live.cloneNode(true) as HTMLElement;
-    clone.removeAttribute("contenteditable");
-    for (const el of clone.querySelectorAll("[contenteditable]")) {
-      el.removeAttribute("contenteditable");
-    }
-    // Editing chrome is only meaningful in the live editor (the app hides
-    // most of it via data-show="false"); an exported document must not
-    // carry it at all. `.tools` is the code block's always-visible toolbar
-    // (language picker, copy button).
-    for (const el of clone.querySelectorAll("[data-show], .tools")) {
-      el.remove();
-    }
-    for (const el of clone.querySelectorAll("[draggable]")) {
-      el.removeAttribute("draggable");
-    }
-    for (const el of clone.querySelectorAll(".ProseMirror-trailingBreak, .crepe-placeholder")) {
-      el.remove();
-    }
-    return clone.outerHTML;
-  }
-
   /** Replace the entire document content. */
   async setContent(markdown: string): Promise<void> {
     await this.create(markdown);

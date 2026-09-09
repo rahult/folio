@@ -1005,29 +1005,26 @@ body.focus-mode:not(.source-mode) #editor .milkdown .ProseMirror > *:not([data-f
   opacity: 0.3;
 }
 
-/* ——— print (PDF export via the native print panel) ——— */
+/* ——— print (PDF export via the native print panel) ———
+   Export → PDF renders the document into #print-root (styled by
+   src/export.css, injected by main.ts); print shows that and nothing else. */
+
+#print-root {
+  display: none;
+}
 
 @media print {
-  #toolbar,
-  #statusbar {
+  body > *:not(#print-root) {
     display: none !important;
   }
 
   body {
     height: auto;
     overflow: visible;
+    background: oklch(0.981 0.007 88);
   }
 
-  #editor {
-    overflow: visible;
-  }
-
-  #editor .milkdown {
-    max-width: 100%;
-    animation: none;
-  }
-
-  #editor .milkdown .ProseMirror {
-    padding: 0;
+  #print-root {
+    display: block;
   }
 }
