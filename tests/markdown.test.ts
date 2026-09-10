@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  countWords,
   ensureTrailingNewline,
   fileNameFromPath,
   isMarkdownPath,
@@ -67,5 +68,13 @@ describe("isMarkdownPath", () => {
   it("rejects other extensions", () => {
     expect(isMarkdownPath("a.txt")).toBe(false);
     expect(isMarkdownPath("a.mdx")).toBe(false);
+  });
+});
+
+describe("countWords", () => {
+  it("counts tokens with letters or digits and ignores bare syntax", () => {
+    expect(countWords("Hello, world! — 42 ** `x`")).toBe(4);
+    expect(countWords("")).toBe(0);
+    expect(countWords("* - #")).toBe(0);
   });
 });

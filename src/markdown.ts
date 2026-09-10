@@ -26,3 +26,9 @@ export function ensureTrailingNewline(markdown: string): string {
 export function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown|mdown|mkd)$/i.test(path);
 }
+
+/** Words in a Markdown text: whitespace-separated tokens that contain at
+ *  least one letter or digit, so punctuation and bare syntax don't count. */
+export function countWords(markdown: string): number {
+  return markdown.split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
+}

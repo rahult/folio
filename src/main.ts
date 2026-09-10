@@ -18,7 +18,7 @@ import { renderExportHtml } from "./exportrender";
 import { resolveImageSrc } from "./images";
 import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
 import { classifyLink } from "./links";
-import { normalizeMarkdown } from "./markdown";
+import { countWords, normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
 import { shouldScroll, typewriterScrollTop } from "./modes";
 import { NavigationHistory } from "./navhistory";
@@ -105,12 +105,6 @@ function displayPath(path: string | null): string {
   // Abbreviate the user's home directory for readability.
   const match = path.match(/^\/Users\/[^/]+/);
   return match ? `~${path.slice(match[0].length)}` : path;
-}
-
-function countWords(markdown: string): number {
-  return markdown
-    .split(/\s+/)
-    .filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
 }
 
 const editor = new MarkdownEditor(editorRoot, (markdown) => {
