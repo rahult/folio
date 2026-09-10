@@ -93,11 +93,15 @@ export interface LineRange {
  * splits, and whitespace differences don't matter. Null when absent.
  */
 export function locateQuote(sourceText: string, quote: string): LineRange | null {
-  const needle = quote.split(/\s+/).filter(Boolean);
+  const needle = quote.split(/\s+/).map(wordCore).filter(Boolean);
   if (needle.length === 0) return null;
   const words: { word: string; line: number }[] = [];
   sourceText.split("\n").forEach((line, i) => {
-    for (const match of line.matchAll(/\S+/g)) words.push({ word: match[0], line: i + 1 });
+    for (const match of line.matchAll(/\S+/g)) {
+      if (MARKDOWN_MARKER.test(match[0])) continue;
+      const core = wordCore(match[0]);
+      if (core) words.push({ word: core, line: i + 1 });
+    }
   });
   outer: for (let i = 0; i + needle.length <= words.length; i++) {
     for (let j = 0; j < needle.length; j++) {
@@ -106,6 +110,16 @@ export function locateQuote(sourceText: string, quote: string): LineRange | null
     return { startLine: words[i].line, endLine: words[i + needle.length - 1].line };
   }
   return null;
+}
+
+/** Block-level syntax that the rendered text never contains: list
+ *  bullets and numbers, heading hashes, quote bars, task checkboxes. */
+const MARKDOWN_MARKER = /^(?:[-*+>]|#{1,6}|\d+[.)]|\[[ xX]\])$/;
+
+/** A word stripped of surrounding punctuation (`**bold**,` → `bold`), so
+ *  inline marks and sentence punctuation don't break the match. */
+function wordCore(word: string): string {
+  return word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 }
 
 /** "L12 " or "L12–14 " for a heading, or "" when unknown. */

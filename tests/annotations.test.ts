@@ -93,6 +93,14 @@ describe("locateQuote", () => {
     expect(locateQuote(text, "at once.   Watch the")).toEqual({ startLine: 3, endLine: 4 });
   });
 
+  it("sees through list markers, headings, and inline marks", () => {
+    const md = "## Steps\n\n* Asterisk bullet\n* Second **item**\n\n1. First\n2. `Second`\n\n- [x] Done task\n";
+    expect(locateQuote(md, "Asterisk bullet Second item")).toEqual({ startLine: 3, endLine: 4 });
+    expect(locateQuote(md, "First Second")).toEqual({ startLine: 6, endLine: 7 });
+    expect(locateQuote(md, "Done task")).toEqual({ startLine: 9, endLine: 9 });
+    expect(locateQuote(md, "Steps")).toEqual({ startLine: 1, endLine: 1 });
+  });
+
   it("returns null when the words are not there", () => {
     expect(locateQuote(text, "canary rollout")).toBeNull();
     expect(locateQuote(text, "")).toBeNull();
