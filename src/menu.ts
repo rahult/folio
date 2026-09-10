@@ -20,6 +20,9 @@ export type MenuAction =
   | { kind: "toggle-typewriter-mode" }
   | { kind: "toggle-review-mode" }
   | { kind: "toggle-panel" }
+  | { kind: "close-tab" }
+  | { kind: "next-tab" }
+  | { kind: "prev-tab" }
   | { kind: "toggle-float" }
   | { kind: "toggle-watch" }
   | { kind: "toggle-telemetry" }
@@ -94,6 +97,12 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-review-mode" };
     case "view.panel":
       return { kind: "toggle-panel" };
+    case "file.close":
+      return { kind: "close-tab" };
+    case "view.next-tab":
+      return { kind: "next-tab" };
+    case "view.prev-tab":
+      return { kind: "prev-tab" };
     case "view.float-on-top":
       return { kind: "toggle-float" };
     case "view.telemetry":

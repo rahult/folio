@@ -105,6 +105,9 @@ describe("actionForMenuId", () => {
     });
     expect(actionForMenuId("view.review-mode")).toEqual({ kind: "toggle-review-mode" });
     expect(actionForMenuId("view.panel")).toEqual({ kind: "toggle-panel" });
+    expect(actionForMenuId("file.close")).toEqual({ kind: "close-tab" });
+    expect(actionForMenuId("view.next-tab")).toEqual({ kind: "next-tab" });
+    expect(actionForMenuId("view.prev-tab")).toEqual({ kind: "prev-tab" });
     expect(actionForMenuId("view.theme-manuscript")).toEqual({ kind: "set-theme", theme: "manuscript" });
     expect(actionForMenuId("view.theme-slate")).toEqual({ kind: "set-theme", theme: "slate" });
     expect(actionForMenuId("view.float-on-top")).toEqual({ kind: "toggle-float" });

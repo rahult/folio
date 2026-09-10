@@ -1071,7 +1071,11 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             None,
         )?);
     }
-    let file_menu = file_builder.separator().close_window().build()?;
+    // ⌘W is ours: it closes the active tab, or the window with one tab left.
+    let file_menu = file_builder
+        .separator()
+        .item(&menu_item(app, "file.close", "Close Tab", Some("CmdOrCtrl+W"))?)
+        .build()?;
 
     // Predefined edit items dispatch through the native responder chain,
     // which is what makes undo/cut/copy/paste work inside WKWebView.
@@ -1233,6 +1237,9 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             Some("CmdOrCtrl+Shift+O"),
             false,
         )?)
+        .separator()
+        .item(&menu_item(app, "view.next-tab", "Next Tab", Some("Ctrl+Tab"))?)
+        .item(&menu_item(app, "view.prev-tab", "Previous Tab", Some("Ctrl+Shift+Tab"))?)
         .separator()
         .item(&check_item(
             app,

@@ -18,8 +18,13 @@ function fakeStorage(initial: Record<string, string> = {}): Storage {
 describe("loadSession / saveSession", () => {
   it("round-trips a full session", () => {
     const storage = fakeStorage();
-    saveSession({ path: "/notes/plan.md", pos: 42, scroll: 300 }, storage);
-    expect(loadSession(storage)).toEqual({ path: "/notes/plan.md", pos: 42, scroll: 300 });
+    saveSession({ path: "/notes/plan.md", pos: 42, scroll: 300, tabs: ["/a.md", "/notes/plan.md"] }, storage);
+    expect(loadSession(storage)).toEqual({
+      path: "/notes/plan.md",
+      pos: 42,
+      scroll: 300,
+      tabs: ["/a.md", "/notes/plan.md"],
+    });
   });
 
   it("returns null when nothing is stored or data is corrupt", () => {
@@ -30,7 +35,12 @@ describe("loadSession / saveSession", () => {
 
   it("sanitizes missing and negative fields", () => {
     const storage = fakeStorage({ "folio-session": '{"pos":-5,"scroll":-1}' });
-    expect(loadSession(storage)).toEqual({ path: null, pos: 0, scroll: 0 });
+    expect(loadSession(storage)).toEqual({ path: null, pos: 0, scroll: 0, tabs: [] });
+  });
+
+  it("derives the tab list from a pre-tabs session", () => {
+    const storage = fakeStorage({ "folio-session": '{"path":"/p.md","pos":1,"scroll":2}' });
+    expect(loadSession(storage)?.tabs).toEqual(["/p.md"]);
   });
 
   it("treats a non-string path as untitled", () => {

@@ -41,6 +41,7 @@ import { shouldScroll, typewriterScrollTop } from "./modes";
 import { NavigationHistory } from "./navhistory";
 import { addRecent, loadRecent, saveRecent } from "./recent";
 import { loadSession, saveSession } from "./session";
+import { TabList, type Tab, type TabSnapshot } from "./tabs";
 import { renderedText, showReloadDiff, docSegments } from "./diffview";
 import { findQuoteRange } from "./quotematch";
 import {
@@ -110,6 +111,7 @@ const telemetryOverlay = document.querySelector<HTMLDivElement>("#telemetry-over
 const telemetryAcceptBtn = document.querySelector<HTMLButtonElement>("#telemetry-accept-btn")!;
 const telemetryDeclineBtn = document.querySelector<HTMLButtonElement>("#telemetry-decline-btn")!;
 const editorRoot = document.querySelector<HTMLElement>("#editor")!;
+const tabStrip = document.querySelector<HTMLElement>("#tabs")!;
 const sourceEditor = document.querySelector<HTMLTextAreaElement>("#source-editor")!;
 const liveBadge = document.querySelector<HTMLSpanElement>("#live-badge")!;
 
@@ -142,6 +144,8 @@ function renderTitle(): void {
   document.body.classList.toggle("is-dirty", doc.dirty);
   document.title = doc.displayTitle;
   pathEl.textContent = displayPath(doc.filePath);
+  const active = tabStrip.querySelector<HTMLElement>('.tab[aria-current="true"]');
+  active?.classList.toggle("dirty", doc.dirty);
 }
 
 /** The markdown the user is currently editing, from whichever view is live. */
@@ -150,14 +154,19 @@ function currentMarkdown(): string {
 }
 
 /** Put content into whichever view is live and reset the dirty baseline. */
-async function loadContent(content: string, path: string | null): Promise<void> {
+async function loadContent(
+  content: string,
+  path: string | null,
+  baseline?: string,
+): Promise<void> {
   // A new document starts in edit mode; a waiting request re-enters review
   // mode once the request state is refreshed for it.
   exitReviewMode(false);
   jumpIndex = -1;
   if (sourceMode) {
     sourceEditor.value = content;
-    doc.load(path, content);
+    doc.load(path, baseline ?? content);
+    doc.updateDirty(content);
   } else {
     // Image nodes resolve relative srcs against the document's folder as
     // they render, so the path must be in place before the editor builds.
@@ -165,8 +174,10 @@ async function loadContent(content: string, path: string | null): Promise<void> 
     await editor.setContent(content);
     // The dirty baseline is the editor's serialized markdown, not the raw
     // file text: Milkdown normalizes formatting (list markers, spacing), so
-    // a file would otherwise count as modified the moment it is opened.
-    doc.load(path, editor.getMarkdown());
+    // a file would otherwise count as modified the moment it is opened. A
+    // tab coming back with unsaved edits brings its own baseline.
+    doc.load(path, baseline ?? editor.getMarkdown());
+    if (baseline !== undefined) doc.updateDirty(editor.getMarkdown());
   }
   renderStatus(content);
   refreshOutline();
@@ -179,8 +190,16 @@ async function loadContent(content: string, path: string | null): Promise<void> 
 async function loadFromPath(path: string, options?: { visit?: boolean }): Promise<void> {
   const raw = await invoke<string>("read_text_file", { path });
   const content = normalizeMarkdown(raw);
+  // The document lands in its tab: an existing one for the path, the clean
+  // untitled tab when that is what is showing, or a new tab beside the
+  // active one. Whatever was showing keeps its edits in its own tab.
+  if (tabs.active.path !== path) {
+    tabs.remember(snapshotEditor());
+    tabs.open(path);
+  }
   diskContent = content;
   await loadContent(content, path);
+  renderTabs();
   recordRecent(path);
   saveSessionNow();
   void loadAnnotationsForOpenFile();
@@ -190,19 +209,6 @@ async function loadFromPath(path: string, options?: { visit?: boolean }): Promis
     renderNavButtons();
   }
   syncWatch();
-}
-
-/** Run `next` after confirming when the current document has unsaved
- *  changes; a fresh/untouched document proceeds without prompting. */
-async function guardDirty(next: () => Promise<void>): Promise<void> {
-  if (doc.dirty) {
-    const discard = await confirm(
-      "You have unsaved changes. Discard them and open the other file?",
-      { title: "Open File", kind: "warning", okLabel: "Discard", cancelLabel: "Cancel" },
-    );
-    if (!discard) return;
-  }
-  await next();
 }
 
 async function openFile(): Promise<void> {
@@ -290,6 +296,8 @@ async function saveFile(saveAs = false): Promise<void> {
   doc.setPath(path);
   doc.markSaved(content);
   diskContent = normalizeMarkdown(content);
+  tabs.setPath(tabs.active.id, path);
+  renderTabs();
   recordRecent(path);
   saveSessionNow();
   void archiveCurrentRevision();
@@ -298,15 +306,14 @@ async function saveFile(saveAs = false): Promise<void> {
 }
 
 async function newFile(): Promise<void> {
-  if (doc.dirty) {
-    const discard = await confirm(
-      "You have unsaved changes. Discard them and start a new document?",
-      { title: "New Document", kind: "warning", okLabel: "Discard", cancelLabel: "Cancel" },
-    );
-    if (!discard) return;
+  // A fresh tab; the current document keeps its edits where they are.
+  if (tabs.active.path !== null || doc.dirty) {
+    tabs.remember(snapshotEditor());
+    tabs.addUntitled();
   }
   diskContent = null;
   await loadContent("", null);
+  renderTabs();
   annotations = [];
   documentEditedDuringReview = false;
   reviewBarError = null;
@@ -780,15 +787,16 @@ let sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function saveSessionNow(): void {
   if (!isPrimaryWindow) return;
   const path = doc.filePath;
+  const openPaths = tabs.all.map((t) => t.path).filter((p): p is string => p !== null);
   if (path === null) {
-    saveSession({ path: null, pos: 0, scroll: 0 });
+    saveSession({ path: null, pos: 0, scroll: 0, tabs: openPaths });
     return;
   }
   let pos = 0;
   editor.withView((view) => {
     pos = view.state.selection.from;
   });
-  saveSession({ path, pos, scroll: editorRoot.scrollTop });
+  saveSession({ path, pos, scroll: editorRoot.scrollTop, tabs: openPaths });
 }
 
 function scheduleSessionSave(): void {
@@ -801,10 +809,20 @@ function scheduleSessionSave(): void {
 async function restoreSession(): Promise<void> {
   const session = loadSession();
   if (!session?.path) return;
+  // Reopen every tab, the active one last so it ends up showing; a tab
+  // whose file has gone is skipped.
+  for (const path of session.tabs) {
+    if (path === session.path) continue;
+    try {
+      await loadFromPath(path, { visit: false });
+    } catch {
+      // gone since last time
+    }
+  }
   try {
     await loadFromPath(session.path);
   } catch {
-    saveSession({ path: null, pos: 0, scroll: 0 });
+    saveSession({ path: null, pos: 0, scroll: 0, tabs: [] });
     return;
   }
   requestAnimationFrame(() => {
@@ -841,7 +859,7 @@ async function followLink(href: string): Promise<void> {
   switch (target.kind) {
     case "markdown":
       try {
-        await guardDirty(() => loadFromPath(target.path));
+        await loadFromPath(target.path);
       } catch {
         await message(`Couldn't open ${target.path}`, { title: "Open Link", kind: "error" });
       }
@@ -861,21 +879,17 @@ async function followLink(href: string): Promise<void> {
 async function navigateBack(): Promise<void> {
   const path = nav.peekBack();
   if (!path) return;
-  await guardDirty(async () => {
-    nav.goBack();
-    await loadFromPath(path, { visit: false });
-    renderNavButtons();
-  });
+  nav.goBack();
+  await loadFromPath(path, { visit: false });
+  renderNavButtons();
 }
 
 async function navigateForward(): Promise<void> {
   const path = nav.peekForward();
   if (!path) return;
-  await guardDirty(async () => {
-    nav.goForward();
-    await loadFromPath(path, { visit: false });
-    renderNavButtons();
-  });
+  nav.goForward();
+  await loadFromPath(path, { visit: false });
+  renderNavButtons();
 }
 
 // ⌘-click follows links; capture phase so ProseMirror's own handlers
@@ -1525,7 +1539,7 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return;
     case "open-recent": {
       const path = recentFiles[action.index];
-      if (path) await guardDirty(() => loadFromPath(path));
+      if (path) await loadFromPath(path);
       return;
     }
     case "open-revision":
@@ -1543,6 +1557,12 @@ async function runMenuAction(action: MenuAction): Promise<void> {
     case "toggle-panel":
       togglePanel();
       return;
+    case "close-tab":
+      return closeActiveTab();
+    case "next-tab":
+      return switchTab(1);
+    case "prev-tab":
+      return switchTab(-1);
     case "export-feedback":
       return exportReviewFeedback();
     case "approve-review":
@@ -1573,12 +1593,169 @@ void listen<string>("menu", (event) => {
 });
 
 // Files opened via Finder while the app is running arrive as events; each
-// one replaces the current document (after a dirty check).
+// one opens in its own tab.
 void listen<string>("file-open", (event) => {
-  void guardDirty(() => loadFromPath(event.payload));
+  void loadFromPath(event.payload);
 });
 
 // ——— toolbar + fallback shortcuts (dev in browser has no native menu) ———
+
+// ——— tabs ———
+//
+// One editor, many documents: the active tab lives in the editor; every
+// other tab keeps a snapshot (content, dirty baseline, caret, scroll) and
+// is restored by reloading it. A clean inactive tab is re-read from disk
+// on return so it can never show stale text.
+
+const tabs = new TabList();
+
+function snapshotEditor(): TabSnapshot {
+  return {
+    content: currentMarkdown(),
+    baseline: doc.baseline,
+    dirty: doc.dirty,
+    scroll: sourceMode ? sourceEditor.scrollTop : editorRoot.scrollTop,
+    anchor: sourceMode ? anchorFromMarkdown(sourceEditor.value, sourceEditor.selectionStart) : editor.caretAnchor(),
+  };
+}
+
+/** Bring a tab into the editor. */
+async function showTab(tab: Tab): Promise<void> {
+  const snap = tab.snapshot;
+  tab.snapshot = null;
+  if (tab.path !== null && !(snap?.dirty ?? false)) {
+    // Clean: the disk is the truth.
+    try {
+      await loadFromPath(tab.path, { visit: false });
+    } catch {
+      await loadContent(snap?.content ?? "", tab.path);
+    }
+  } else {
+    diskContent = tab.path === null ? null : diskContent;
+    await loadContent(snap?.content ?? "", tab.path, snap?.baseline);
+    annotations = [];
+    void loadAnnotationsForOpenFile();
+    void refreshReviewRequest();
+    syncWatch();
+  }
+  if (snap) {
+    if (sourceMode) {
+      sourceEditor.scrollTop = snap.scroll;
+      if (snap.anchor) placeSourceCaret(offsetFromAnchor(sourceEditor.value, snap.anchor));
+    } else {
+      if (snap.anchor) editor.setCaretAnchor(snap.anchor);
+      editorRoot.scrollTop = snap.scroll;
+    }
+  }
+  renderTabs();
+  saveSessionNow();
+}
+
+async function activateTab(id: number): Promise<void> {
+  if (id === tabs.active.id) return;
+  tabs.remember(snapshotEditor());
+  if (!tabs.activate(id)) return;
+  await showTab(tabs.active);
+}
+
+async function switchTab(delta: 1 | -1): Promise<void> {
+  if (tabs.all.length < 2) return;
+  tabs.remember(snap0);
+  tabs.step(delta);
+  await showTab(tabs.active);
+}
+
+/** ⌘W: close the tab, asking first when it has unsaved edits; with one
+ *  tab left, close the window instead. */
+async function closeActiveTab(): Promise<void> {
+  if (tabs.all.length === 1) {
+    if (doc.dirty) {
+      const discard = await confirm("You have unsaved changes. Close the window anyway?", {
+        title: "Close Window",
+        kind: "warning",
+        okLabel: "Discard",
+        cancelLabel: "Cancel",
+      });
+      if (!discard) return;
+    }
+    await getCurrentWindow().close();
+    return;
+  }
+  await closeTab(tabs.active.id);
+}
+
+async function closeTab(id: number): Promise<void> {
+  const tab = tabs.all.find((t) => t.id === id);
+  if (!tab) return;
+  const dirty = tab.id === tabs.active.id ? doc.dirty : (tab.snapshot?.dirty ?? false);
+  if (dirty) {
+    const discard = await confirm(`Discard unsaved changes to ${tab.title}?`, {
+      title: "Close Tab",
+      kind: "warning",
+      okLabel: "Discard",
+      cancelLabel: "Cancel",
+    });
+    if (!discard) return;
+  }
+  const wasActive = tab.id === tabs.active.id;
+  if (!tabs.close(id)) return;
+  if (wasActive) await showTab(tabs.active);
+  else {
+    renderTabs();
+    saveSessionNow();
+  }
+}
+
+function renderTabs(): void {
+  const list = tabs.all;
+  tabStrip.hidden = list.length < 2;
+  tabStrip.replaceChildren(
+    ...list.map((tab) => {
+      const el = document.createElement("div");
+      el.className = "tab";
+      el.setAttribute("role", "tab");
+      const active = tab.id === tabs.active.id;
+      if (active) el.setAttribute("aria-current", "true");
+      const dirty = active ? doc.dirty : (tab.snapshot?.dirty ?? false);
+      el.classList.toggle("dirty", dirty);
+      el.title = tab.path ?? "Untitled";
+      const title = document.createElement("span");
+      title.className = "tab-title";
+      title.textContent = tab.title;
+      const close = document.createElement("button");
+      close.className = "tab-close";
+      close.type = "button";
+      close.title = "Close tab";
+      close.setAttribute("aria-label", `Close ${tab.title}`);
+      close.innerHTML =
+        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      close.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void closeTab(tab.id);
+      });
+      el.addEventListener("click", () => void activateTab(tab.id));
+      el.addEventListener("auxclick", (e) => {
+        if (e.button === 1) void closeTab(tab.id);
+      });
+      el.append(title, close);
+      return el;
+    }),
+  );
+}
+
+window.addEventListener("keydown", (e) => {
+  // ⌘⇧] / ⌘⇧[ and ⌃Tab / ⌃⇧Tab cycle tabs (the menu carries ⌘W).
+  if (e.metaKey && e.shiftKey && (e.key === "]" || e.key === "}")) {
+    e.preventDefault();
+    void switchTab(1);
+  } else if (e.metaKey && e.shiftKey && (e.key === "[" || e.key === "{")) {
+    e.preventDefault();
+    void switchTab(-1);
+  } else if (e.ctrlKey && e.key === "Tab") {
+    e.preventDefault();
+    void switchTab(e.shiftKey ? -1 : 1);
+  }
+});
 
 // ——— typing hush ———
 //

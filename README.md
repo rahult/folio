@@ -157,6 +157,10 @@ their default applications.
   brown ink, for long reading), Newsprint (high-contrast near-white),
   Night (warm dark), Slate (cool blue-grey dark). Instant switching,
   persisted across launches, respected by Source Mode
+- **Tabs** — several documents in one window. Open, Open Recent, Finder,
+  and links land in tabs; a tab keeps its unsaved edits, caret, and scroll
+  while you work elsewhere. ⌘W closes the tab (the window with one left),
+  ⌘⇧] / ⌘⇧[ or ⌃Tab switch, and the tab set comes back on relaunch
 - **Quiet chrome** — the title strip and status bar fade while you type
   and return when the mouse moves; the window has no separate title bar
 

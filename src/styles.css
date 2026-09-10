@@ -327,6 +327,97 @@ body.is-dirty #doc-title::before {
   color: var(--ink-faint);
 }
 
+/* ——— tabs: documents open in this window (hidden with one) ——— */
+
+#tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 8px 0;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper-sunken);
+  flex: 0 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#tabs::-webkit-scrollbar {
+  display: none;
+}
+
+#tabs[hidden] {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 14rem;
+  min-width: 0;
+  padding: 5px 8px 6px 12px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 7px 7px 0 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-faint);
+  background: transparent;
+  cursor: default;
+  position: relative;
+  top: 1px;
+}
+
+.tab:hover {
+  color: var(--ink-soft);
+}
+
+.tab[aria-current="true"] {
+  color: var(--ink);
+  background: var(--paper);
+  border-color: var(--hairline);
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab.dirty .tab-title::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 7px;
+  vertical-align: 1px;
+}
+
+.tab-close {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  padding: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tab:hover .tab-close,
+.tab[aria-current="true"] .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  color: var(--ink);
+  background: var(--hairline);
+}
+
 /* ——— editor canvas ——— */
 
 #main-row {

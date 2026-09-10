@@ -7,12 +7,14 @@
 const SESSION_KEY = "folio-session";
 
 export interface SessionState {
-  /** Absolute path of the document, or null for untitled (nothing to restore). */
+  /** Absolute path of the active document, or null for untitled. */
   path: string | null;
   /** ProseMirror selection anchor. */
   pos: number;
   /** Editor scroll offset in pixels. */
   scroll: number;
+  /** Every open tab's path, in order (untitled tabs are not kept). */
+  tabs: string[];
 }
 
 /** Read the persisted session (null on missing/corrupt data). */
@@ -22,11 +24,18 @@ export function loadSession(storage: Storage = localStorage): SessionState | nul
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
-    const { path, pos, scroll } = parsed as Record<string, unknown>;
+    const { path, pos, scroll, tabs } = parsed as Record<string, unknown>;
+    const safePath = typeof path === "string" ? path : null;
+    const safeTabs = Array.isArray(tabs)
+      ? tabs.filter((t): t is string => typeof t === "string")
+      : safePath
+        ? [safePath]
+        : [];
     return {
-      path: typeof path === "string" ? path : null,
+      path: safePath,
       pos: typeof pos === "number" && pos >= 0 ? pos : 0,
       scroll: typeof scroll === "number" && scroll >= 0 ? scroll : 0,
+      tabs: safeTabs,
     };
   } catch {
     return null;

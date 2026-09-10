@@ -24,6 +24,11 @@ export class DocumentState {
     return this.isDirty;
   }
 
+  /** The last saved serialization — what `dirty` compares against. */
+  get baseline(): string {
+    return this.savedContent;
+  }
+
   /** Title shown in the toolbar: "• name.md" while there are unsaved changes. */
   get displayTitle(): string {
     return `${this.isDirty ? "• " : ""}${this.fileName}`;
