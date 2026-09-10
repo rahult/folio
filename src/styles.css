@@ -839,17 +839,83 @@ body.review-mode #editor .milkdown .ProseMirror {
 
 /* ——— annotations sidebar ——— */
 
-#annot-sidebar {
-  width: 248px;
+#panel {
+  width: 264px;
   flex: 0 0 auto;
   border-left: 1px solid var(--hairline);
   background: var(--paper);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#panel[hidden] {
+  display: none;
+}
+
+#panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 0 12px;
+  border-bottom: 1px solid var(--hairline);
+  flex: 0 0 auto;
+}
+
+#panel-tabs {
+  display: flex;
+  gap: 14px;
+}
+
+#panel-tabs button {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 0 8px;
+  cursor: pointer;
+}
+
+#panel-tabs button:hover {
+  color: var(--ink-soft);
+}
+
+#panel-tabs button[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+#panel-close {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 5px;
+  display: inline-flex;
+}
+
+#panel-close:hover {
+  color: var(--ink);
+  background: var(--paper-sunken);
+}
+
+#panel-outline,
+#panel-annotations {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
-#annot-sidebar[hidden] {
+#panel-outline[hidden],
+#panel-annotations[hidden] {
   display: none;
 }
 
@@ -860,36 +926,103 @@ body.review-mode #editor .milkdown .ProseMirror {
   color: var(--ink-faint);
 }
 
-#annot-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--hairline);
+/* takeaway — the reader's own summary, saved beside the document */
+#takeaway {
   flex: 0 0 auto;
-}
-
-#annot-sidebar-title {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-#annot-sidebar-close {
-  border: none;
-  background: transparent;
-  color: var(--ink-faint);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 5px;
-  display: inline-flex;
-}
-
-#annot-sidebar-close:hover {
+  margin: 10px 12px 6px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-raised);
   color: var(--ink);
+  caret-color: var(--accent);
+  resize: vertical;
+  outline: none;
+  min-height: 4.2em;
+}
+
+#takeaway:focus {
+  border-color: var(--accent);
+}
+
+#takeaway:disabled {
   background: var(--paper-sunken);
+  color: var(--ink-faint);
+}
+
+#takeaway.save-failed {
+  border-color: oklch(0.55 0.18 25);
+}
+
+#reading-stats {
+  flex: 0 0 auto;
+  padding: 2px 12px 8px;
+  font-size: 11px;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--hairline);
+  font-variant-numeric: tabular-nums;
+}
+
+/* outline — headings with their section's reading time */
+#outline-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0 12px;
+  outline: none;
+}
+
+#outline-list:focus-visible {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 40%, transparent);
+}
+
+#outline-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 12px 4px calc(12px + (var(--level, 1) - 1) * 12px);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+#outline-list li[data-level="1"] {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+#outline-list li:hover {
+  background: var(--paper-sunken);
+}
+
+#outline-list li[aria-current="true"] {
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--ink);
+}
+
+#outline-list .outline-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#outline-list .outline-min {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+#outline-list .outline-empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  cursor: default;
 }
 
 .annot-item {

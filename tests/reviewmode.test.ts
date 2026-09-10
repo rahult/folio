@@ -25,6 +25,7 @@ describe("reviewKeyAction", () => {
     expect(reviewKeyAction(k("p"), closed)).toEqual({ kind: "jump", delta: -1 });
     expect(reviewKeyAction(k("Enter"), closed)).toEqual({ kind: "send" });
     expect(reviewKeyAction(k("e"), closed)).toEqual({ kind: "edit" });
+    expect(reviewKeyAction(k("o"), closed)).toEqual({ kind: "outline" });
     expect(reviewKeyAction(k("?", { shiftKey: true }), closed)).toEqual({ kind: "hint" });
   });
 

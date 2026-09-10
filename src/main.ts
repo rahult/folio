@@ -17,6 +17,22 @@ import { collectExportFonts, exportHooksFor } from "./exporthooks";
 import { renderExportHtml } from "./exportrender";
 import { resolveImageSrc } from "./images";
 import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
+import { buildOutline, readingMinutes, sectionAtOffset, type OutlineEntry } from "./outline";
+import { decisionFilePath, readTakeaway, writeTakeaway } from "./decisionfile";
+import {
+  activeTab,
+  isPanelOpen,
+  markTakeawaySaveFailed,
+  onOutlinePick,
+  onPanelChange,
+  openPanel,
+  renderOutline,
+  renderStats,
+  setTakeaway,
+  setTakeawayEnabled,
+  takeawayField,
+  togglePanel,
+} from "./panel";
 import { classifyLink } from "./links";
 import { countWords, normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
@@ -90,9 +106,7 @@ const reviewBarHint = document.querySelector<HTMLElement>("#review-bar-hint")!;
 const reviewChangesBtn = document.querySelector<HTMLButtonElement>("#review-changes-btn")!;
 const reviewApproveBtn = document.querySelector<HTMLButtonElement>("#review-approve-btn")!;
 const annotationsBtn = document.querySelector<HTMLButtonElement>("#annotations-btn")!;
-const annotSidebar = document.querySelector<HTMLElement>("#annot-sidebar")!;
 const annotList = document.querySelector<HTMLDivElement>("#annot-list")!;
-const annotSidebarClose = document.querySelector<HTMLButtonElement>("#annot-sidebar-close")!;
 const telemetryOverlay = document.querySelector<HTMLDivElement>("#telemetry-overlay")!;
 const telemetryAcceptBtn = document.querySelector<HTMLButtonElement>("#telemetry-accept-btn")!;
 const telemetryDeclineBtn = document.querySelector<HTMLButtonElement>("#telemetry-decline-btn")!;
@@ -113,7 +127,8 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
   // deleting it, so `reviewRequest` stays non-null after a verdict — only
   // "waiting" means an agent is actually blocked on this edit.
   if (doc.dirty && reviewRequest?.state === "waiting") documentEditedDuringReview = true;
-  wordCountEl.textContent = `${countWords(markdown)} words`;
+  renderStatus(markdown);
+  scheduleOutlineRefresh();
   renderTitle();
 }, {
   // Consulted when each image node renders, so it must read the live path.
@@ -154,7 +169,9 @@ async function loadContent(content: string, path: string | null): Promise<void> 
     // a file would otherwise count as modified the moment it is opened.
     doc.load(path, editor.getMarkdown());
   }
-  wordCountEl.textContent = `${countWords(content)} words`;
+  renderStatus(content);
+  refreshOutline();
+  void loadTakeaway();
   renderTitle();
 }
 
@@ -360,7 +377,8 @@ sourceEditor.addEventListener("input", () => {
   // See the matching guard in the WYSIWYG change handler above: only
   // "waiting" means an agent is actually blocked on this edit.
   if (doc.dirty && reviewRequest?.state === "waiting") documentEditedDuringReview = true;
-  wordCountEl.textContent = `${countWords(sourceEditor.value)} words`;
+  renderStatus(sourceEditor.value);
+  scheduleOutlineRefresh();
   renderTitle();
 });
 
@@ -419,6 +437,7 @@ function syncMenuState(): void {
     focus: focusMode,
     typewriter: typewriterMode,
     review: reviewMode,
+    panel: isPanelOpen(),
     theme: appliedTheme,
     floating: floatMode,
     watch: watchEnabled,
@@ -515,7 +534,137 @@ editor.onSelectionUpdate(() => {
   if (sourceMode) return;
   if (focusMode) markFocusBlock();
   if (typewriterMode) scrollCaretToTypewriterLine();
+  trackCurrentSection();
 });
+
+// ——— reading panel: outline, stats, takeaway ———
+
+let outline: OutlineEntry[] = [];
+let currentSection = -1;
+let outlineTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Status bar: word count plus reading time (omitted under a minute). */
+function renderStatus(markdown: string): void {
+  const words = countWords(markdown);
+  const minutes = readingMinutes(words);
+  wordCountEl.textContent =
+    `${words.toLocaleString()} words` + (minutes > 0 ? ` · ${minutes} min` : "");
+  renderStats(words, minutes);
+}
+
+function refreshOutline(): void {
+  if (outlineTimer !== null) {
+    clearTimeout(outlineTimer);
+    outlineTimer = null;
+  }
+  outline = buildOutline(currentMarkdown());
+  trackCurrentSection();
+}
+
+/** Typing rebuilds the outline at most every 300 ms. */
+function scheduleOutlineRefresh(): void {
+  if (outlineTimer !== null) clearTimeout(outlineTimer);
+  outlineTimer = setTimeout(refreshOutline, 300);
+}
+
+/** The caret's Markdown offset, from whichever view is live. */
+function caretOffset(): number {
+  if (sourceMode) return sourceEditor.selectionStart;
+  const anchor = editor.caretAnchor();
+  return anchor ? offsetFromAnchor(currentMarkdown(), anchor) : 0;
+}
+
+function trackCurrentSection(): void {
+  currentSection = sectionAtOffset(outline, caretOffset());
+  if (isPanelOpen() && activeTab() === "outline") renderOutline(outline, currentSection);
+}
+
+/** Go to a heading: caret at its start, scrolled into view; in Review
+ *  Mode it also becomes the current block. */
+function goToHeading(entry: OutlineEntry): void {
+  if (sourceMode) {
+    sourceEditor.focus();
+    placeSourceCaret(entry.offset);
+    return;
+  }
+  editor.withView((view) => {
+    let seen = -1;
+    let target: number | null = null;
+    view.state.doc.descendants((node, pos) => {
+      if (target !== null) return false;
+      if (node.type.name === "heading" && ++seen === entry.index) target = pos;
+      return target === null;
+    });
+    if (target === null) return;
+    const pos = Math.min(target + 1, view.state.doc.content.size);
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos))).scrollIntoView(),
+    );
+    if (reviewMode) setCurrentByPos(view, pos);
+    else view.focus();
+  });
+}
+
+onOutlinePick(goToHeading);
+onPanelChange(() => {
+  if (isPanelOpen() && activeTab() === "outline") renderOutline(outline, currentSection);
+  syncMenuState();
+});
+sourceEditor.addEventListener("selectionchange", trackCurrentSection);
+document.addEventListener("selectionchange", () => {
+  if (sourceMode && document.activeElement === sourceEditor) trackCurrentSection();
+});
+
+/** The takeaway lives in `<doc>.decision.md`; the file's other sections
+ *  (added by later stages) travel through untouched. */
+let decisionFileText: string | null = null;
+let takeawayTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function loadTakeaway(): Promise<void> {
+  const path = doc.filePath;
+  markTakeawaySaveFailed(false);
+  if (!path) {
+    decisionFileText = null;
+    setTakeaway("");
+    setTakeawayEnabled(false, "Save the document to keep a takeaway");
+    return;
+  }
+  setTakeawayEnabled(true, "What I took from it, in my own words");
+  try {
+    decisionFileText = await invoke<string>("read_text_file", { path: decisionFilePath(path) });
+  } catch {
+    decisionFileText = null; // no companion file yet
+  }
+  // The document may have changed while the read was in flight.
+  if (doc.filePath !== path) return;
+  setTakeaway(decisionFileText ? readTakeaway(decisionFileText) : "");
+}
+
+async function saveTakeaway(): Promise<void> {
+  if (takeawayTimer !== null) {
+    clearTimeout(takeawayTimer);
+    takeawayTimer = null;
+  }
+  const path = doc.filePath;
+  if (!path) return;
+  const next = writeTakeaway(decisionFileText, doc.fileName, path, takeawayField.value);
+  if (next === decisionFileText) return;
+  try {
+    await invoke("write_text_file", { path: decisionFilePath(path), contents: next });
+    if (doc.filePath === path) {
+      decisionFileText = next;
+      markTakeawaySaveFailed(false);
+    }
+  } catch {
+    if (doc.filePath === path) markTakeawaySaveFailed(true);
+  }
+}
+
+takeawayField.addEventListener("input", () => {
+  if (takeawayTimer !== null) clearTimeout(takeawayTimer);
+  takeawayTimer = setTimeout(() => void saveTakeaway(), 800);
+});
+takeawayField.addEventListener("blur", () => void saveTakeaway());
 
 editorRoot.addEventListener("scroll", scheduleSessionSave);
 
@@ -759,7 +908,6 @@ async function loadAnnotationsForOpenFile(): Promise<void> {
   const path = doc.filePath;
   if (!path) {
     annotations = [];
-    sidebarOpen = false;
     renderAnnotationsNow();
     return;
   }
@@ -773,7 +921,7 @@ async function loadAnnotationsForOpenFile(): Promise<void> {
     localStorage.removeItem(`folio-annotations:${path}`);
   }
   // Auto-open only when the incoming file actually has annotations.
-  sidebarOpen = annotations.length > 0;
+  if (annotations.length > 0) openPanel("annotations");
   renderAnnotationsNow();
   documentEditedDuringReview = false;
   reviewBarError = null;
@@ -788,12 +936,6 @@ function renderAnnotationsNow(): void {
 
 // ——— annotations sidebar ———
 
-/** Sidebar visibility. Opens automatically when a file loads with
- *  annotations or a fresh one is added; the toolbar toggle and the close
- *  button flip it manually at any time — including when empty, so the
- *  toggle always gives visible feedback. */
-let sidebarOpen = false;
-
 const ANNOT_KIND_LABEL: Record<AnnotationKind, string> = {
   comment: "Comment",
   delete: "Delete",
@@ -801,10 +943,12 @@ const ANNOT_KIND_LABEL: Record<AnnotationKind, string> = {
   approve: "Looks good",
 };
 
+/** The Annotations tab of the reading panel. The toolbar button reflects
+ *  whether that tab is showing. */
 function renderSidebar(): void {
-  annotSidebar.hidden = !sidebarOpen;
-  annotationsBtn.classList.toggle("active", sidebarOpen);
-  annotationsBtn.setAttribute("aria-pressed", String(sidebarOpen));
+  const showing = isPanelOpen() && activeTab() === "annotations";
+  annotationsBtn.classList.toggle("active", showing);
+  annotationsBtn.setAttribute("aria-pressed", String(showing));
   if (annotations.length === 0) {
     const empty = document.createElement("div");
     empty.className = "annot-empty";
@@ -878,15 +1022,8 @@ async function deleteAnnotation(annotation: Annotation): Promise<void> {
   renderAnnotationsNow();
 }
 
-annotSidebarClose.addEventListener("click", () => {
-  sidebarOpen = false;
-  renderSidebar();
-});
-
-annotationsBtn.addEventListener("click", () => {
-  sidebarOpen = !sidebarOpen;
-  renderSidebar();
-});
+annotationsBtn.addEventListener("click", () => togglePanel("annotations"));
+onPanelChange(renderSidebar);
 
 /** The selection, or with no selection the innermost block under the
  *  caret (depth 0 would quote the whole document — never useful). */
@@ -928,7 +1065,7 @@ function addAnnotation(kind: AnnotationKind, quote: string, body: string): void 
   trackEvent("annotate");
   annotations = [...annotations, annotation];
   void invoke("add_annotation", { path: doc.filePath, annotation });
-  sidebarOpen = true; // a fresh annotation re-shows the panel
+  openPanel("annotations"); // a fresh annotation re-shows the panel
   renderAnnotationsNow();
 }
 
@@ -1156,8 +1293,7 @@ editorRoot.addEventListener("click", (e) => {
     ".annot-comment, .annot-delete, .annot-replace",
   );
   if (!mark || annotations.length === 0) return;
-  sidebarOpen = true;
-  renderSidebar();
+  openPanel("annotations");
   editor.withView((view) => {
     const pos = view.posAtCoords({ left: e.clientX, top: e.clientY });
     if (!pos) return;
@@ -1332,6 +1468,9 @@ function runReviewAction(action: ReviewAction): void {
       hintVisible = !hintVisible;
       renderReviewBar();
       return;
+    case "outline":
+      togglePanel("outline");
+      return;
   }
 }
 
@@ -1398,6 +1537,9 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return;
     case "toggle-review-mode":
       toggleReviewMode();
+      return;
+    case "toggle-panel":
+      togglePanel();
       return;
     case "export-feedback":
       return exportReviewFeedback();

@@ -104,6 +104,7 @@ describe("actionForMenuId", () => {
       kind: "toggle-typewriter-mode",
     });
     expect(actionForMenuId("view.review-mode")).toEqual({ kind: "toggle-review-mode" });
+    expect(actionForMenuId("view.panel")).toEqual({ kind: "toggle-panel" });
     expect(actionForMenuId("view.float-on-top")).toEqual({ kind: "toggle-float" });
     expect(actionForMenuId("view.theme-paper")).toEqual({
       kind: "set-theme",

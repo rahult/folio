@@ -797,10 +797,11 @@ fn config_dir(app: &AppHandle<Wry>) -> Result<std::path::PathBuf, String> {
 /// rebuild and re-set the whole menu.) Checkmarks are carried over — a
 /// rebuild must not reset view/watch state.
 fn rebuild_menu(app: &AppHandle<Wry>) {
-    const CHECK_IDS: [&str; 9] = [
+    const CHECK_IDS: [&str; 10] = [
         "view.focus-mode",
         "view.typewriter-mode",
         "view.review-mode",
+        "view.panel",
         "view.float-on-top",
         "file.watch",
         "view.telemetry",
@@ -882,6 +883,7 @@ fn sync_menu_state(
     focus: bool,
     typewriter: bool,
     review: bool,
+    panel: bool,
     theme: String,
     floating: bool,
     watch: bool,
@@ -892,6 +894,7 @@ fn sync_menu_state(
         ("view.focus-mode", focus),
         ("view.typewriter-mode", typewriter),
         ("view.review-mode", review),
+        ("view.panel", panel),
         ("view.float-on-top", floating),
         ("file.watch", watch),
         ("view.telemetry", telemetry),
@@ -1217,6 +1220,13 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             "view.review-mode",
             "Review Mode",
             Some("CmdOrCtrl+Shift+R"),
+            false,
+        )?)
+        .item(&check_item(
+            app,
+            "view.panel",
+            "Reading Panel",
+            Some("CmdOrCtrl+Shift+O"),
             false,
         )?)
         .separator()

@@ -133,16 +133,32 @@
     </header>
     <div id="main-row">
       <main id="editor"></main>
-      <aside id="annot-sidebar" hidden aria-label="Review annotations">
-        <header id="annot-sidebar-header">
-          <span id="annot-sidebar-title">Annotations</span>
-          <button id="annot-sidebar-close" type="button" title="Hide annotations" aria-label="Hide annotations">
+      <aside id="panel" hidden aria-label="Reading panel">
+        <header id="panel-header">
+          <div id="panel-tabs" role="tablist" aria-label="Panel">
+            <button id="panel-tab-outline" type="button" role="tab" aria-selected="true" aria-controls="panel-outline">Outline</button>
+            <button id="panel-tab-annotations" type="button" role="tab" aria-selected="false" aria-controls="panel-annotations">Annotations</button>
+          </div>
+          <button id="panel-close" type="button" title="Hide panel" aria-label="Hide panel">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
         </header>
-        <div id="annot-list"></div>
+        <section id="panel-outline" role="tabpanel" aria-labelledby="panel-tab-outline">
+          <textarea
+            id="takeaway"
+            rows="3"
+            spellcheck="true"
+            placeholder="What I took from it, in my own words"
+            aria-label="What I took from it"
+          ></textarea>
+          <div id="reading-stats" aria-live="polite"></div>
+          <ol id="outline-list" tabindex="0" aria-label="Document outline"></ol>
+        </section>
+        <section id="panel-annotations" role="tabpanel" aria-labelledby="panel-tab-annotations" hidden>
+          <div id="annot-list"></div>
+        </section>
       </aside>
     </div>
     <main id="print-root" class="folio-export" aria-hidden="true"></main>
