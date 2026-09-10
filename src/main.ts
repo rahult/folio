@@ -780,6 +780,7 @@ const ANNOT_KIND_LABEL: Record<AnnotationKind, string> = {
   comment: "Comment",
   delete: "Delete",
   replace: "Replace",
+  approve: "Looks good",
 };
 
 function renderSidebar(): void {

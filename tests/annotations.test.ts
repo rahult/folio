@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFeedback,
+  locateQuote,
   loadAnnotations,
   makeAnnotation,
   saveAnnotations,
@@ -78,5 +79,73 @@ describe("buildFeedback", () => {
     const longQuote = "line one\n\nline two   with   spacing";
     const feedback = buildFeedback("plan.md", [makeAnnotation("comment", longQuote, "hm")]);
     expect(feedback).toContain('"line one line two with spacing"');
+  });
+});
+
+describe("locateQuote", () => {
+  const text = "# Plan\n\nShip to all users at once.\nWatch the error rate.\n\nRoll back by flag.\n";
+
+  it("finds a single-line quote", () => {
+    expect(locateQuote(text, "Ship to all users at once.")).toEqual({ startLine: 3, endLine: 3 });
+  });
+
+  it("finds a quote spanning lines, tolerant of whitespace", () => {
+    expect(locateQuote(text, "at once.   Watch the")).toEqual({ startLine: 3, endLine: 4 });
+  });
+
+  it("returns null when the words are not there", () => {
+    expect(locateQuote(text, "canary rollout")).toBeNull();
+    expect(locateQuote(text, "")).toBeNull();
+  });
+});
+
+describe("buildFeedback with approve marks and line numbers", () => {
+  const text = "# Plan\n\nShip to all users at once.\n\nRoll back by flag.\n";
+
+  it("heads entries with line ranges when the source is given", () => {
+    const out = buildFeedback("plan.md", [makeAnnotation("delete", "Ship to all users at once.", "")], text);
+    expect(out).toContain('## 1. Delete L3 "Ship to all users at once."');
+  });
+
+  it("lists approve marks under Keep as is and keeps the verdict approved", () => {
+    const out = buildFeedback("plan.md", [makeAnnotation("approve", "Roll back by flag.", "")], text);
+    expect(out).toContain("Verdict: **approved**");
+    expect(out).toContain("## Keep as is");
+    expect(out).toContain('- L5 "Roll back by flag."');
+  });
+
+  it("puts change requests before Keep as is and counts only them", () => {
+    const out = buildFeedback(
+      "plan.md",
+      [
+        makeAnnotation("approve", "Roll back by flag.", ""),
+        makeAnnotation("comment", "Ship to all users at once.", "Too fast."),
+      ],
+      text,
+    );
+    expect(out).toContain("Verdict: **changes requested** (1 annotation)");
+    expect(out.indexOf("## 1. Comment")).toBeLessThan(out.indexOf("## Keep as is"));
+  });
+
+  it("omits line ranges without a source text or when the quote is not found", () => {
+    expect(buildFeedback("plan.md", [makeAnnotation("comment", "Ship to all", "x")])).toContain(
+      '## 1. Comment on "Ship to all"',
+    );
+    expect(buildFeedback("plan.md", [makeAnnotation("comment", "gone", "x")], text)).toContain(
+      '## 1. Comment on "gone"',
+    );
+  });
+
+  it("accepts approve when loading persisted annotations", () => {
+    const storage = new Map<string, string>();
+    const fake = {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => void storage.set(k, v),
+    } as unknown as Storage;
+    fake.setItem(
+      "folio-annotations:/p.md",
+      JSON.stringify([{ id: "a1", kind: "approve", quote: "q", body: "", createdAt: "t" }]),
+    );
+    expect(loadAnnotations("/p.md", fake)).toHaveLength(1);
   });
 });

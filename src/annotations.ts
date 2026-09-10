@@ -7,7 +7,12 @@
  * by pre-SQLite builds. Pure and DOM-free so the model is unit-testable.
  */
 
-export type AnnotationKind = "comment" | "delete" | "replace";
+export type AnnotationKind = "comment" | "delete" | "replace" | "approve";
+
+/** Kinds that ask the agent to change something; `approve` says keep it. */
+export function isChangeRequest(kind: AnnotationKind): boolean {
+  return kind !== "approve";
+}
 
 export interface Annotation {
   /** Stable id (position-independent so edits and reloads keep it). */
@@ -37,7 +42,7 @@ export function loadAnnotations(path: string, storage: Storage = localStorage): 
         typeof (a as Annotation).id === "string" &&
         typeof (a as Annotation).quote === "string" &&
         typeof (a as Annotation).body === "string" &&
-        ["comment", "delete", "replace"].includes((a as Annotation).kind),
+        ["comment", "delete", "replace", "approve"].includes((a as Annotation).kind),
     );
   } catch {
     return [];
@@ -77,30 +82,75 @@ function oneLine(text: string, max = 72): string {
   return collapsed.length > max ? `${collapsed.slice(0, max - 1)}…` : collapsed;
 }
 
+export interface LineRange {
+  startLine: number;
+  endLine: number;
+}
+
+/**
+ * Where a quote sits in the on-disk text, as 1-based inclusive lines.
+ * Matched on the word sequence (like `findQuoteRange`) so wrapping, mark
+ * splits, and whitespace differences don't matter. Null when absent.
+ */
+export function locateQuote(sourceText: string, quote: string): LineRange | null {
+  const needle = quote.split(/\s+/).filter(Boolean);
+  if (needle.length === 0) return null;
+  const words: { word: string; line: number }[] = [];
+  sourceText.split("\n").forEach((line, i) => {
+    for (const match of line.matchAll(/\S+/g)) words.push({ word: match[0], line: i + 1 });
+  });
+  outer: for (let i = 0; i + needle.length <= words.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (words[i + j].word !== needle[j]) continue outer;
+    }
+    return { startLine: words[i].line, endLine: words[i + needle.length - 1].line };
+  }
+  return null;
+}
+
+/** "L12 " or "L12–14 " for a heading, or "" when unknown. */
+function lineRef(sourceText: string | undefined, quote: string): string {
+  if (sourceText === undefined) return "";
+  const range = locateQuote(sourceText, quote);
+  if (!range) return "";
+  return range.startLine === range.endLine
+    ? `L${range.startLine} `
+    : `L${range.startLine}–${range.endLine} `;
+}
+
 /**
  * Serialize annotations into structured Markdown feedback an agent can act
- * on directly: a verdict, then one numbered instruction per annotation with
- * the quoted context. With no annotations the verdict is approval.
+ * on directly: a verdict, one numbered instruction per change request with
+ * the quoted context (and its line range when `sourceText`, the on-disk
+ * file, is given), then the passages marked as good under "Keep as is".
+ * With no change requests the verdict is approval.
  */
-export function buildFeedback(fileName: string, annotations: Annotation[]): string {
+export function buildFeedback(
+  fileName: string,
+  annotations: Annotation[],
+  sourceText?: string,
+): string {
+  const changes = annotations.filter((a) => isChangeRequest(a.kind));
+  const keeps = annotations.filter((a) => !isChangeRequest(a.kind));
   const lines: string[] = [`# Review feedback: ${fileName}`, ""];
-  if (annotations.length === 0) {
+  if (changes.length === 0) {
     lines.push("Verdict: **approved** — no changes requested.", "");
-    return lines.join("\n");
+  } else {
+    lines.push(
+      `Verdict: **changes requested** (${changes.length} annotation${changes.length === 1 ? "" : "s"})`,
+      "",
+    );
   }
-  lines.push(
-    `Verdict: **changes requested** (${annotations.length} annotation${annotations.length === 1 ? "" : "s"})`,
-    "",
-  );
-  annotations.forEach((a, i) => {
+  changes.forEach((a, i) => {
     const quote = oneLine(a.quote);
+    const at = lineRef(sourceText, a.quote);
     if (a.kind === "comment") {
-      lines.push(`## ${i + 1}. Comment on "${quote}"`, "", `> ${quote}`, "", a.body, "");
+      lines.push(`## ${i + 1}. Comment on ${at}"${quote}"`, "", `> ${quote}`, "", a.body, "");
     } else if (a.kind === "delete") {
-      lines.push(`## ${i + 1}. Delete "${quote}"`, "", `> ${quote}`, "", "Remove this section.", "");
+      lines.push(`## ${i + 1}. Delete ${at}"${quote}"`, "", `> ${quote}`, "", "Remove this section.", "");
     } else {
       lines.push(
-        `## ${i + 1}. Replace "${quote}"`,
+        `## ${i + 1}. Replace ${at}"${quote}"`,
         "",
         `> ${quote}`,
         "",
@@ -111,5 +161,10 @@ export function buildFeedback(fileName: string, annotations: Annotation[]): stri
       );
     }
   });
+  if (keeps.length > 0) {
+    lines.push("## Keep as is", "");
+    for (const a of keeps) lines.push(`- ${lineRef(sourceText, a.quote)}"${oneLine(a.quote)}"`);
+    lines.push("");
+  }
   return lines.join("\n");
 }
