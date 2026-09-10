@@ -8,7 +8,7 @@
 import { isMarkdownPath } from "./markdown";
 
 export type LinkTarget =
-  | { kind: "markdown"; path: string }
+  | { kind: "markdown"; path: string; anchor: string | null }
   | { kind: "external-url"; url: string }
   | { kind: "external-path"; path: string }
   | { kind: "anchor" }
@@ -53,6 +53,8 @@ export function classifyLink(href: string, currentFilePath: string | null): Link
   }
 
   const rawPath = href.toLowerCase().startsWith("file://") ? href.slice(7) : href;
+  const hashAt = rawPath.indexOf("#");
+  const anchor = hashAt === -1 ? null : rawPath.slice(hashAt + 1) || null;
   const clean = rawPath.split("#")[0].split("?")[0];
   if (!clean) return { kind: "anchor" };
   // Relative links from an untitled document cannot be resolved.
@@ -61,5 +63,5 @@ export function classifyLink(href: string, currentFilePath: string | null): Link
   }
 
   const path = resolveRelativePath(currentFilePath ?? "", clean);
-  return isMarkdownPath(path) ? { kind: "markdown", path } : { kind: "external-path", path };
+  return isMarkdownPath(path) ? { kind: "markdown", path, anchor } : { kind: "external-path", path };
 }

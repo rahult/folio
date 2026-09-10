@@ -672,6 +672,11 @@ fn project_root_for(path: &std::path::Path) -> std::path::PathBuf {
 }
 
 fn is_markdown_file(path: &std::path::Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+    // Folio's own companions beside a document are not documents.
+    if name.ends_with(".feedback.md") || name.ends_with(".decision.md") || name.ends_with(".analysis.md") {
+        return false;
+    }
     matches!(
         path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
         Some("md") | Some("markdown") | Some("mdown") | Some("mkd")
@@ -1939,6 +1944,7 @@ mod tests {
         fs::write(root.join("docs/plan.markdown"), "# p").unwrap();
         fs::write(root.join("docs/notes.txt"), "x").unwrap();
         fs::write(root.join("node_modules/pkg/README.md"), "# no").unwrap();
+        fs::write(root.join("docs/plan.markdown.feedback.md"), "# fb").unwrap();
         let found = project_root_for(&root.join("docs/plan.markdown"));
         assert_eq!(found, root);
         let mut files = Vec::new();

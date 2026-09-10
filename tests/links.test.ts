@@ -28,14 +28,16 @@ describe("classifyLink", () => {
     expect(classifyLink("other.md", BASE)).toEqual({
       kind: "markdown",
       path: "/docs/plans/other.md",
+      anchor: null,
     });
-    expect(classifyLink("./a.MD", BASE)).toEqual({ kind: "markdown", path: "/docs/plans/a.MD" });
+    expect(classifyLink("./a.MD", BASE)).toEqual({ kind: "markdown", path: "/docs/plans/a.MD", anchor: null });
   });
 
   it("strips anchors and query strings before resolving", () => {
     expect(classifyLink("other.md#section", BASE)).toEqual({
       kind: "markdown",
       path: "/docs/plans/other.md",
+      anchor: "section",
     });
   });
 
@@ -69,13 +71,14 @@ describe("classifyLink", () => {
     expect(classifyLink("file:///docs/a.md", BASE)).toEqual({
       kind: "markdown",
       path: "/docs/a.md",
+      anchor: null,
     });
   });
 
   it("rejects relative links from an untitled document", () => {
     expect(classifyLink("other.md", null)).toEqual({ kind: "invalid" });
     // …but absolute and external links still work
-    expect(classifyLink("/tmp/a.md", null)).toEqual({ kind: "markdown", path: "/tmp/a.md" });
+    expect(classifyLink("/tmp/a.md", null)).toEqual({ kind: "markdown", path: "/tmp/a.md", anchor: null });
     expect(classifyLink("https://x.dev", null)).toEqual({
       kind: "external-url",
       url: "https://x.dev",

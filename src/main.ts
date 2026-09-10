@@ -21,6 +21,7 @@ import { attribute, type Origin, type RevisionText } from "./provenance";
 import { clearProvenance, setProvenance } from "./provview";
 import { parseFeedback, requestOutcomes, revisionLabel } from "./ledger";
 import { rankFiles } from "./quickopen";
+import { headingForAnchor, parseWikilink, resolveWikilink } from "./wikilink";
 import { buildOutline, readingMinutes, sectionAtOffset, type OutlineEntry } from "./outline";
 import { decisionFilePath, readTakeaway, writeTakeaway } from "./decisionfile";
 import {
@@ -137,6 +138,7 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
   scheduleOutlineRefresh();
   scheduleAuthorshipRefresh();
   renderTitle();
+  if (!sourceMode) void updateWikiComplete();
 }, {
   // Consulted when each image node renders, so it must read the live path.
   resolveImageSrc: (src) => resolveImageSrc(src, doc.filePath, convertFileSrc),
@@ -548,6 +550,7 @@ editor.onSelectionUpdate(() => {
   if (focusMode) markFocusBlock();
   if (typewriterMode) scrollCaretToTypewriterLine();
   trackCurrentSection();
+  if (!wikiComplete.hidden && !wikiPrefix()) closeWikiComplete();
 });
 
 // ——— reading panel: outline, stats, takeaway ———
@@ -867,6 +870,7 @@ async function followLink(href: string): Promise<void> {
     case "markdown":
       try {
         await loadFromPath(target.path);
+        if (target.anchor) jumpToAnchor(target.anchor);
       } catch {
         await message(`Couldn't open ${target.path}`, { title: "Open Link", kind: "error" });
       }
@@ -899,17 +903,175 @@ async function navigateForward(): Promise<void> {
   renderNavButtons();
 }
 
+/** Scroll to the heading an `#anchor` names, once the outline is built. */
+function jumpToAnchor(anchor: string): void {
+  refreshOutline();
+  const index = headingForAnchor(outline, anchor);
+  if (index === -1) return;
+  const entry = outline[index];
+  if (entry) goToHeading(entry);
+}
+
+/** `[[target#heading]]` → the project file it names, opened in a tab. */
+async function followWikilink(raw: string): Promise<void> {
+  const { target, anchor } = parseWikilink(raw);
+  if (!target) {
+    if (anchor) jumpToAnchor(anchor);
+    return;
+  }
+  const base = doc.filePath ?? recentFiles[0];
+  if (!base) return;
+  const project = await invoke<ProjectFiles>("list_project_markdown", { path: base });
+  const rel = resolveWikilink(target, project.files);
+  if (!rel) {
+    await message(`No Markdown file in this project matches [[${target}]]`, {
+      title: "Open Link",
+      kind: "error",
+    });
+    return;
+  }
+  const root = project.root.endsWith("/") ? project.root : `${project.root}/`;
+  await loadFromPath(root + rel);
+  if (anchor) jumpToAnchor(anchor);
+}
+
 // ⌘-click follows links; capture phase so ProseMirror's own handlers
 // (link tooltip, caret placement) don't swallow it first.
 editorRoot.addEventListener(
   "click",
   (e) => {
     if (!(e.metaKey || e.ctrlKey)) return;
-    const anchor = (e.target as HTMLElement).closest("a[href]");
+    const el = e.target as HTMLElement;
+    const wiki = el.closest<HTMLElement>("[data-wikilink]");
+    if (wiki) {
+      e.preventDefault();
+      e.stopPropagation();
+      void followWikilink(wiki.dataset.wikilink ?? "");
+      return;
+    }
+    const anchor = el.closest("a[href]");
     if (!anchor) return;
     e.preventDefault();
     e.stopPropagation();
     void followLink(anchor.getAttribute("href") ?? "");
+  },
+  true,
+);
+
+// ——— [[ completion ———
+//
+// Typing `[[` in the page opens a list of the project's Markdown files
+// filtered by what follows; Enter inserts the file's name and closes the
+// brackets. Escape or moving away dismisses it.
+
+const wikiComplete = document.querySelector<HTMLOListElement>("#wiki-complete")!;
+let wikiCandidates: string[] = [];
+let wikiIndex = 0;
+/** Position of the `[[` that opened the list, so the typed prefix can be
+ *  replaced on accept. */
+let wikiOpenAt: number | null = null;
+let wikiProject: ProjectFiles | null = null;
+
+function closeWikiComplete(): void {
+  wikiComplete.hidden = true;
+  wikiOpenAt = null;
+}
+
+function wikiPrefix(): { from: number; query: string } | null {
+  let result: { from: number; query: string } | null = null;
+  editor.withView((view) => {
+    const { $from, empty } = view.state.selection;
+    if (!empty || $from.parent.type.name === "code_block") return;
+    const before = $from.parent.textBetween(0, $from.parentOffset, "\n", "\ufffc");
+    const m = /\[\[([^\[\]\n]*)$/.exec(before);
+    if (!m) return;
+    result = { from: $from.pos - m[0].length, query: m[1] };
+  });
+  return result;
+}
+
+async function updateWikiComplete(): Promise<void> {
+  const prefix = wikiPrefix();
+  if (!prefix) {
+    closeWikiComplete();
+    return;
+  }
+  const base = doc.filePath ?? recentFiles[0];
+  if (!base) return;
+  if (!wikiProject || wikiOpenAt !== prefix.from) {
+    wikiProject = await invoke<ProjectFiles>("list_project_markdown", { path: base });
+    wikiOpenAt = prefix.from;
+    wikiIndex = 0;
+  }
+  const current = wikiProject;
+  wikiCandidates = rankFiles(prefix.query, current.files, [], 8);
+  if (wikiCandidates.length === 0) {
+    wikiComplete.hidden = true;
+    return;
+  }
+  wikiIndex = Math.min(wikiIndex, wikiCandidates.length - 1);
+  wikiComplete.replaceChildren(
+    ...wikiCandidates.map((rel, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      if (i === wikiIndex) li.setAttribute("aria-selected", "true");
+      const slash = rel.lastIndexOf("/");
+      const name = document.createElement("span");
+      name.textContent = rel.slice(slash + 1).replace(/\.(md|markdown|mdown|mkd)$/i, "");
+      const dir = document.createElement("span");
+      dir.className = "qo-dir";
+      dir.textContent = slash === -1 ? "" : rel.slice(0, slash);
+      li.append(name, dir);
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        acceptWikiComplete(i);
+      });
+      return li;
+    }),
+  );
+  editor.withView((view) => {
+    const coords = view.coordsAtPos(view.state.selection.from);
+    wikiComplete.style.left = `${Math.min(coords.left, window.innerWidth - 300)}px`;
+    wikiComplete.style.top = `${coords.bottom + 6}px`;
+  });
+  wikiComplete.hidden = false;
+}
+
+function acceptWikiComplete(index: number): void {
+  const rel = wikiCandidates[index];
+  const from = wikiOpenAt;
+  if (!rel || from === null) return;
+  const name = rel.slice(rel.lastIndexOf("/") + 1).replace(/\.(md|markdown|mdown|mkd)$/i, "");
+  editor.withView((view) => {
+    const to = view.state.selection.from;
+    view.dispatch(view.state.tr.insertText(`[[${name}]]`, from, to));
+    view.focus();
+  });
+  closeWikiComplete();
+}
+
+editorRoot.addEventListener(
+  "keydown",
+  (e) => {
+    if (wikiComplete.hidden) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      const n = wikiCandidates.length;
+      wikiIndex = (wikiIndex + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
+      Array.from(wikiComplete.children).forEach((li, i) => {
+        if (i === wikiIndex) li.setAttribute("aria-selected", "true");
+        else li.removeAttribute("aria-selected");
+      });
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      e.stopPropagation();
+      acceptWikiComplete(wikiIndex);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeWikiComplete();
+    }
   },
   true,
 );

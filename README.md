@@ -165,6 +165,10 @@ their default applications.
   brown ink, for long reading), Newsprint (high-contrast near-white),
   Night (warm dark), Slate (cool blue-grey dark). Instant switching,
   persisted across launches, respected by Source Mode
+- **Wikilinks** — `[[name]]` links to the project file with that name
+  (`[[name#Heading]]` to a heading, `[[name|label]]` for the text). Type
+  `[[` for a completion list; ⌘-click follows, as with ordinary links,
+  which now honour `file.md#heading` targets too
 - **Quick Open** — ⌘P fuzzy-finds any Markdown file in the current
   project (the nearest git root, or the document's folder), recents first.
   No sidebar: type, arrow, Enter
