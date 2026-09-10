@@ -1660,7 +1660,7 @@ async function activateTab(id: number): Promise<void> {
 
 async function switchTab(delta: 1 | -1): Promise<void> {
   if (tabs.all.length < 2) return;
-  tabs.remember(snap0);
+  tabs.remember(snapshotEditor());
   tabs.step(delta);
   await showTab(tabs.active);
 }
