@@ -153,6 +153,7 @@
       aria-label="Markdown source"
     ></textarea>
     <footer id="review-bar" hidden>
+      <span id="review-bar-hint" hidden></span>
       <span id="review-bar-label"></span>
       <div id="review-bar-actions">
         <button id="review-changes-btn" type="button">Request changes</button>
@@ -181,42 +182,6 @@
         <div class="dialog-actions">
           <button id="telemetry-decline-btn" type="button">No thanks</button>
           <button id="telemetry-accept-btn" type="button">Enable statistics</button>
-        </div>
-      </div>
-    </div>
-    <div id="annot-overlay" hidden>
-      <div
-        id="annot-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="annot-heading"
-      >
-        <h2 id="annot-heading">Annotate selection</h2>
-        <blockquote id="annot-quote"></blockquote>
-        <div class="annot-kinds" role="radiogroup" aria-label="Annotation type">
-          <label>
-            <input type="radio" name="annot-kind" value="comment" checked />
-            Comment
-          </label>
-          <label>
-            <input type="radio" name="annot-kind" value="delete" />
-            Mark for deletion
-          </label>
-          <label>
-            <input type="radio" name="annot-kind" value="replace" />
-            Suggest replacement
-          </label>
-        </div>
-        <textarea
-          id="annot-body"
-          rows="3"
-          spellcheck="false"
-          placeholder="Your note for the agent…"
-          aria-label="Annotation text"
-        ></textarea>
-        <div class="dialog-actions">
-          <button id="annot-cancel-btn" type="button">Cancel</button>
-          <button id="annot-save-btn" type="button">Save annotation</button>
         </div>
       </div>
     </div>

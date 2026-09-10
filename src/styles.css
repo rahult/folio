@@ -578,6 +578,30 @@ body.source-mode #main-row {
   white-space: nowrap;
 }
 
+/* the key legend, shown in review mode (toggle with ?) */
+#review-bar-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+#review-bar-hint[hidden] {
+  display: none;
+}
+
+/* review mode with nothing waiting: the legend alone, on plain paper */
+#review-bar.legend-only {
+  background: var(--paper-sunken);
+}
+
+#review-bar.legend-only #review-bar-actions {
+  display: none;
+}
+
 #review-bar-actions {
   display: flex;
   gap: 8px;
@@ -682,7 +706,6 @@ body.source-mode #main-row {
 
 /* ——— modal dialogs ——— */
 
-#annot-overlay,
 #telemetry-overlay {
   position: fixed;
   inset: 0;
@@ -695,7 +718,6 @@ body.source-mode #main-row {
   animation: dialog-fade 180ms ease-out both;
 }
 
-#annot-overlay[hidden],
 #telemetry-overlay[hidden] {
   display: none;
 }
@@ -709,7 +731,6 @@ body.source-mode #main-row {
   }
 }
 
-#annot-dialog,
 #telemetry-dialog {
   width: min(26rem, calc(100vw - 3rem));
   background: var(--paper-raised);
@@ -731,7 +752,6 @@ body.source-mode #main-row {
   }
 }
 
-#annot-heading,
 #telemetry-heading {
   font-family: var(--font-prose);
   font-size: 1.45rem;
@@ -740,58 +760,6 @@ body.source-mode #main-row {
   letter-spacing: -0.01em;
   margin: 0 0 0.6rem;
   color: var(--ink);
-}
-
-/* annotation dialog */
-#annot-quote {
-  margin: 0 0 1rem;
-  padding: 0.1em 0 0.1em 1em;
-  border-left: 3px solid var(--accent);
-  color: var(--ink-soft);
-  font-size: 13px;
-  line-height: 1.5;
-  max-height: 6em;
-  overflow: hidden;
-}
-
-.annot-kinds {
-  display: flex;
-  gap: 12px;
-  margin: 0 0 0.9rem;
-  font-size: 12.5px;
-  color: var(--ink-soft);
-}
-
-.annot-kinds label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-}
-
-.annot-kinds input {
-  accent-color: var(--accent);
-}
-
-#annot-body {
-  width: 100%;
-  resize: none;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--paper);
-  color: var(--ink);
-  caret-color: var(--accent);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 1.55;
-  padding: 0.6rem 0.75rem;
-  margin: 0 0 1.1rem;
-}
-
-#annot-body:focus {
-  outline: 2px solid color-mix(in oklch, var(--accent) 55%, transparent);
-  outline-offset: 1px;
-  border-color: transparent;
 }
 
 /* annotation marks in the document: dotted accent underline for comments,

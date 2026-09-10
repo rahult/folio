@@ -35,9 +35,20 @@ import {
 } from "./annotations";
 import { renderAnnotations } from "./annotview";
 import { barModel, feedbackWithEditNote, type ReviewRequest, type Verdict } from "./reviewgate";
+import { hintText, reviewKeyAction, verdictFor, type ReviewAction } from "./reviewmode";
+import {
+  closeEntry,
+  isEntryOpen,
+  moveCurrent,
+  openEntry,
+  setCurrentByPos,
+  setReviewMode,
+  targetQuote,
+} from "./reviewview";
 import { storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
 import { TextSelection, type Selection } from "@milkdown/kit/prose/state";
+import type { EditorView } from "@milkdown/kit/prose/view";
 import {
   initTelemetry,
   setTelemetryConsent,
@@ -75,6 +86,7 @@ const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn"
 const feedbackBtn = document.querySelector<HTMLButtonElement>("#feedback-btn")!;
 const reviewBar = document.querySelector<HTMLElement>("#review-bar")!;
 const reviewBarLabel = document.querySelector<HTMLElement>("#review-bar-label")!;
+const reviewBarHint = document.querySelector<HTMLElement>("#review-bar-hint")!;
 const reviewChangesBtn = document.querySelector<HTMLButtonElement>("#review-changes-btn")!;
 const reviewApproveBtn = document.querySelector<HTMLButtonElement>("#review-approve-btn")!;
 const annotationsBtn = document.querySelector<HTMLButtonElement>("#annotations-btn")!;
@@ -84,11 +96,6 @@ const annotSidebarClose = document.querySelector<HTMLButtonElement>("#annot-side
 const telemetryOverlay = document.querySelector<HTMLDivElement>("#telemetry-overlay")!;
 const telemetryAcceptBtn = document.querySelector<HTMLButtonElement>("#telemetry-accept-btn")!;
 const telemetryDeclineBtn = document.querySelector<HTMLButtonElement>("#telemetry-decline-btn")!;
-const annotOverlay = document.querySelector<HTMLDivElement>("#annot-overlay")!;
-const annotQuote = document.querySelector<HTMLElement>("#annot-quote")!;
-const annotBody = document.querySelector<HTMLTextAreaElement>("#annot-body")!;
-const annotSaveBtn = document.querySelector<HTMLButtonElement>("#annot-save-btn")!;
-const annotCancelBtn = document.querySelector<HTMLButtonElement>("#annot-cancel-btn")!;
 const editorRoot = document.querySelector<HTMLElement>("#editor")!;
 const sourceEditor = document.querySelector<HTMLTextAreaElement>("#source-editor")!;
 const liveBadge = document.querySelector<HTMLSpanElement>("#live-badge")!;
@@ -120,7 +127,7 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
 });
 // The selection bubble's annotate icon runs the same flow as
 // Edit → Annotate Selection… (function declaration, hoisted).
-editor.onAnnotateRequest(openAnnotateDialog);
+editor.onAnnotateRequest(() => openInlineEntry("comment"));
 
 function renderTitle(): void {
   titleEl.textContent = doc.fileName;
@@ -136,6 +143,10 @@ function currentMarkdown(): string {
 
 /** Put content into whichever view is live and reset the dirty baseline. */
 async function loadContent(content: string, path: string | null): Promise<void> {
+  // A new document starts in edit mode; a waiting request re-enters review
+  // mode once the request state is refreshed for it.
+  exitReviewMode(false);
+  jumpIndex = -1;
   if (sourceMode) {
     sourceEditor.value = content;
     doc.load(path, content);
@@ -299,7 +310,13 @@ async function newFile(): Promise<void> {
 
 let sourceMode = false;
 
+/** Review mode is a rendered-page affair; it pauses for source mode and
+ *  resumes when the page comes back. */
+let resumeReviewAfterSource = false;
+
 async function enterSourceMode(): Promise<void> {
+  resumeReviewAfterSource = reviewMode;
+  exitReviewMode(false);
   // Carry the caret across: the anchor is read before the editor is hidden.
   const anchor = editor.caretAnchor();
   const markdown = editor.getMarkdown();
@@ -335,6 +352,8 @@ async function exitSourceMode(): Promise<void> {
   doc.updateDirty(editor.getMarkdown());
   renderTitle();
   editor.setCaretAnchor(anchor);
+  if (resumeReviewAfterSource) enterReviewMode();
+  resumeReviewAfterSource = false;
 }
 
 function toggleSourceMode(): Promise<void> {
@@ -582,6 +601,8 @@ async function pollDisk(): Promise<void> {
     });
   }
   diskContent = incoming;
+  // A rewrite mid-review must not bounce the reviewer out of review mode.
+  const stayInReview = reviewMode;
   await loadContent(incoming, path);
   void archiveCurrentRevision();
   if (!sourceMode) {
@@ -590,6 +611,7 @@ async function pollDisk(): Promise<void> {
     editor.withView((view) => {
       showReloadDiff(view, previousText);
     });
+    if (stayInReview) enterReviewMode();
   }
   liveBadge.setAttribute("data-flash", "");
   if (flashTimer !== null) clearTimeout(flashTimer);
@@ -872,66 +894,48 @@ annotationsBtn.addEventListener("click", () => {
   renderSidebar();
 });
 
-let pendingQuote = "";
+/** The selection, or with no selection the innermost block under the
+ *  caret (depth 0 would quote the whole document — never useful). */
+function selectionOrBlockQuote(view: EditorView): string {
+  const { $from, from, to } = view.state.selection;
+  if (from !== to) return view.state.doc.textBetween(from, to, "\n", " ");
+  if ($from.depth > 0) return view.state.doc.textBetween($from.start(), $from.end(), "\n", " ");
+  return "";
+}
 
-/** Edit → Annotate Selection… — capture the selection (or, with no
- *  selection, the block under the caret) and open the dialog. */
-function openAnnotateDialog(): void {
-  if (sourceMode) return;
+/** Edit → Annotate Selection…, the bubble's annotate icon, and review
+ *  mode's c / r: open the inline entry under the target passage. In
+ *  review mode the target is the current block (or a selection inside it);
+ *  while editing it is the selection or the block under the caret. */
+function openInlineEntry(kind: "comment" | "replace"): void {
+  if (sourceMode || !doc.filePath) return;
   editor.withView((view) => {
-    const { $from, from, to } = view.state.selection;
-    if (from !== to) {
-      pendingQuote = view.state.doc.textBetween(from, to, "\n", " ");
-    } else if ($from.depth > 0) {
-      // No selection: annotate the innermost block under the caret (depth 0
-      // would quote the whole document — never useful).
-      pendingQuote = view.state.doc.textBetween($from.start(), $from.end(), "\n", " ");
-    } else {
-      pendingQuote = "";
-    }
+    const quote = reviewMode ? targetQuote(view) : selectionOrBlockQuote(view);
+    if (!quote.trim()) return;
+    if (!reviewMode) setCurrentByPos(view, view.state.selection.from);
+    openEntry(view, {
+      kind,
+      onSubmit: (body) => {
+        closeEntry(view);
+        addAnnotation(kind, quote, body);
+        if (!reviewMode) view.focus();
+      },
+      onCancel: () => {
+        closeEntry(view);
+        if (!reviewMode) view.focus();
+      },
+    });
   });
-  if (!pendingQuote.trim()) return;
-  annotQuote.textContent = pendingQuote.replace(/\s+/g, " ").trim();
-  annotBody.value = "";
-  syncAnnotBodyVisibility();
-  annotOverlay.hidden = false;
-  annotBody.focus();
 }
 
-function selectedAnnotKind(): AnnotationKind {
-  const checked = document.querySelector<HTMLInputElement>('input[name="annot-kind"]:checked');
-  return (checked?.value as AnnotationKind) ?? "comment";
-}
-
-function syncAnnotBodyVisibility(): void {
-  const kind = selectedAnnotKind();
-  annotBody.hidden = kind === "delete";
-  annotBody.placeholder =
-    kind === "replace" ? "Suggested replacement…" : "Your note for the agent…";
-}
-
-function closeAnnotateDialog(): void {
-  annotOverlay.hidden = true;
-}
-
-function saveAnnotation(): void {
-  if (!doc.filePath || !pendingQuote.trim()) {
-    closeAnnotateDialog();
-    return;
-  }
-  const kind = selectedAnnotKind();
-  const body = kind === "delete" ? "" : annotBody.value.trim();
-  if (kind !== "delete" && !body) {
-    annotBody.focus();
-    return;
-  }
-  const annotation = makeAnnotation(kind, pendingQuote, body);
+function addAnnotation(kind: AnnotationKind, quote: string, body: string): void {
+  if (!doc.filePath) return;
+  const annotation = makeAnnotation(kind, quote, body);
   trackEvent("annotate");
   annotations = [...annotations, annotation];
   void invoke("add_annotation", { path: doc.filePath, annotation });
   sidebarOpen = true; // a fresh annotation re-shows the panel
   renderAnnotationsNow();
-  closeAnnotateDialog();
 }
 
 function clearReviewAnnotations(): void {
@@ -959,7 +963,7 @@ async function copyText(text: string): Promise<void> {
  *  the clipboard and a `<file>.feedback.md` beside the reviewed file. */
 async function exportReviewFeedback(): Promise<void> {
   trackEvent("export_feedback");
-  const feedback = buildFeedback(doc.fileName, annotations);
+  const feedback = buildFeedback(doc.fileName, annotations, diskContent ?? undefined);
   await copyText(feedback);
   if (doc.filePath) {
     await invoke("write_text_file", {
@@ -1016,6 +1020,7 @@ async function refreshReviewRequest(fromPoll = false): Promise<void> {
   if (fromPoll && reviewBarConfirming) return;
   reviewRequest = result;
   renderReviewBar();
+  maybeAutoEnterReviewMode();
 }
 
 function renderReviewBar(): void {
@@ -1028,9 +1033,16 @@ function renderReviewBar(): void {
     return;
   }
   const model = barModel(reviewRequest, annotations.length);
-  reviewBar.hidden = !model.visible;
+  // In review mode the bar stays up for the key legend even with nothing
+  // waiting; the verdict buttons only show while an agent is blocked.
+  reviewBar.hidden = !(model.visible || reviewMode);
+  reviewBar.classList.toggle("legend-only", reviewMode && !model.visible);
+  reviewBarHint.textContent =
+    reviewMode && hintVisible ? hintText(reviewRequest?.state === "waiting") : "";
+  reviewBarHint.hidden = reviewBarHint.textContent === "";
   if (!model.visible) {
     reviewBar.classList.remove("sent");
+    reviewBarLabel.textContent = "";
     return;
   }
   // Drop any confirmation left over from a verdict on a previous document:
@@ -1113,7 +1125,7 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
   reviewBarError = null;
   trackEvent("review_verdict", { verdict });
   const feedback = feedbackWithEditNote(
-    buildFeedback(doc.fileName, annotations),
+    buildFeedback(doc.fileName, annotations, diskContent ?? undefined),
     documentEditedDuringReview,
   );
   try {
@@ -1142,14 +1154,6 @@ reviewApproveBtn.addEventListener("click", () => void submitVerdict("approved"))
 reviewChangesBtn.addEventListener("click", () => void submitVerdict("changes"));
 setInterval(() => void refreshReviewRequest(true), REVIEW_POLL_MS);
 
-annotSaveBtn.addEventListener("click", saveAnnotation);
-annotCancelBtn.addEventListener("click", closeAnnotateDialog);
-annotOverlay.addEventListener("click", (e) => {
-  if (e.target === annotOverlay) closeAnnotateDialog();
-});
-for (const radio of document.querySelectorAll('input[name="annot-kind"]')) {
-  radio.addEventListener("change", syncAnnotBodyVisibility);
-}
 
 // Clicking an annotation mark in the document opens the sidebar and
 // highlights the annotation under the caret.
@@ -1235,9 +1239,120 @@ function requestTheme(theme: Theme): void {
   syncMenuState();
 }
 
+// ——— review mode ———
+
+/** Requests the user left with `e`; auto-enter must not fight them. */
+const dismissedReviewRequests = new Set<string>();
+let hintVisible = true;
+/** Cursor for n / p through the annotation list. */
+let jumpIndex = -1;
+
+function enterReviewMode(): void {
+  if (sourceMode || reviewMode) return;
+  reviewMode = true;
+  document.body.classList.add("review-mode");
+  editor.withView((view) => setReviewMode(view, true));
+  trackEvent("review_mode");
+  renderReviewBar();
+  syncMenuState();
+}
+
+/** `dismiss` remembers the waiting request so it does not re-open review
+ *  mode; false when leaving for another reason (a document switch, source
+ *  mode) where the request should still get its chance later. */
+function exitReviewMode(dismiss = true): void {
+  if (!reviewMode) return;
+  reviewMode = false;
+  document.body.classList.remove("review-mode");
+  editor.withView((view) => {
+    closeEntry(view);
+    setReviewMode(view, false);
+    view.focus();
+  });
+  if (dismiss && reviewRequest?.state === "waiting") {
+    dismissedReviewRequests.add(reviewRequest.requestedAt);
+  }
+  renderReviewBar();
+  syncMenuState();
+}
+
+function toggleReviewMode(): void {
+  if (reviewMode) exitReviewMode();
+  else enterReviewMode();
+}
+
+/** A waiting request opens review mode by itself, unless the user already
+ *  left it for this request. */
+function maybeAutoEnterReviewMode(): void {
+  if (reviewRequest?.state !== "waiting" || reviewMode || sourceMode) return;
+  if (dismissedReviewRequests.has(reviewRequest.requestedAt)) return;
+  enterReviewMode();
+}
+
+function nextAnnotation(delta: 1 | -1): Annotation | null {
+  if (annotations.length === 0) return null;
+  jumpIndex = (jumpIndex + delta + annotations.length) % annotations.length;
+  return annotations[jumpIndex];
+}
+
+function runReviewAction(action: ReviewAction): void {
+  switch (action.kind) {
+    case "move":
+      editor.withView((view) => moveCurrent(view, action.delta));
+      return;
+    case "annotate":
+      openInlineEntry(action.annotation);
+      return;
+    case "mark":
+      editor.withView((view) => {
+        const quote = targetQuote(view);
+        if (quote.trim()) addAnnotation(action.annotation, quote, "");
+      });
+      return;
+    case "remove":
+      editor.withView((view) => {
+        const quote = targetQuote(view);
+        // Prefer an exact match; a block-level mark is otherwise matched by
+        // the annotation whose quote sits inside the block.
+        const hit =
+          annotations.find((a) => a.quote === quote) ??
+          annotations.find((a) => quote.includes(a.quote));
+        if (hit) void deleteAnnotation(hit);
+      });
+      return;
+    case "jump": {
+      const target = nextAnnotation(action.delta);
+      if (target) {
+        jumpToAnnotation(target);
+        editor.withView((view) => setCurrentByPos(view, view.state.selection.from));
+      }
+      return;
+    }
+    case "send":
+      if (reviewRequest?.state === "waiting") void submitVerdict(verdictFor(annotations));
+      return;
+    case "edit":
+      exitReviewMode();
+      return;
+    case "hint":
+      hintVisible = !hintVisible;
+      renderReviewBar();
+      return;
+  }
+}
+
 window.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  if (!annotOverlay.hidden) closeAnnotateDialog();
+  if (!reviewMode || sourceMode) return;
+  const target = e.target as HTMLElement | null;
+  if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT")) return;
+  let entryOpen = false;
+  editor.withView((view) => {
+    entryOpen = isEntryOpen(view);
+  });
+  const action = reviewKeyAction(e, { entryOpen });
+  if (!action) return;
+  e.preventDefault();
+  runReviewAction(action);
 });
 
 // ——— native menu dispatch ———
@@ -1285,7 +1400,10 @@ async function runMenuAction(action: MenuAction): Promise<void> {
     case "nav-forward":
       return navigateForward();
     case "annotate":
-      openAnnotateDialog();
+      openInlineEntry("comment");
+      return;
+    case "toggle-review-mode":
+      toggleReviewMode();
       return;
     case "export-feedback":
       return exportReviewFeedback();
