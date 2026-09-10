@@ -943,6 +943,90 @@ body.source-mode #main-row {
   cursor: pointer;
 }
 
+/* ——— quick open (⌘P) ——— */
+
+#quick-open {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: color-mix(in oklch, var(--paper) 40%, transparent);
+  z-index: 45;
+}
+
+#quick-open[hidden] {
+  display: none;
+}
+
+#quick-open-box {
+  width: min(34rem, calc(100vw - 3rem));
+  background: var(--paper-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--crepe-shadow-2);
+  overflow: hidden;
+}
+
+#quick-open-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  caret-color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+}
+
+#quick-open-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+#quick-open-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+#quick-open-list li .qo-dir {
+  color: var(--ink-faint);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#quick-open-list li[aria-selected="true"] {
+  background: var(--accent-wash);
+}
+
+#quick-open-list .qo-empty {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+#quick-open-hint {
+  padding: 6px 14px 8px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
 /* ——— authorship tints (View → Authorship) ——— */
 
 :root {

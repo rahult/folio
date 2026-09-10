@@ -11,6 +11,7 @@ import type { ZoomDirection } from "./zoom";
 export type MenuAction =
   | { kind: "new-file" }
   | { kind: "open-file" }
+  | { kind: "quick-open" }
   | { kind: "save-file" }
   | { kind: "save-file-as" }
   | { kind: "export-html" }
@@ -82,6 +83,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "new-file" };
     case "file.open":
       return { kind: "open-file" };
+    case "file.quick-open":
+      return { kind: "quick-open" };
     case "file.save":
       return { kind: "save-file" };
     case "file.save-as":

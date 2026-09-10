@@ -165,6 +165,9 @@ their default applications.
   brown ink, for long reading), Newsprint (high-contrast near-white),
   Night (warm dark), Slate (cool blue-grey dark). Instant switching,
   persisted across launches, respected by Source Mode
+- **Quick Open** — ⌘P fuzzy-finds any Markdown file in the current
+  project (the nearest git root, or the document's folder), recents first.
+  No sidebar: type, arrow, Enter
 - **Tabs** — several documents in one window. Open, Open Recent, Finder,
   and links land in tabs; a tab keeps its unsaved edits, caret, and scroll
   while you work elsewhere. ⌘W closes the tab (the window with one left),

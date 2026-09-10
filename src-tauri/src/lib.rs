@@ -647,6 +647,79 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+// ——— quick open ———
+//
+// The Markdown files under a document's project: the nearest ancestor with
+// a .git directory, or the document's own folder. Hidden directories,
+// node_modules, and build output are skipped; the walk is capped so a
+// home directory never becomes a project.
+
+const QUICK_OPEN_CAP: usize = 5000;
+
+fn project_root_for(path: &std::path::Path) -> std::path::PathBuf {
+    let start = path.parent().unwrap_or(path).to_path_buf();
+    let mut dir = start.clone();
+    for _ in 0..6 {
+        if dir.join(".git").exists() {
+            return dir;
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent.to_path_buf(),
+            None => break,
+        }
+    }
+    start
+}
+
+fn is_markdown_file(path: &std::path::Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
+        Some("md") | Some("markdown") | Some("mdown") | Some("mkd")
+    )
+}
+
+fn walk_markdown(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<String>) {
+    if out.len() >= QUICK_OPEN_CAP {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') || name == "node_modules" || name == "target" || name == "dist" {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            walk_markdown(&path, root, out);
+        } else if is_markdown_file(&path) {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        if out.len() >= QUICK_OPEN_CAP {
+            return;
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct ProjectFiles {
+    root: String,
+    files: Vec<String>,
+}
+
+/// Markdown files under the project of `path`, relative to its root.
+#[tauri::command]
+fn list_project_markdown(path: String) -> ProjectFiles {
+    let root = project_root_for(std::path::Path::new(&path));
+    let mut files = Vec::new();
+    walk_markdown(&root, &root, &mut files);
+    ProjectFiles { root: root.to_string_lossy().to_string(), files }
+}
+
 /// Archive a revision of a reviewed file (no-op duplicate-safe).
 #[tauri::command]
 fn archive_revision(
@@ -1052,6 +1125,7 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
 
     let mut file_builder = SubmenuBuilder::new(app, "File")
         .item(&menu_item(app, "file.new", "New", Some("CmdOrCtrl+N"))?)
+        .item(&menu_item(app, "file.quick-open", "Quick Open…", Some("CmdOrCtrl+P"))?)
         .item(&menu_item(
             app,
             "file.new-window",
@@ -1516,6 +1590,7 @@ pub fn run() {
             set_revision_menu,
             archive_revision,
             list_revision_contents,
+            list_project_markdown,
             list_revisions,
             read_revision,
             register_default_markdown_handler,
@@ -1852,6 +1927,23 @@ mod tests {
         )
         .unwrap();
         assert_eq!(read_revision_file(&dir, 3).unwrap().origin, "unknown");
+    }
+
+    #[test]
+    fn quick_open_lists_markdown_under_the_project_root() {
+        let root = history_test_dir("quick-open");
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::write(root.join("README.md"), "# r").unwrap();
+        fs::write(root.join("docs/plan.markdown"), "# p").unwrap();
+        fs::write(root.join("docs/notes.txt"), "x").unwrap();
+        fs::write(root.join("node_modules/pkg/README.md"), "# no").unwrap();
+        let found = project_root_for(&root.join("docs/plan.markdown"));
+        assert_eq!(found, root);
+        let mut files = Vec::new();
+        walk_markdown(&root, &root, &mut files);
+        assert_eq!(files, vec!["README.md", "docs/plan.markdown"]);
     }
 
     #[test]

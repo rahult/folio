@@ -20,6 +20,7 @@ import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
 import { attribute, type Origin, type RevisionText } from "./provenance";
 import { clearProvenance, setProvenance } from "./provview";
 import { parseFeedback, requestOutcomes, revisionLabel } from "./ledger";
+import { rankFiles } from "./quickopen";
 import { buildOutline, readingMinutes, sectionAtOffset, type OutlineEntry } from "./outline";
 import { decisionFilePath, readTakeaway, writeTakeaway } from "./decisionfile";
 import {
@@ -1592,6 +1593,8 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return newFile();
     case "open-file":
       return openFile();
+    case "quick-open":
+      return openQuickOpen();
     case "save-file":
       return saveFile();
     case "save-file-as":
@@ -1840,6 +1843,121 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// ——— quick open (⌘P) ———
+//
+// A fuzzy finder over the Markdown files of the current project (the
+// nearest git root, or the document's folder), with recents first. No
+// sidebar, no tree: type, arrow, Enter.
+
+const quickOpen = document.querySelector<HTMLElement>("#quick-open")!;
+const quickOpenInput = document.querySelector<HTMLInputElement>("#quick-open-input")!;
+const quickOpenList = document.querySelector<HTMLOListElement>("#quick-open-list")!;
+const quickOpenHint = document.querySelector<HTMLElement>("#quick-open-hint")!;
+
+interface ProjectFiles {
+  root: string;
+  files: string[];
+}
+
+let quickOpenProject: ProjectFiles | null = null;
+let quickOpenResults: string[] = [];
+let quickOpenIndex = 0;
+
+async function openQuickOpen(): Promise<void> {
+  const path = doc.filePath ?? recentFiles[0];
+  if (!path) {
+    await openFile();
+    return;
+  }
+  quickOpenProject = await invoke<ProjectFiles>("list_project_markdown", { path });
+  quickOpenInput.value = "";
+  quickOpen.hidden = false;
+  renderQuickOpen();
+  quickOpenInput.focus();
+}
+
+function closeQuickOpen(): void {
+  quickOpen.hidden = true;
+  editor.withView((view) => view.focus());
+}
+
+function renderQuickOpen(): void {
+  const project = quickOpenProject;
+  if (!project) return;
+  const root = project.root.endsWith("/") ? project.root : `${project.root}/`;
+  const recents = recentFiles
+    .filter((p) => p.startsWith(root))
+    .map((p) => p.slice(root.length));
+  quickOpenResults = rankFiles(quickOpenInput.value, project.files, recents, 12);
+  quickOpenIndex = 0;
+  quickOpenHint.textContent = `${displayPath(project.root)} · ${project.files.length} files`;
+  if (quickOpenResults.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "qo-empty";
+    empty.textContent = "No matching Markdown files";
+    quickOpenList.replaceChildren(empty);
+    return;
+  }
+  quickOpenList.replaceChildren(
+    ...quickOpenResults.map((rel, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      if (i === quickOpenIndex) li.setAttribute("aria-selected", "true");
+      const slash = rel.lastIndexOf("/");
+      const name = document.createElement("span");
+      name.textContent = slash === -1 ? rel : rel.slice(slash + 1);
+      const dir = document.createElement("span");
+      dir.className = "qo-dir";
+      dir.textContent = slash === -1 ? "" : rel.slice(0, slash);
+      li.append(name, dir);
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        void chooseQuickOpen(i);
+      });
+      return li;
+    }),
+  );
+}
+
+function moveQuickOpen(delta: number): void {
+  if (quickOpenResults.length === 0) return;
+  quickOpenIndex = (quickOpenIndex + delta + quickOpenResults.length) % quickOpenResults.length;
+  Array.from(quickOpenList.children).forEach((li, i) => {
+    if (i === quickOpenIndex) li.setAttribute("aria-selected", "true");
+    else li.removeAttribute("aria-selected");
+  });
+  quickOpenList.children[quickOpenIndex]?.scrollIntoView({ block: "nearest" });
+}
+
+async function chooseQuickOpen(index: number): Promise<void> {
+  const rel = quickOpenResults[index];
+  const project = quickOpenProject;
+  if (!rel || !project) return;
+  const root = project.root.endsWith("/") ? project.root : `${project.root}/`;
+  closeQuickOpen();
+  await loadFromPath(root + rel);
+}
+
+quickOpenInput.addEventListener("input", renderQuickOpen);
+quickOpenInput.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    moveQuickOpen(1);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    moveQuickOpen(-1);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    void chooseQuickOpen(quickOpenIndex);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    closeQuickOpen();
+  }
+});
+quickOpen.addEventListener("mousedown", (e) => {
+  if (e.target === quickOpen) closeQuickOpen();
+});
+
 // ——— typing hush ———
 //
 // The chrome steps back while you type: the title strip and status bar fade
@@ -1883,6 +2001,9 @@ window.addEventListener("keydown", (e) => {
   } else if (key === "s") {
     e.preventDefault();
     void saveFile(e.shiftKey);
+  } else if (key === "p" && !e.shiftKey) {
+    e.preventDefault();
+    void openQuickOpen();
   } else if (key === "[") {
     e.preventDefault();
     void navigateBack();
