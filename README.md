@@ -156,7 +156,8 @@ their default applications.
   result does not depend on what was on screen), syntax-highlighted code,
   Mermaid diagrams as SVG, local images and the app's typefaces embedded.
   Export → PDF… prints the same rendering through the native macOS print
-  panel (Save as PDF)
+  panel (Save as PDF). Export → Word… writes a .docx with real heading
+  styles, lists, tables, quotes, code, links, and embedded images
 - **Focus Mode** — View → Focus Mode (⌥⌘F) dims every block except the
   one holding the caret
 - **Typewriter Mode** — View → Typewriter Mode (⌥⌘Y) keeps the caret on

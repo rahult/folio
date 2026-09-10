@@ -10,12 +10,13 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl, openPath } from "@tauri-apps/plugin-opener";
 import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
-import { buildHtmlDocument, htmlExportTarget } from "./export";
+import { buildHtmlDocument, exportTarget, htmlExportTarget } from "./export";
+import { buildDocx, type DocxImage } from "./docx";
 import exportCss from "./export.css?raw";
 import "./export.css";
 import { collectExportFonts, exportHooksFor } from "./exporthooks";
 import { renderExportHtml } from "./exportrender";
-import { resolveImageSrc } from "./images";
+import { localImagePath, resolveImageSrc } from "./images";
 import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
 import { attribute, type Origin, type RevisionText } from "./provenance";
 import { clearProvenance, setProvenance } from "./provview";
@@ -426,6 +427,43 @@ async function exportHtmlFile(): Promise<void> {
   });
   if (selected === null) return;
   await invoke("write_text_file", { path: selected, contents: html });
+}
+
+/** Local images for the Word export: read through the asset protocol,
+ *  measured with an <img>, and handed over as bytes. SVG and anything
+ *  Word cannot embed become links instead. */
+async function docxImage(src: string): Promise<DocxImage | null> {
+  const path = localImagePath(src, doc.filePath);
+  if (path === null) return null;
+  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  const type = ext === "png" ? "png" : ext === "jpg" || ext === "jpeg" ? "jpg" : ext === "gif" ? "gif" : ext === "bmp" ? "bmp" : null;
+  if (!type) return null;
+  try {
+    const url = convertFileSrc(path);
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = new Uint8Array(await response.arrayBuffer());
+    const size = await new Promise<{ width: number; height: number }>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => resolve({ width: 0, height: 0 });
+      img.src = url;
+    });
+    return { data, type, ...size };
+  } catch {
+    return null;
+  }
+}
+
+async function exportDocx(): Promise<void> {
+  trackEvent("export_docx");
+  const selected = await save({
+    defaultPath: exportTarget(doc.filePath, "docx"),
+    filters: [{ name: "Word", extensions: ["docx"] }],
+  });
+  if (selected === null) return;
+  const bytes = await buildDocx(currentMarkdown(), doc.fileName, { image: docxImage });
+  await invoke("write_binary_file", { path: selected, contents: Array.from(bytes) });
 }
 
 async function exportPdf(): Promise<void> {
@@ -1765,6 +1803,8 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return exportHtmlFile();
     case "export-pdf":
       return exportPdf();
+    case "export-docx":
+      return exportDocx();
     case "toggle-source-mode":
       return toggleSourceMode();
     case "toggle-focus-mode":

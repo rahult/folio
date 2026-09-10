@@ -99,6 +99,7 @@ describe("actionForMenuId", () => {
     expect(actionForMenuId("app.check-updates")).toEqual({ kind: "check-updates" });
     expect(actionForMenuId("file.export-html")).toEqual({ kind: "export-html" });
     expect(actionForMenuId("file.export-pdf")).toEqual({ kind: "export-pdf" });
+    expect(actionForMenuId("file.export-docx")).toEqual({ kind: "export-docx" });
     expect(actionForMenuId("view.focus-mode")).toEqual({ kind: "toggle-focus-mode" });
     expect(actionForMenuId("view.typewriter-mode")).toEqual({
       kind: "toggle-typewriter-mode",

@@ -4,13 +4,18 @@
  * lives in src/main.ts and src/editor.ts.
  */
 
+/** Where to offer saving an export, given the current file path. */
+export function exportTarget(filePath: string | null, ext: string): string {
+  if (!filePath) return `untitled.${ext}`;
+  if (/\.(md|markdown|mdown|mkd)$/i.test(filePath)) {
+    return filePath.replace(/\.(md|markdown|mdown|mkd)$/i, `.${ext}`);
+  }
+  return `${filePath}.${ext}`;
+}
+
 /** Where to offer saving the exported HTML, given the current file path. */
 export function htmlExportTarget(filePath: string | null): string {
-  if (!filePath) return "untitled.html";
-  if (/\.(md|markdown|mdown|mkd)$/i.test(filePath)) {
-    return filePath.replace(/\.(md|markdown|mdown|mkd)$/i, ".html");
-  }
-  return `${filePath}.html`;
+  return exportTarget(filePath, "html");
 }
 
 /** Escape text interpolated into the exported document's <title>. */

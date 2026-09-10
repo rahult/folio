@@ -939,6 +939,12 @@ fn read_text_file(path: String) -> Result<String, String> {
 }
 
 /// Write a UTF-8 text file to disk, creating or overwriting it.
+/// Write bytes (a .docx package) to disk.
+#[tauri::command]
+fn write_binary_file(path: String, contents: Vec<u8>) -> Result<(), String> {
+    fs::write(&path, contents).map_err(|e| format!("failed to write {path}: {e}"))
+}
+
 #[tauri::command]
 fn write_text_file(path: String, contents: String) -> Result<(), String> {
     fs::write(&path, contents).map_err(|e| format!("failed to write {path}: {e}"))
@@ -1223,6 +1229,7 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
                     Some("CmdOrCtrl+E"),
                 )?)
                 .item(&menu_item(app, "file.export-pdf", "PDF…", None)?)
+                .item(&menu_item(app, "file.export-docx", "Word…", None)?)
                 .build()?,
         );
     if cfg!(target_os = "macos") {
@@ -1583,6 +1590,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_text_file,
             write_text_file,
+            write_binary_file,
             print_document,
             sync_menu_state,
             take_startup_request,
