@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Folio — a calm, Typora-style Markdown editor for macOS, Windows, and Linux. Write in a single live-rendered page."
+      content="Folio is a calm Markdown editor for macOS, Windows, and Linux that renders as you write, and a review window for the plans and docs your coding agent writes."
     />
     <link rel="icon" type="image/svg+xml" href="./folio-icon.svg" />
     <link rel="stylesheet" href="./site.css" />
@@ -16,65 +16,55 @@
   <body>
     <header class="site-header">
       <a class="brand" href="#top">
-        <img src="./folio-icon.svg" alt="" width="28" height="28" />
+        <img src="./folio-icon.svg" alt="" width="26" height="26" />
         <span>Folio</span>
       </a>
-      <nav>
-        <a href="#demo">Demo</a>
-        <a href="#features">Features</a>
+      <nav aria-label="Sections">
+        <a href="#write">Writing</a>
+        <a href="#review">Agent review</a>
+        <a href="#keys">Shortcuts</a>
         <a href="#download">Download</a>
         <a href="https://github.com/rahult/folio">GitHub</a>
       </nav>
     </header>
 
     <main id="top">
-      <section class="hero">
-        <h1>A calm, Typora-style<br />Markdown editor.</h1>
-        <p class="lede">
-          Write in a single live-rendered page — no split panes, no clutter.
-          Native, tiny, and fast; the text is the interface.
-        </p>
-        <div class="hero-actions">
-          <a
-            class="btn btn-primary"
-            id="dl-hero"
-            href="https://github.com/rahult/folio/releases/latest"
-            >Download for macOS</a
-          >
-          <a class="btn" href="#demo">Try it in your browser</a>
+      <!-- ——— hero: the editor itself ——— -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">Markdown, rendered as you write it.</h1>
+          <p class="lede">
+            One page, no split panes. Folio is a small native editor for
+            people who write in Markdown, and a review window for the plans
+            your coding agent writes. Free and open source.
+          </p>
+          <div class="hero-actions">
+            <a
+              class="btn btn-primary"
+              id="dl-hero"
+              href="https://github.com/rahult/folio/releases/latest"
+              >Download for macOS</a
+            >
+            <a class="btn" href="#download">Windows and Linux</a>
+          </div>
+          <p class="hero-note">
+            About 5&nbsp;MB, built on the system webview. Try the real editor
+            below first.
+          </p>
         </div>
-        <p class="hero-note">
-          Apple Silicon · free, open source, ~5 MB, no Electron —
-          <a href="#download">all platforms</a>
-        </p>
-      </section>
 
-      <section id="demo" class="demo">
-        <h2>The editor, live</h2>
-        <p class="section-lede">
-          This is the real Folio editor running in your browser. Type on the
-          left of the page and watch Markdown render inline — then flip to the
-          preview to see the exported document.
-        </p>
-        <div class="demo-frame">
-          <div class="demo-tabs" role="tablist" aria-label="Demo view">
-            <button
-              id="tab-write"
-              class="active"
-              type="button"
-              role="tab"
-              aria-selected="true"
-            >
-              Write
-            </button>
-            <button
-              id="tab-preview"
-              type="button"
-              role="tab"
-              aria-selected="false"
-            >
-              Preview
-            </button>
+        <div class="demo-frame" id="demo">
+          <div class="demo-chrome">
+            <span class="demo-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <div class="demo-tabs" role="tablist" aria-label="Demo view">
+              <button id="tab-write" class="active" type="button" role="tab" aria-selected="true">
+                Write
+              </button>
+              <button id="tab-preview" type="button" role="tab" aria-selected="false">
+                Exported page
+              </button>
+            </div>
+            <span class="demo-hint">This is the editor from the app, running here.</span>
           </div>
           <div id="demo-editor" role="tabpanel" aria-labelledby="tab-write"></div>
           <iframe
@@ -88,108 +78,355 @@
         </div>
       </section>
 
-      <section id="features" class="features">
-        <h2>Features</h2>
-        <div class="feature-grid">
-          <div class="feature">
-            <h3>Seamless WYSIWYG</h3>
+      <!-- ——— writing ——— -->
+      <section id="write" class="tour" aria-labelledby="write-title">
+        <header class="section-head">
+          <h2 id="write-title">For writing</h2>
+          <p>
+            The text is the interface. Everything else steps out of the way
+            until you ask for it.
+          </p>
+        </header>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <h3>Live rendering, real Markdown underneath</h3>
             <p>
-              Markdown renders inline as you type — headings, emphasis, lists,
-              tables, code blocks, blockquotes, links, and images.
+              Headings, emphasis, lists, tables, code, quotes, links, and
+              images render inline as you type. Press ⌘/ and the same page
+              becomes plain Markdown, with your caret where you left it. Press
+              it again to come back.
             </p>
           </div>
-          <div class="feature">
-            <h3>Source Code Mode</h3>
+          <figure class="visual visual-source" aria-label="The same paragraph in rendered and source views">
+            <div class="pane pane-rendered">
+              <p class="pane-h">Rollout plan</p>
+              <p>Ship to <strong>10% of users</strong> for a day, then <em>everyone</em>. Roll back with <code>deploy --undo</code>.</p>
+            </div>
+            <div class="pane pane-source">
+              <pre>## Rollout plan
+
+Ship to **10% of users** for a day, then *everyone*. Roll back with `deploy --undo`.</pre>
+            </div>
+            <figcaption>⌘/ flips between the two.</figcaption>
+          </figure>
+        </article>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <h3>Focus and typewriter modes</h3>
             <p>
-              Flip between the rendered page and raw Markdown with a single
-              keystroke (⌘/).
+              Focus Mode dims every paragraph except the one you are in.
+              Typewriter Mode keeps the line you are typing at a fixed height
+              on the screen so your eyes never chase the caret. They compose.
             </p>
           </div>
-          <div class="feature">
-            <h3>Native everything</h3>
+          <figure class="visual visual-focus" aria-label="Focus mode dims paragraphs around the current one">
+            <p>The migration runs in three passes. The first adds the column and backfills it in batches of ten thousand rows.</p>
+            <p class="current">The second pass switches reads to the new column behind a flag, so a bad batch can be undone without a deploy.</p>
+            <p>The third removes the old column once the flag has been on for a week without incident.</p>
+          </figure>
+        </article>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <h3>Three themes, one typeface</h3>
             <p>
-              Real native menus and file dialogs, dirty indicator, live word
-              count — a proper desktop citizen.
+              Paper is warm and quiet. Night is dark without being black.
+              Newsprint is high contrast for bright rooms. All three set prose
+              in Newsreader with a single oxblood accent, and the choice is
+              remembered.
             </p>
           </div>
-          <div class="feature">
-            <h3>Free and complete</h3>
+          <figure class="visual visual-themes" aria-label="The Paper, Night, and Newsprint themes">
+            <div class="swatch swatch-paper">
+              <span class="swatch-name">Paper</span>
+              <p>The <a>quick brown fox</a> jumps over the lazy dog.</p>
+            </div>
+            <div class="swatch swatch-night">
+              <span class="swatch-name">Night</span>
+              <p>The <a>quick brown fox</a> jumps over the lazy dog.</p>
+            </div>
+            <div class="swatch swatch-newsprint">
+              <span class="swatch-name">Newsprint</span>
+              <p>The <a>quick brown fox</a> jumps over the lazy dog.</p>
+            </div>
+          </figure>
+        </article>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <h3>Export that looks like the page</h3>
             <p>
-              Export to HTML &amp; PDF, Focus Mode, Typewriter Mode, and the
-              Night and Newsprint themes — all included, no license key.
+              File → Export writes one self-contained HTML file: highlighted
+              code, Mermaid diagrams as SVG, your images and the typefaces
+              embedded. Export → PDF prints the same rendering. Both are built
+              from the Markdown, so the result never depends on what was on
+              screen.
             </p>
           </div>
-          <div class="feature">
-            <h3>Editorial design</h3>
+          <figure class="visual visual-export" aria-label="An exported page with code and a diagram">
+            <div class="page">
+              <p class="page-h">Queue design</p>
+              <p>Producers write to a ring; a single consumer drains it.</p>
+              <pre><span class="k">fn</span> <span class="f">drain</span>(ring: &amp;<span class="t">Ring</span>) {
+    <span class="k">while let</span> <span class="k">Some</span>(job) = ring.pop() {
+        job.run();
+    }
+}</pre>
+              <div class="diagram" aria-hidden="true">
+                <span>producer</span><i></i><span>ring</span><i></i><span>consumer</span>
+              </div>
+            </div>
+            <figcaption>notes.md → notes.html, 200 KB, opens anywhere.</figcaption>
+          </figure>
+        </article>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <h3>A proper desktop citizen</h3>
             <p>
-              Warm paper canvas, Newsreader serif prose, one oxblood accent.
-              Nothing between you and the sentence.
+              Native menus and file dialogs, a dirty dot in the title, Open
+              Recent, and session restore that reopens your last file at the
+              same caret and scroll position. Make it the default app for
+              <code>.md</code> from the File menu. Updates install themselves.
             </p>
           </div>
-          <div class="feature">
-            <h3>Tiny footprint</h3>
+          <figure class="visual visual-native" aria-label="The Paragraph menu with its shortcuts">
+            <ul class="menu">
+              <li><span>Heading 1</span><kbd>⌘1</kbd></li>
+              <li><span>Heading 2</span><kbd>⌘2</kbd></li>
+              <li><span>Heading 3</span><kbd>⌘3</kbd></li>
+              <li class="sep" aria-hidden="true"></li>
+              <li><span>Quote</span><kbd>⌥⌘Q</kbd></li>
+              <li><span>Code fence</span><kbd>⌥⌘C</kbd></li>
+              <li><span>Table</span><kbd>⌥⌘T</kbd></li>
+              <li class="sep" aria-hidden="true"></li>
+              <li><span>Bullet list</span><kbd>⌥⌘U</kbd></li>
+              <li><span>Task list</span><kbd>⌥⌘X</kbd></li>
+            </ul>
+          </figure>
+        </article>
+      </section>
+
+      <!-- ——— agent review ——— -->
+      <section id="review" class="review" aria-labelledby="review-title">
+        <header class="section-head">
+          <h2 id="review-title">For reviewing what your agent wrote</h2>
+          <p>
+            Coding agents produce plans, specs, and docs in Markdown, and you
+            end up reading them as a diff in a terminal. Folio is the other
+            half of that loop: a window that stays on top, shows what changed,
+            and sends your notes straight back.
+          </p>
+        </header>
+
+        <div class="loop">
+          <div class="loop-terminal" aria-label="The agent's terminal">
+            <p class="prompt"><span class="you">you</span> /folio docs/plan.md</p>
+            <p class="dim">$ folio review --wait --agent claude docs/plan.md</p>
+            <p class="dim wait">waiting for your verdict in Folio…</p>
+            <p class="dim out"># Review feedback: plan.md</p>
+            <p class="dim out">Verdict: <strong>changes requested</strong> (2 annotations)</p>
+            <p class="dim out">## 1. Replace "ship to all users at once"</p>
+            <p class="dim out">Suggested replacement: 10% canary for a day, then 100%.</p>
+            <p class="agent"><span class="you">claude</span> Updated the rollout section. Resubmitting.</p>
+          </div>
+
+          <div class="loop-window" aria-label="Folio's floating review window">
+            <div class="win-bar">
+              <span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="win-title">plan.md</span>
+              <span class="win-live"><b></b>live</span>
+            </div>
+            <div class="win-doc">
+              <p class="doc-h">Rollout</p>
+              <p>
+                <span class="del">Ship to all users at once.</span>
+                <span class="add">Ship to 10% of users for a day, then everyone.</span>
+                Watch error rate and p95 latency before widening.
+              </p>
+              <p>
+                Roll back by flipping the flag, not by redeploying.
+                <mark class="note">Say who owns the flag during the canary.</mark>
+              </p>
+            </div>
+            <div class="win-review">
+              <span>claude waiting, 2 annotations</span>
+              <span class="win-buttons"><b class="primary">Request changes</b><b>✓ Approve</b></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="loop-notes">
+          <div>
+            <h3>What changed, at a glance</h3>
             <p>
-              Built on Tauri with the system webview — a ~5 MB download, no
-              bundled browser.
+              While the window floats, Folio watches the file. Each rewrite
+              reloads in place with additions washed green and removals shown
+              struck through. Your own unsaved edits are never clobbered.
+            </p>
+          </div>
+          <div>
+            <h3>Annotate, then send</h3>
+            <p>
+              Select a passage and add a comment, mark it for deletion, or
+              suggest a replacement. Approve or request changes from the bar
+              at the bottom; the feedback goes to the agent's terminal as
+              structured Markdown it can act on.
+            </p>
+          </div>
+          <div>
+            <h3>Ask for it, or not</h3>
+            <p>
+              The <code>/folio</code> skill teaches Claude Code, Codex, and
+              other agents the loop. It only runs when you type it. Without
+              the skill, <code>folio review plan.md</code> from any shell
+              opens a floating window and keeps watching the file.
+            </p>
+          </div>
+          <div>
+            <h3>Every version, kept</h3>
+            <p>
+              Revision History archives each on-disk version of a reviewed
+              file and diffs any two, so you can see exactly what the agent
+              did between its first draft and its fourth.
             </p>
           </div>
         </div>
+
+        <div class="loop-install">
+          <p>Install the skill once. It is user-invoked only.</p>
+          <pre><code>git clone https://github.com/rahult/folio &amp;&amp; cp -r folio/skills/folio ~/.claude/skills/</code></pre>
+          <p class="loop-exit">
+            The CLI exits 0 on approve, 2 on changes requested, 3 if the
+            review is still open, so an agent can branch on the result.
+          </p>
+        </div>
       </section>
 
-      <section id="download" class="download">
-        <h2>Download</h2>
-        <p class="section-lede">
-          Direct downloads for the latest release
-          (<span id="latest-version">v0.2.0</span>) — no detours, the file
-          starts downloading immediately:
-        </p>
+      <!-- ——— also on board ——— -->
+      <section id="more" class="more" aria-labelledby="more-title">
+        <header class="section-head">
+          <h2 id="more-title">Also on board</h2>
+        </header>
+        <ul class="more-list">
+          <li><strong>Mermaid diagrams</strong> render inline from fenced blocks; click Edit to see the source.</li>
+          <li><strong>Relative images</strong> resolve against the file, so <code>![](img/a.png)</code> just works.</li>
+          <li><strong>Link navigation</strong> ⌘-clicks between Markdown files with back and forward history.</li>
+          <li><strong>Resizable table columns</strong> by dragging the border.</li>
+          <li><strong>Auto-reload</strong> when the file changes on disk, agent edits or git checkouts alike.</li>
+          <li><strong>Float on Top</strong> pins any window above everything else at a compact size.</li>
+          <li><strong>Copy for agent</strong> puts the document on the clipboard as clean Markdown.</li>
+          <li><strong>Pipe in</strong> with <code>agent … | folio --float -</code> to review output straight from stdin.</li>
+          <li><strong>Zoom</strong> the page with ⇧⌘= and ⇧⌘-.</li>
+          <li><strong>Live word count</strong> in the status bar, and CRLF files come out clean.</li>
+          <li><strong>No telemetry</strong> unless you opt in; nothing loads before you do.</li>
+          <li><strong>Windows and Linux</strong> builds from the same source.</li>
+        </ul>
+      </section>
+
+      <!-- ——— shortcuts ——— -->
+      <section id="keys" class="keys" aria-labelledby="keys-title">
+        <header class="section-head">
+          <h2 id="keys-title">Shortcuts</h2>
+          <p>Typora users will feel at home.</p>
+        </header>
+        <div class="keys-grid">
+          <table>
+            <caption>File and view</caption>
+            <tbody>
+              <tr><td>Open, Save, Save As</td><td><kbd>⌘O</kbd> <kbd>⌘S</kbd> <kbd>⇧⌘S</kbd></td></tr>
+              <tr><td>Export HTML</td><td><kbd>⌘E</kbd></td></tr>
+              <tr><td>Source Code Mode</td><td><kbd>⌘/</kbd></td></tr>
+              <tr><td>Focus Mode</td><td><kbd>⌥⌘F</kbd></td></tr>
+              <tr><td>Typewriter Mode</td><td><kbd>⌥⌘Y</kbd></td></tr>
+              <tr><td>Float on Top</td><td><kbd>⌥⌘W</kbd></td></tr>
+              <tr><td>Back, Forward</td><td><kbd>⌘[</kbd> <kbd>⌘]</kbd></td></tr>
+              <tr><td>Zoom in, out, reset</td><td><kbd>⇧⌘=</kbd> <kbd>⇧⌘-</kbd> <kbd>⇧⌘0</kbd></td></tr>
+            </tbody>
+          </table>
+          <table>
+            <caption>Paragraph and format</caption>
+            <tbody>
+              <tr><td>Heading 1 to 6</td><td><kbd>⌘1</kbd> … <kbd>⌘6</kbd></td></tr>
+              <tr><td>Quote, table, code fence</td><td><kbd>⌥⌘Q</kbd> <kbd>⌥⌘T</kbd> <kbd>⌥⌘C</kbd></td></tr>
+              <tr><td>Ordered, bullet, task list</td><td><kbd>⌥⌘O</kbd> <kbd>⌥⌘U</kbd> <kbd>⌥⌘X</kbd></td></tr>
+              <tr><td>Strong, emphasis</td><td><kbd>⌘B</kbd> <kbd>⌘I</kbd></td></tr>
+              <tr><td>Link</td><td><kbd>⌘K</kbd></td></tr>
+              <tr><td>Clear format</td><td><kbd>⌘\</kbd></td></tr>
+            </tbody>
+          </table>
+          <table>
+            <caption>Review</caption>
+            <tbody>
+              <tr><td>Annotate selection</td><td><kbd>⌥⌘A</kbd></td></tr>
+              <tr><td>Export review feedback</td><td><kbd>⌥⌘R</kbd></td></tr>
+              <tr><td>Approve review</td><td><kbd>⇧⌘↩</kbd></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ——— download ——— -->
+      <section id="download" class="download" aria-labelledby="download-title">
+        <header class="section-head">
+          <h2 id="download-title">Download</h2>
+          <p>
+            Latest release: <span id="latest-version">see GitHub</span>. Links
+            start the file download directly.
+          </p>
+        </header>
         <ul class="platform-list">
           <li>
-            <strong>macOS</strong> (Apple Silicon) —
-            <a id="dl-macos" href="https://github.com/rahult/folio/releases/latest"><code>.dmg</code></a>
+            <span class="platform">macOS</span>
+            <span class="platform-note">Apple Silicon</span>
+            <span class="platform-links">
+              <a id="dl-macos" href="https://github.com/rahult/folio/releases/latest">.dmg</a>
+            </span>
           </li>
           <li>
-            <strong>Windows</strong> —
-            <a id="dl-win-msi" href="https://github.com/rahult/folio/releases/latest"><code>.msi</code></a>
-            /
-            <a id="dl-win-exe" href="https://github.com/rahult/folio/releases/latest"><code>.exe</code></a>
+            <span class="platform">Windows</span>
+            <span class="platform-note">x64</span>
+            <span class="platform-links">
+              <a id="dl-win-msi" href="https://github.com/rahult/folio/releases/latest">.msi</a>
+              <a id="dl-win-exe" href="https://github.com/rahult/folio/releases/latest">.exe</a>
+            </span>
           </li>
           <li>
-            <strong>Linux</strong> —
-            <a id="dl-appimage" href="https://github.com/rahult/folio/releases/latest"><code>.AppImage</code></a>
-            /
-            <a id="dl-deb" href="https://github.com/rahult/folio/releases/latest"><code>.deb</code></a>
-            /
-            <a id="dl-rpm" href="https://github.com/rahult/folio/releases/latest"><code>.rpm</code></a>
+            <span class="platform">Linux</span>
+            <span class="platform-note">x64</span>
+            <span class="platform-links">
+              <a id="dl-appimage" href="https://github.com/rahult/folio/releases/latest">.AppImage</a>
+              <a id="dl-deb" href="https://github.com/rahult/folio/releases/latest">.deb</a>
+              <a id="dl-rpm" href="https://github.com/rahult/folio/releases/latest">.rpm</a>
+            </span>
           </li>
         </ul>
         <p class="all-downloads">
-          <a href="https://github.com/rahult/folio/releases"
-            >See all downloads on GitHub Releases →</a
-          >
+          <a href="https://github.com/rahult/folio/releases">All releases on GitHub</a>
         </p>
         <p class="fine-print">
-          Installers are unsigned: on Windows, SmartScreen → More info →
-          Run anyway. On macOS, if the app is refused as "damaged" after
-          downloading, clear the quarantine flag once:
-          <code>xattr -dr com.apple.quarantine /Applications/Folio.app</code>
+          Installers are unsigned. On Windows, SmartScreen shows More info,
+          then Run anyway. On macOS, if a downloaded app is refused as
+          damaged, clear the quarantine flag once:
         </p>
+        <pre class="fine-print-code"><code>xattr -dr com.apple.quarantine /Applications/Folio.app</code></pre>
       </section>
     </main>
 
     <footer class="site-footer">
       <p>
         Folio is open source under the
-        <a href="https://github.com/rahult/folio/blob/main/LICENSE"
-          >MIT license</a
-        >.
+        <a href="https://github.com/rahult/folio/blob/main/LICENSE">MIT license</a>.
+        Built with Tauri and Milkdown.
       </p>
     </footer>
 
     <div id="ga-consent" hidden>
       <span>
-        This site uses anonymous usage statistics (Google Analytics) — opt in
-        to help improve Folio.
+        This site can collect anonymous usage statistics. Opt in to help
+        improve Folio.
       </span>
       <button id="ga-accept" type="button">Allow</button>
       <button id="ga-decline" type="button">No thanks</button>
@@ -224,7 +461,7 @@
           }
           if (data.tag_name) {
             const hero = document.getElementById("dl-hero");
-            if (hero) hero.textContent = `Download for macOS · ${data.tag_name}`;
+            if (hero) hero.textContent = `Download for macOS ${data.tag_name}`;
             const ver = document.getElementById("latest-version");
             if (ver) ver.textContent = data.tag_name;
           }

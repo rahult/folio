@@ -9,26 +9,31 @@ import { renderExportHtml } from "../src/exportrender";
 
 const SAMPLE_MARKDOWN = `# Write, and watch it render
 
-Folio renders Markdown **inline as you type** — no split panes, no preview
-toggle, no clutter. Try it: make this sentence *italic*, or turn the next
-line into a heading.
+Folio renders Markdown **inline as you type**. There is no preview pane to
+glance at and no toolbar to reach for: make this sentence *italic*, turn the
+next line into a heading with \`#\`, or press ⌘/ to see the source.
 
 ## Everything you expect
 
-- Headings, emphasis, and inline \`code\`
-- Ordered and unordered lists (try pressing Enter below)
-- Tables, blockquotes, links, and images
+- Headings, emphasis, links, and inline \`code\`
+- Ordered and unordered lists (press Enter below to add one)
+- Tables with draggable columns, blockquotes, images
+
+- [x] Task lists that round-trip to \`- [x]\`
+- [ ] A checkbox you can tick
 
 > The text is the interface. Everything else steps out of the way.
 
-## A table, rendered live
+## A table
 
 | Feature        | Shortcut |
 | -------------- | -------- |
 | Source mode    | ⌘/       |
 | Export         | ⌘E       |
 | Focus mode     | ⌥⌘F      |
-| Typewriter     | ⌥⌘Y      |
+| Annotate       | ⌥⌘A      |
+
+## Code and diagrams
 
 \`\`\`rust
 fn main() {
@@ -36,7 +41,15 @@ fn main() {
 }
 \`\`\`
 
-Press the **Preview** tab above to see this document as an exported page.
+\`\`\`mermaid
+graph LR
+  Agent -- writes --> plan.md
+  plan.md -- reviewed in --> Folio
+  Folio -- verdict --> Agent
+\`\`\`
+
+Switch to **Exported page** above to see this document the way File → Export
+writes it.
 `;
 
 const editorRoot = document.querySelector<HTMLElement>("#demo-editor")!;
