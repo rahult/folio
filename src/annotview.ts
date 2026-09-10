@@ -46,7 +46,9 @@ export function renderAnnotations(view: EditorView, annotations: Annotation[]): 
   for (const annotation of annotations) {
     const range = findQuoteRange(segments, annotation.quote, docSize);
     if (!range) continue; // quote vanished in a rewrite — feedback keeps it
-    if (annotation.kind === "comment") {
+    if (annotation.kind === "approve") {
+      decorations.push(Decoration.inline(range.from, range.to, { class: "annot-approve" }));
+    } else if (annotation.kind === "comment") {
       decorations.push(Decoration.inline(range.from, range.to, { class: "annot-comment" }));
     } else {
       decorations.push(Decoration.inline(range.from, range.to, { class: "annot-delete" }));

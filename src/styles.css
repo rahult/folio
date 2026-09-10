@@ -805,6 +805,58 @@ body.source-mode #main-row {
   border-bottom: 2px dotted var(--accent);
 }
 
+/* looks good — a quiet green rule, so it reads as "keep", not "fix" */
+.milkdown .ProseMirror .annot-approve {
+  border-bottom: 2px solid oklch(0.72 0.1 155 / 0.7);
+  cursor: pointer;
+}
+
+/* ——— review mode ——— */
+
+/* Read-only page: no caret, and the current block carries an accent rule
+   in the left margin that j/k move. */
+body.review-mode #editor .milkdown .ProseMirror {
+  caret-color: transparent;
+}
+
+#editor .milkdown .ProseMirror > [data-review-current] {
+  box-shadow: -3px 0 0 0 var(--accent);
+  border-radius: 1px;
+}
+
+/* the inline entry field under the current block */
+.review-entry {
+  margin: 0.5rem 0 1.1rem;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+
+.review-entry span {
+  display: block;
+  color: var(--ink-faint);
+  margin-bottom: 4px;
+}
+
+.review-entry textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  resize: vertical;
+  outline: none;
+}
+
+.review-entry textarea:focus {
+  border-color: var(--accent);
+}
+
 .milkdown .ProseMirror .annot-delete {
   text-decoration: line-through;
   text-decoration-color: var(--accent);

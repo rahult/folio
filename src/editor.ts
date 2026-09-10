@@ -28,6 +28,7 @@ import type { EditorView } from "@milkdown/kit/prose/view";
 import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from "./commands";
 import { diffViewPlugin } from "./diffview";
 import { annotationPlugin } from "./annotview";
+import { reviewViewPlugin } from "./reviewview";
 import { mermaidRenderPreview } from "./mermaid";
 import { alnumCount, positionForAnchor, type CaretAnchor, type TextSegment } from "./caretmap";
 import { TextSelection } from "@milkdown/kit/prose/state";
@@ -125,6 +126,8 @@ export class MarkdownEditor {
     // Decoration host for review annotations (comments, deletions,
     // replacements on the document being reviewed).
     this.crepe.editor.use(annotationPlugin);
+    // Review Mode: read-only page, current-block rule, inline entry field.
+    this.crepe.editor.use(reviewViewPlugin);
 
     await this.crepe.create();
   }
