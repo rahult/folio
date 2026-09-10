@@ -70,13 +70,30 @@ on disk — agent edits, git checkouts, another editor.
 
 ### Annotate the plan, send it back
 
-Reviewing isn't just watching. Select text (or place the caret in a block)
-and **Edit → Annotate Selection…** (⌥⌘A) lets you comment on it, mark it
-for deletion, or suggest a replacement — quiet marks in the document that
-persist across agent rewrites. **File → Export Review Feedback** (⌥⌘R)
-serializes your annotations into structured Markdown the agent can act on —
-copied to the clipboard *and* written to `<plan>.feedback.md` beside the
-file, so file-driven agents pick it up with no copy-pasting.
+Reviewing isn't just watching. When an agent is waiting on the open file
+(or any time via **View → Review Mode**, ⌘⇧R) the page turns read-only and
+the keyboard becomes a review tool:
+
+| Key | Action |
+| --- | --- |
+| `j` / `k` (or ↓ / ↑) | Move the rule to the next / previous block; click or shift-select to target a passage inside it |
+| `c` | Comment — type under the block, Enter saves, Esc cancels |
+| `r` | Suggest a replacement, same field |
+| `d` | Mark for deletion |
+| `a` | Looks good — tells the agent to leave this alone |
+| `x` | Remove the mark on the block |
+| `n` / `p` | Jump to the next / previous annotation |
+| Enter | Send the verdict: changes requested if anything asks for one, else approved |
+| `e` | Back to editing (`?` toggles the legend) |
+
+Outside review mode, **Edit → Annotate Selection…** (⌥⌘A) or the
+annotate icon in the selection bubble open the same inline field. Marks are
+quiet underlines that persist across agent rewrites. **File → Export
+Review Feedback** (⌥⌘R) serializes them into structured Markdown the agent
+can act on — numbered change requests with the passage's line numbers, then
+a *Keep as is* list — copied to the clipboard *and* written to
+`<plan>.feedback.md` beside the file, so file-driven agents pick it up
+with no copy-pasting.
 
 ### Ask your agent to open a review: the `/folio` skill
 

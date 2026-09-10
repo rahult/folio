@@ -268,12 +268,14 @@ Ship to **10% of users** for a day, then *everyone*. Roll back with `deploy --un
             </p>
           </div>
           <div>
-            <h3>Annotate, then send</h3>
+            <h3>Annotate with single keys, then send</h3>
             <p>
-              Select a passage and add a comment, mark it for deletion, or
-              suggest a replacement. Approve or request changes from the bar
-              at the bottom; the feedback goes to the agent's terminal as
-              structured Markdown it can act on.
+              The page turns read-only while the agent waits. Move between
+              blocks with <code>j</code> and <code>k</code>, press
+              <code>c</code> to comment, <code>d</code> to delete,
+              <code>r</code> to suggest a replacement, <code>a</code> for
+              looks good, Enter to send. The feedback reaches the agent's
+              terminal as structured Markdown with line numbers.
             </p>
           </div>
           <div>
@@ -358,11 +360,16 @@ Ship to **10% of users** for a day, then *everyone*. Roll back with `deploy --un
             </tbody>
           </table>
           <table>
-            <caption>Review</caption>
+            <caption>Review mode</caption>
             <tbody>
-              <tr><td>Annotate selection</td><td><kbd>⌥⌘A</kbd></td></tr>
+              <tr><td>Review Mode on or off</td><td><kbd>⇧⌘R</kbd> <kbd>e</kbd></td></tr>
+              <tr><td>Next, previous block</td><td><kbd>j</kbd> <kbd>k</kbd></td></tr>
+              <tr><td>Comment, replace</td><td><kbd>c</kbd> <kbd>r</kbd></td></tr>
+              <tr><td>Delete, looks good, remove mark</td><td><kbd>d</kbd> <kbd>a</kbd> <kbd>x</kbd></td></tr>
+              <tr><td>Next, previous annotation</td><td><kbd>n</kbd> <kbd>p</kbd></td></tr>
+              <tr><td>Send the verdict</td><td><kbd>↩</kbd></td></tr>
+              <tr><td>Annotate selection while editing</td><td><kbd>⌥⌘A</kbd></td></tr>
               <tr><td>Export review feedback</td><td><kbd>⌥⌘R</kbd></td></tr>
-              <tr><td>Approve review</td><td><kbd>⇧⌘↩</kbd></td></tr>
             </tbody>
           </table>
         </div>

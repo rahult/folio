@@ -49,8 +49,11 @@ the document directly instead of annotating; the feedback says so when it
 happens, but the file on disk is always the source of truth.
 
 Feedback is numbered instructions with the quoted passage each one refers
-to: *Comment on*, *Delete*, or *Replace*. Apply each one to the passage it
-quotes; a comment is a question or request, not text to paste in.
+to, with its line numbers in the file when known (`L12–14`): *Comment on*,
+*Delete*, or *Replace*. Apply each one to the passage it quotes; a comment
+is a question or request, not text to paste in. A trailing **Keep as is**
+section lists passages the user marked as good: leave those untouched when
+you revise.
 
 Folio also writes the feedback to `<path>.feedback.md` beside the document.
 You do not need it in this loop. If it exists after the review, delete it
