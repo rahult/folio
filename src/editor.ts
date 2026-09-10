@@ -143,11 +143,22 @@ export class MarkdownEditor {
     this.annotateCb = cb;
   }
 
-  /** Run `fn` against the live ProseMirror view (no-op before create). */
+  /** Run `fn` against the live ProseMirror view. A no-op before create and
+   *  during it: Crepe fires selection/markdown callbacks while the view is
+   *  still being mounted, when the context has no view to hand out yet. */
   withView(fn: (view: EditorView) => void): void {
     if (!this.crepe) return;
     this.crepe.editor.action((ctx) => {
-      fn(ctx.get(editorViewCtx));
+      let view: EditorView;
+      try {
+        view = ctx.get(editorViewCtx);
+      } catch {
+        return;
+      }
+      // Milkdown's context slice holds a placeholder object until the real
+      // view is mounted; only a view with state is usable.
+      if (!view || !view.state) return;
+      fn(view);
     });
   }
 

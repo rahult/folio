@@ -28,6 +28,7 @@ import {
   openPanel,
   renderOutline,
   renderStats,
+  setCurrentOutline,
   setTakeaway,
   setTakeawayEnabled,
   takeawayField,
@@ -558,7 +559,8 @@ function refreshOutline(): void {
     outlineTimer = null;
   }
   outline = buildOutline(currentMarkdown());
-  trackCurrentSection();
+  currentSection = sectionAtOffset(outline, caretOffset());
+  renderOutline(outline, currentSection);
 }
 
 /** Typing rebuilds the outline at most every 300 ms. */
@@ -575,8 +577,10 @@ function caretOffset(): number {
 }
 
 function trackCurrentSection(): void {
-  currentSection = sectionAtOffset(outline, caretOffset());
-  if (isPanelOpen() && activeTab() === "outline") renderOutline(outline, currentSection);
+  const next = sectionAtOffset(outline, caretOffset());
+  if (next === currentSection) return;
+  currentSection = next;
+  setCurrentOutline(currentSection);
 }
 
 /** Go to a heading: caret at its start, scrolled into view; in Review
@@ -606,10 +610,7 @@ function goToHeading(entry: OutlineEntry): void {
 }
 
 onOutlinePick(goToHeading);
-onPanelChange(() => {
-  if (isPanelOpen() && activeTab() === "outline") renderOutline(outline, currentSection);
-  syncMenuState();
-});
+onPanelChange(syncMenuState);
 sourceEditor.addEventListener("selectionchange", trackCurrentSection);
 document.addEventListener("selectionchange", () => {
   if (sourceMode && document.activeElement === sourceEditor) trackCurrentSection();
@@ -1654,3 +1655,4 @@ syncMenuState();
 initTelemetryFlow();
 // Silent update check on launch; failures (offline, no release) are ignored.
 void checkForUpdates(false);
+

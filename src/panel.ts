@@ -126,6 +126,17 @@ export function renderOutline(next: OutlineEntry[], current: number): void {
   scrollCurrentIntoView();
 }
 
+/** Move the current-section marker without rebuilding the rows — a
+ *  rebuild mid-click would detach the row before its click event fires. */
+export function setCurrentOutline(current: number): void {
+  cursor = current;
+  Array.from(outlineList.children).forEach((li, i) => {
+    if (i === current && entries.length > 0) li.setAttribute("aria-current", "true");
+    else li.removeAttribute("aria-current");
+  });
+  scrollCurrentIntoView();
+}
+
 function scrollCurrentIntoView(): void {
   const row = outlineList.querySelector<HTMLElement>('[aria-current="true"]');
   row?.scrollIntoView({ block: "nearest" });
