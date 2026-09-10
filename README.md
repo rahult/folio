@@ -95,6 +95,18 @@ a *Keep as is* list — copied to the clipboard *and* written to
 `<plan>.feedback.md` beside the file, so file-driven agents pick it up
 with no copy-pasting.
 
+### Read with a map: the reading panel
+
+**View → Reading Panel** (⌘⇧O, or `o` in Review Mode) opens a panel with
+two tabs. **Outline** lists the document's headings with each section's
+reading time, marks the section you are in as you read, and jumps on
+click or with the arrow keys — in the rendered page and in Source Code
+Mode alike. Above it, a **What I took from it** field is for your own
+one-paragraph summary; it saves beside the document as
+`<doc>.decision.md`, plain Markdown any agent can read. The status bar
+shows the whole document's reading time next to the word count.
+**Annotations** is the second tab.
+
 ### Ask your agent to open a review: the `/folio` skill
 
 `skills/folio/` is an [Agent Skill](https://agentskills.io) that teaches a
