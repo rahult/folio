@@ -1177,6 +1177,99 @@ body.review-mode #editor .milkdown .ProseMirror {
   font-variant-numeric: tabular-nums;
 }
 
+/* history — archived versions, and what each revision answered */
+#history-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 12px;
+}
+
+.history-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.history-entry {
+  border-bottom: 1px solid var(--hairline);
+  padding: 6px 0 8px;
+}
+
+.history-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+
+.history-head:hover {
+  background: var(--paper-sunken);
+}
+
+.history-when {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-label {
+  font-size: 12.5px;
+}
+
+.history-summary {
+  padding: 2px 12px 4px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.history-requests {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px;
+}
+
+.history-requests li {
+  display: grid;
+  grid-template-columns: 1rem auto 1fr;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.history-mark {
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+.history-requests li.changed .history-mark {
+  color: oklch(0.55 0.13 150);
+}
+
+.history-kind {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.history-quote {
+  font-family: var(--font-prose);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* outline — headings with their section's reading time */
 #outline-list {
   list-style: none;

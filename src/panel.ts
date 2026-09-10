@@ -7,7 +7,7 @@
 
 import type { OutlineEntry } from "./outline";
 
-export type PanelTab = "outline" | "annotations";
+export type PanelTab = "outline" | "annotations" | "history";
 
 const TAB_KEY = "folio-panel-tab";
 
@@ -15,11 +15,14 @@ const panel = document.querySelector<HTMLElement>("#panel")!;
 const tabButtons: Record<PanelTab, HTMLButtonElement> = {
   outline: document.querySelector<HTMLButtonElement>("#panel-tab-outline")!,
   annotations: document.querySelector<HTMLButtonElement>("#panel-tab-annotations")!,
+  history: document.querySelector<HTMLButtonElement>("#panel-tab-history")!,
 };
 const tabPanels: Record<PanelTab, HTMLElement> = {
   outline: document.querySelector<HTMLElement>("#panel-outline")!,
   annotations: document.querySelector<HTMLElement>("#panel-annotations")!,
+  history: document.querySelector<HTMLElement>("#panel-history")!,
 };
+const historyList = document.querySelector<HTMLOListElement>("#history-list")!;
 const closeBtn = document.querySelector<HTMLButtonElement>("#panel-close")!;
 export const takeawayField = document.querySelector<HTMLTextAreaElement>("#takeaway")!;
 const statsEl = document.querySelector<HTMLElement>("#reading-stats")!;
@@ -35,7 +38,8 @@ let cursor = -1;
 
 function restoreTab(): PanelTab {
   try {
-    return localStorage.getItem(TAB_KEY) === "annotations" ? "annotations" : "outline";
+    const stored = localStorage.getItem(TAB_KEY);
+    return stored === "annotations" || stored === "history" ? stored : "outline";
   } catch {
     return "outline";
   }
@@ -188,3 +192,75 @@ outlineList.addEventListener("keydown", (e) => {
     outlineList.blur();
   }
 });
+
+// ——— history tab ———
+
+export interface HistoryEntry {
+  seq: number;
+  /** Unix seconds. */
+  archivedAt: number;
+  label: string;
+  /** For a revision: each change request and whether its passage changed. */
+  outcomes: { kind: string; quote: string; changed: boolean }[] | null;
+}
+
+/** Repaint the History tab; `onPick` shows a revision's diff. */
+export function renderHistory(entries: HistoryEntry[], onPick: (seq: number) => void): void {
+  if (entries.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "history-empty";
+    empty.textContent = "No revisions yet — versions are archived as the file is saved, rewritten, or reviewed.";
+    historyList.replaceChildren(empty);
+    return;
+  }
+  historyList.replaceChildren(
+    ...entries.map((entry) => {
+      const li = document.createElement("li");
+      li.className = "history-entry";
+      const head = document.createElement("button");
+      head.type = "button";
+      head.className = "history-head";
+      head.title = "Show what changed between this version and now";
+      const when = document.createElement("span");
+      when.className = "history-when";
+      when.textContent = new Date(entry.archivedAt * 1000).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const label = document.createElement("span");
+      label.className = "history-label";
+      label.textContent = entry.label;
+      head.append(when, label);
+      head.addEventListener("click", () => onPick(entry.seq));
+      li.append(head);
+      if (entry.outcomes) {
+        const changed = entry.outcomes.filter((o) => o.changed).length;
+        const summary = document.createElement("div");
+        summary.className = "history-summary";
+        summary.textContent = `${changed} of ${entry.outcomes.length} requested passages changed`;
+        li.append(summary);
+        const list = document.createElement("ul");
+        list.className = "history-requests";
+        for (const outcome of entry.outcomes) {
+          const row = document.createElement("li");
+          row.className = outcome.changed ? "changed" : "unchanged";
+          const mark = document.createElement("span");
+          mark.className = "history-mark";
+          mark.textContent = outcome.changed ? "✓" : "–";
+          const kind = document.createElement("span");
+          kind.className = "history-kind";
+          kind.textContent = outcome.kind;
+          const quote = document.createElement("span");
+          quote.className = "history-quote";
+          quote.textContent = outcome.quote;
+          row.append(mark, kind, quote);
+          list.append(row);
+        }
+        li.append(list);
+      }
+      return li;
+    }),
+  );
+}

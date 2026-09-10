@@ -503,6 +503,9 @@ struct RevisionContent {
     /// origins were recorded, and the file as first opened).
     #[serde(default = "unknown_origin")]
     origin: String,
+    /// For a "revision": the feedback it answers.
+    #[serde(default)]
+    feedback: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -513,12 +516,15 @@ struct RevisionMeta {
     origin: String,
 }
 
-/// One link of the authorship chain: rendered text plus who wrote it.
+/// One link of the authorship chain: rendered text plus who wrote it, and
+/// for a revision the feedback it answers.
 #[derive(serde::Serialize)]
 struct RevisionText {
     seq: u64,
+    archived_at: u64,
     rendered: String,
     origin: String,
+    feedback: Option<String>,
 }
 
 /// FNV-1a hex of the reviewed file's path — stable directory name.
@@ -565,6 +571,17 @@ fn archive_in_dir(
     now: u64,
     origin: &str,
 ) -> Result<u64, String> {
+    archive_with_feedback(dir, markdown, rendered, now, origin, None)
+}
+
+fn archive_with_feedback(
+    dir: &std::path::Path,
+    markdown: &str,
+    rendered: &str,
+    now: u64,
+    origin: &str,
+    feedback: Option<String>,
+) -> Result<u64, String> {
     fs::create_dir_all(dir).map_err(|e| format!("failed to create history dir: {e}"))?;
     let seqs = revision_seqs(dir);
     if let Some(&latest) = seqs.last() {
@@ -580,6 +597,7 @@ fn archive_in_dir(
         rendered: rendered.to_string(),
         archived_at: now,
         origin: origin.to_string(),
+        feedback,
     };
     let json = serde_json::to_string(&content).map_err(|e| e.to_string())?;
     fs::write(dir.join(format!("{seq}.json")), json)
@@ -639,15 +657,25 @@ fn archive_revision(
     origin: String,
 ) -> Result<u64, String> {
     // The first rewrite after "changes requested" is the agent's revision,
-    // whichever window happens to archive it.
-    let origin = if origin == "external"
-        && reviewgate::take_changes_requested_in(&reviewgate::review_dir(), &path)
-    {
-        "revision".to_string()
+    // whichever window happens to archive it; it keeps the feedback it
+    // answers so the history can show what was addressed.
+    let pending = if origin == "external" {
+        reviewgate::take_changes_requested_in(&reviewgate::review_dir(), &path)
     } else {
-        origin
+        None
     };
-    archive_in_dir(&history_dir(&app, &path)?, &markdown, &rendered, now_secs(), &origin)
+    let (origin, feedback) = match pending {
+        Some(feedback) => ("revision".to_string(), Some(feedback)),
+        None => (origin, None),
+    };
+    archive_with_feedback(
+        &history_dir(&app, &path)?,
+        &markdown,
+        &rendered,
+        now_secs(),
+        &origin,
+        feedback,
+    )
 }
 
 /// Every archived revision's rendered text and origin, oldest first — the
@@ -659,7 +687,13 @@ fn list_revision_contents(app: AppHandle<Wry>, path: String) -> Result<Vec<Revis
         .into_iter()
         .filter_map(|seq| {
             let content = read_revision_file(&dir, seq).ok()?;
-            Some(RevisionText { seq, rendered: content.rendered, origin: content.origin })
+            Some(RevisionText {
+                seq,
+                archived_at: content.archived_at,
+                rendered: content.rendered,
+                origin: content.origin,
+                feedback: content.feedback,
+            })
         })
         .collect())
 }
@@ -1389,7 +1423,7 @@ fn resolve_review(
     )
     .map_err(|e| e.to_string())?;
     if state == reviewgate::ReviewState::Changes {
-        reviewgate::mark_changes_requested_in(&reviewgate::review_dir(), &path);
+        reviewgate::mark_changes_requested_in(&reviewgate::review_dir(), &path, &feedback);
     }
     Ok(())
 }

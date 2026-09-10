@@ -19,6 +19,7 @@ import { resolveImageSrc } from "./images";
 import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
 import { attribute, type Origin, type RevisionText } from "./provenance";
 import { clearProvenance, setProvenance } from "./provview";
+import { parseFeedback, requestOutcomes, revisionLabel } from "./ledger";
 import { buildOutline, readingMinutes, sectionAtOffset, type OutlineEntry } from "./outline";
 import { decisionFilePath, readTakeaway, writeTakeaway } from "./decisionfile";
 import {
@@ -28,6 +29,7 @@ import {
   onOutlinePick,
   onPanelChange,
   openPanel,
+  renderHistory,
   renderOutline,
   renderStats,
   setCurrentOutline,
@@ -1399,6 +1401,7 @@ async function refreshRevisionMenu(): Promise<void> {
     return;
   }
   const list = await invoke<RevisionMeta[]>("list_revisions", { path });
+  void refreshHistoryTab();
   const entries = list.map((r, i) => {
     const time = new Date(r.archived_at * 1000).toLocaleTimeString([], {
       hour: "2-digit",
@@ -1411,6 +1414,32 @@ async function refreshRevisionMenu(): Promise<void> {
 }
 
 /** History menu: diff the selected revision against the current document. */
+/** The History tab: every archived version, newest first, with the
+ *  change requests a revision answered and whether each passage changed. */
+async function refreshHistoryTab(): Promise<void> {
+  const path = doc.filePath;
+  if (!path) {
+    renderHistory([], () => {});
+    return;
+  }
+  let chain: RevisionText[];
+  try {
+    chain = await invoke<RevisionText[]>("list_revision_contents", { path });
+  } catch {
+    return;
+  }
+  if (doc.filePath !== path) return;
+  const entries = chain
+    .map((r) => ({
+      seq: r.seq ?? 0,
+      archivedAt: r.archived_at ?? 0,
+      label: revisionLabel(r.origin),
+      outcomes: r.feedback ? requestOutcomes(parseFeedback(r.feedback), r.rendered) : null,
+    }))
+    .reverse();
+  renderHistory(entries, (seq) => void openRevision(seq));
+}
+
 async function openRevision(seq: number): Promise<void> {
   const path = doc.filePath;
   if (!path || sourceMode) return;

@@ -82,15 +82,18 @@ fn changes_marker_in(dir: &Path, path: &str) -> PathBuf {
     dir.join(format!("{}.changes", crate::path_hash(path)))
 }
 
-pub fn mark_changes_requested_in(dir: &Path, path: &str) {
+pub fn mark_changes_requested_in(dir: &Path, path: &str, feedback: &str) {
     let _ = std::fs::create_dir_all(dir);
-    let _ = std::fs::write(changes_marker_in(dir, path), b"");
+    let _ = std::fs::write(changes_marker_in(dir, path), feedback.as_bytes());
 }
 
-/// True (and consumed) when a changes-requested verdict is pending a
-/// rewrite for `path`.
-pub fn take_changes_requested_in(dir: &Path, path: &str) -> bool {
-    std::fs::remove_file(changes_marker_in(dir, path)).is_ok()
+/// The feedback of a pending changes-requested verdict for `path`,
+/// consumed so only the first rewrite counts as the revision.
+pub fn take_changes_requested_in(dir: &Path, path: &str) -> Option<String> {
+    let marker = changes_marker_in(dir, path);
+    let feedback = std::fs::read_to_string(&marker).ok()?;
+    let _ = std::fs::remove_file(marker);
+    Some(feedback)
 }
 
 /// Write the request atomically so a concurrent poller never sees a
@@ -265,10 +268,10 @@ mod tests {
     #[test]
     fn changes_marker_is_consumed_once() {
         let dir = temp_dir("changes-marker");
-        assert!(!take_changes_requested_in(&dir, "/p.md"));
-        mark_changes_requested_in(&dir, "/p.md");
-        assert!(take_changes_requested_in(&dir, "/p.md"));
-        assert!(!take_changes_requested_in(&dir, "/p.md"));
+        assert!(take_changes_requested_in(&dir, "/p.md").is_none());
+        mark_changes_requested_in(&dir, "/p.md", "# feedback");
+        assert_eq!(take_changes_requested_in(&dir, "/p.md").as_deref(), Some("# feedback"));
+        assert!(take_changes_requested_in(&dir, "/p.md").is_none());
     }
 
     #[test]

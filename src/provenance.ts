@@ -21,6 +21,10 @@ export interface Attributed {
 export interface RevisionText {
   rendered: string;
   origin: Origin;
+  /** Set when the archive came from Rust; the attribution ignores them. */
+  seq?: number;
+  archived_at?: number;
+  feedback?: string | null;
 }
 
 /** Re-attribute `previous` (attributed text) to `next` text: unchanged

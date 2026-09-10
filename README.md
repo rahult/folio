@@ -136,7 +136,10 @@ knows from the revisions it archives while watching the file.
 
 **File → Revision History** archives every on-disk version of the reviewed
 file (newest 20) and diffs any of them against the current document — see
-exactly what changed between v1 and v4 without leaving the editor.
+exactly what changed between v1 and v4 without leaving the editor. The
+reading panel's **History** tab lists the same versions with who wrote
+each one, and for a revision the agent made after your feedback, which of
+your requested passages actually changed.
 
 Also on board: **File → Open Recent**, session restore (relaunch lands on
 your last file, caret, and scroll position), resizable table columns,
