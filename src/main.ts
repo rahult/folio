@@ -62,7 +62,7 @@ import {
   setReviewMode,
   targetQuote,
 } from "./reviewview";
-import { storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
+import { isDarkTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import { nextZoom, type ZoomDirection } from "./zoom";
 import { TextSelection, type Selection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
@@ -94,10 +94,8 @@ interface StartupRequest {
 const titleEl = document.querySelector<HTMLSpanElement>("#doc-title")!;
 const pathEl = document.querySelector<HTMLSpanElement>("#doc-path")!;
 const wordCountEl = document.querySelector<HTMLSpanElement>("#word-count")!;
-const openBtn = document.querySelector<HTMLButtonElement>("#open-btn")!;
 const navBackBtn = document.querySelector<HTMLButtonElement>("#nav-back-btn")!;
 const navForwardBtn = document.querySelector<HTMLButtonElement>("#nav-forward-btn")!;
-const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
 const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
 const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn")!;
 const feedbackBtn = document.querySelector<HTMLButtonElement>("#feedback-btn")!;
@@ -1363,6 +1361,9 @@ function applyTheme(theme: Theme, persist = true): void {
   appliedTheme = theme;
   document.documentElement.dataset.theme = theme;
   if (persist) localStorage.setItem(THEME_STORAGE_KEY, theme);
+  // The window has no native title bar; its buttons and overlay follow the
+  // app's own light/dark choice rather than the system's.
+  void getCurrentWindow().setTheme(isDarkTheme(theme) ? "dark" : "light");
 }
 
 function requestTheme(theme: Theme): void {
@@ -1579,8 +1580,28 @@ void listen<string>("file-open", (event) => {
 
 // ——— toolbar + fallback shortcuts (dev in browser has no native menu) ———
 
-openBtn.addEventListener("click", () => void openFile());
-saveBtn.addEventListener("click", () => void saveFile());
+// ——— typing hush ———
+//
+// The chrome steps back while you type: the title strip and status bar fade
+// on the first keystroke into the page and return on the next mouse move.
+// Only printable typing counts — shortcuts and navigation leave it alone.
+let hushed = false;
+
+function setHushed(on: boolean): void {
+  if (hushed === on) return;
+  hushed = on;
+  document.body.classList.toggle("hushed", on);
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key.length !== 1 && e.key !== "Enter" && e.key !== "Backspace") return;
+  const target = e.target as HTMLElement | null;
+  if (!target || !target.closest("#editor, #source-editor")) return;
+  setHushed(true);
+});
+window.addEventListener("mousemove", () => setHushed(false));
+window.addEventListener("blur", () => setHushed(false));
 floatBtn.addEventListener("click", () => toggleFloatMode());
 copyAgentBtn.addEventListener("click", () => void copyForAgent());
 feedbackBtn.addEventListener("click", () => void exportReviewFeedback());

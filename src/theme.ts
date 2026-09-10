@@ -4,9 +4,15 @@
  * persistence (src/main.ts).
  */
 
-export type Theme = "paper" | "night" | "newsprint";
+export type Theme = "paper" | "manuscript" | "newsprint" | "night" | "slate";
 
-export const THEMES: readonly Theme[] = ["paper", "night", "newsprint"];
+/** In menu order: two light, one bright, two dark. */
+export const THEMES: readonly Theme[] = ["paper", "manuscript", "newsprint", "night", "slate"];
+
+/** Dark themes tell the OS so native controls and scrollbars match. */
+export function isDarkTheme(theme: Theme): boolean {
+  return theme === "night" || theme === "slate";
+}
 
 export const THEME_STORAGE_KEY = "folio-theme";
 

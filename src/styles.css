@@ -29,8 +29,46 @@
     0 2px 4px oklch(0.3 0.02 70 / 0.08), 0 12px 32px oklch(0.3 0.02 70 / 0.12);
 }
 
+/* Every theme names its scheme so native scrollbars, selection, and
+   form controls follow. */
+:root {
+  color-scheme: light;
+}
+
+/* Manuscript — deeper cream and brown ink for long reading; the page
+   looks older than Paper and the contrast is a touch lower. */
+:root[data-theme="manuscript"] {
+  --paper: oklch(0.955 0.02 85);
+  --paper-raised: oklch(0.972 0.016 86);
+  --paper-sunken: oklch(0.925 0.024 84);
+  --ink: oklch(0.31 0.03 60);
+  --ink-soft: oklch(0.45 0.028 60);
+  --ink-faint: oklch(0.6 0.024 62);
+  --hairline: oklch(0.88 0.02 82);
+  --accent: oklch(0.45 0.1 30);
+  --accent-strong: oklch(0.4 0.105 30);
+  --accent-wash: oklch(0.92 0.025 45);
+  --accent-selection: oklch(0.86 0.045 45);
+}
+
+/* Newsprint — clean, high-contrast near-white. */
+:root[data-theme="newsprint"] {
+  --paper: oklch(0.994 0.002 90);
+  --paper-raised: oklch(0.999 0.001 90);
+  --paper-sunken: oklch(0.962 0.003 90);
+  --ink: oklch(0.21 0.005 60);
+  --ink-soft: oklch(0.35 0.006 60);
+  --ink-faint: oklch(0.52 0.005 60);
+  --hairline: oklch(0.868 0.004 85);
+  --accent: oklch(0.42 0.1 33);
+  --accent-strong: oklch(0.36 0.1 33);
+  --accent-wash: oklch(0.938 0.015 45);
+  --accent-selection: oklch(0.88 0.03 45);
+}
+
 /* Night — genuinely dark, warm-tinted, accent lifted for contrast. */
 :root[data-theme="night"] {
+  color-scheme: dark;
   --paper: oklch(0.245 0.012 70);
   --paper-raised: oklch(0.278 0.013 70);
   --paper-sunken: oklch(0.212 0.011 70);
@@ -49,19 +87,27 @@
     0 2px 4px oklch(0.1 0.01 70 / 0.5), 0 12px 32px oklch(0.1 0.01 70 / 0.5);
 }
 
-/* Newsprint — clean, high-contrast near-white. */
-:root[data-theme="newsprint"] {
-  --paper: oklch(0.994 0.002 90);
-  --paper-raised: oklch(0.999 0.001 90);
-  --paper-sunken: oklch(0.962 0.003 90);
-  --ink: oklch(0.21 0.005 60);
-  --ink-soft: oklch(0.35 0.006 60);
-  --ink-faint: oklch(0.52 0.005 60);
-  --hairline: oklch(0.868 0.004 85);
-  --accent: oklch(0.42 0.1 33);
-  --accent-strong: oklch(0.36 0.1 33);
-  --accent-wash: oklch(0.938 0.015 45);
-  --accent-selection: oklch(0.88 0.03 45);
+/* Slate — a cool dark: blue-grey ground, soft ivory ink, a copper accent
+   instead of oxblood so it reads as its own room, not Night with the
+   heating off. */
+:root[data-theme="slate"] {
+  color-scheme: dark;
+  --paper: oklch(0.255 0.018 250);
+  --paper-raised: oklch(0.29 0.02 250);
+  --paper-sunken: oklch(0.222 0.017 250);
+  --ink: oklch(0.89 0.01 90);
+  --ink-soft: oklch(0.75 0.012 240);
+  --ink-faint: oklch(0.58 0.014 240);
+  --hairline: oklch(0.37 0.02 250);
+  --accent: oklch(0.72 0.11 60);
+  --accent-strong: oklch(0.78 0.11 60);
+  --accent-wash: oklch(0.33 0.03 60);
+  --accent-selection: oklch(0.42 0.05 60);
+
+  --crepe-shadow-1:
+    0 1px 2px oklch(0.1 0.01 250 / 0.4), 0 4px 16px oklch(0.1 0.01 250 / 0.4);
+  --crepe-shadow-2:
+    0 2px 4px oklch(0.1 0.01 250 / 0.5), 0 12px 32px oklch(0.1 0.01 250 / 0.5);
 }
 
 /* Re-skin Crepe/Milkdown through its public tokens. Nord declares its
@@ -113,15 +159,40 @@ body {
   background: var(--accent-selection);
 }
 
-/* ——— top chrome ——— */
+/* ——— top chrome: the title strip ———
+   The window has no native title bar; this strip sits under the traffic
+   lights (inset on the left for them), carries the document name, and is
+   the drag handle. */
 
 #toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 10px 16px;
+  gap: 12px;
+  height: 38px;
+  padding: 0 12px 0 var(--traffic-inset, 12px);
   border-bottom: 1px solid var(--hairline);
   flex: 0 0 auto;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 320ms ease-out;
+}
+
+:root {
+  /* macOS overlay title bar: room for the three window buttons */
+  --traffic-inset: 78px;
+}
+
+/* the chrome hushes while typing (see main.ts) */
+body.hushed #toolbar,
+body.hushed #statusbar {
+  opacity: 0.18;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #toolbar,
+  #statusbar {
+    transition: none;
+  }
 }
 
 /* the title sits optically centered; the end block mirrors the actions */
@@ -180,9 +251,10 @@ body {
 }
 
 #doc-title {
-  font-size: 13px;
+  font-family: var(--font-prose);
+  font-size: 15px;
   font-weight: 500;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   color: var(--ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -493,6 +565,7 @@ body.source-mode #main-row {
   color: var(--ink-faint);
   flex: 0 0 auto;
   user-select: none;
+  transition: opacity 320ms ease-out;
 }
 
 #doc-path {

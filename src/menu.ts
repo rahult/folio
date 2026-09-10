@@ -118,6 +118,10 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "set-theme", theme: "night" };
     case "view.theme-newsprint":
       return { kind: "set-theme", theme: "newsprint" };
+    case "view.theme-manuscript":
+      return { kind: "set-theme", theme: "manuscript" };
+    case "view.theme-slate":
+      return { kind: "set-theme", theme: "slate" };
     case "app.check-updates":
       return { kind: "check-updates" };
     case "file.make-default":

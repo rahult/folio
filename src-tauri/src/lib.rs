@@ -797,7 +797,7 @@ fn config_dir(app: &AppHandle<Wry>) -> Result<std::path::PathBuf, String> {
 /// rebuild and re-set the whole menu.) Checkmarks are carried over — a
 /// rebuild must not reset view/watch state.
 fn rebuild_menu(app: &AppHandle<Wry>) {
-    const CHECK_IDS: [&str; 10] = [
+    const CHECK_IDS: [&str; 12] = [
         "view.focus-mode",
         "view.typewriter-mode",
         "view.review-mode",
@@ -806,8 +806,10 @@ fn rebuild_menu(app: &AppHandle<Wry>) {
         "file.watch",
         "view.telemetry",
         "view.theme-paper",
-        "view.theme-night",
+        "view.theme-manuscript",
         "view.theme-newsprint",
+        "view.theme-night",
+        "view.theme-slate",
     ];
     let mut checked: Vec<(String, bool)> = Vec::new();
     if let Some(menu) = app.menu() {
@@ -899,8 +901,10 @@ fn sync_menu_state(
         ("file.watch", watch),
         ("view.telemetry", telemetry),
         ("view.theme-paper", theme == "paper"),
-        ("view.theme-night", theme == "night"),
+        ("view.theme-manuscript", theme == "manuscript"),
         ("view.theme-newsprint", theme == "newsprint"),
+        ("view.theme-night", theme == "night"),
+        ("view.theme-slate", theme == "slate"),
     ];
     let Ok(items) = menu.items() else { return };
     for (id, checked) in checks {
@@ -1248,14 +1252,11 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
         .item(
             &SubmenuBuilder::new(app, "Themes")
                 .item(&check_item(app, "view.theme-paper", "Paper", None, true)?)
+                .item(&check_item(app, "view.theme-manuscript", "Manuscript", None, false)?)
+                .item(&check_item(app, "view.theme-newsprint", "Newsprint", None, false)?)
+                .separator()
                 .item(&check_item(app, "view.theme-night", "Night", None, false)?)
-                .item(&check_item(
-                    app,
-                    "view.theme-newsprint",
-                    "Newsprint",
-                    None,
-                    false,
-                )?)
+                .item(&check_item(app, "view.theme-slate", "Slate", None, false)?)
                 .build()?,
         )
         .separator()

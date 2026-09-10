@@ -153,9 +153,12 @@ their default applications.
   one holding the caret
 - **Typewriter Mode** — View → Typewriter Mode (⌥⌘Y) keeps the caret on
   a fixed line ~40% from the top while you type; composes with Focus Mode
-- **Themes** — View → Themes: Paper (default), Night (warm dark),
-  Newsprint (high-contrast near-white). Instant switching, persisted
-  across launches, respected by Source Mode and printing
+- **Themes** — View → Themes: Paper (default), Manuscript (deeper cream,
+  brown ink, for long reading), Newsprint (high-contrast near-white),
+  Night (warm dark), Slate (cool blue-grey dark). Instant switching,
+  persisted across launches, respected by Source Mode
+- **Quiet chrome** — the title strip and status bar fade while you type
+  and return when the mouse moves; the window has no separate title bar
 
 ## Download
 

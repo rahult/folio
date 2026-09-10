@@ -15,14 +15,20 @@
       {
         "title": "Folio",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "minWidth": 420,
+        "minHeight": 320
       }
     ],
     "security": {
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },

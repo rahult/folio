@@ -481,6 +481,11 @@ section + section {
   gap: 0.75rem;
 }
 
+.visual-themes .swatch:nth-child(4),
+.visual-themes .swatch:nth-child(5) {
+  grid-column: span 1;
+}
+
 .swatch {
   border-radius: 10px;
   padding: 1rem 1.1rem 1.1rem;
@@ -529,6 +534,33 @@ section + section {
 
 .swatch-night a {
   color: var(--night-accent);
+}
+
+.swatch-manuscript {
+  background: oklch(0.955 0.02 85);
+  color: oklch(0.31 0.03 60);
+  border-color: oklch(0.88 0.02 82);
+}
+
+.swatch-manuscript .swatch-name {
+  color: oklch(0.6 0.024 62);
+}
+
+.swatch-manuscript a {
+  color: oklch(0.45 0.1 30);
+}
+
+.swatch-slate {
+  background: oklch(0.255 0.018 250);
+  color: oklch(0.89 0.01 90);
+}
+
+.swatch-slate .swatch-name {
+  color: oklch(0.58 0.014 240);
+}
+
+.swatch-slate a {
+  color: oklch(0.72 0.11 60);
 }
 
 .swatch-newsprint {
