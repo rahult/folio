@@ -943,6 +943,53 @@ body.source-mode #main-row {
   cursor: pointer;
 }
 
+/* ——— authorship tints (View → Authorship) ——— */
+
+:root {
+  --tint-agent: oklch(0.6 0.1 250);
+  --tint-revision: oklch(0.62 0.12 150);
+}
+
+:root[data-theme="night"],
+:root[data-theme="slate"] {
+  --tint-agent: oklch(0.7 0.1 250);
+  --tint-revision: oklch(0.72 0.12 150);
+}
+
+.milkdown .ProseMirror .prov-external {
+  background: color-mix(in oklch, var(--tint-agent) 18%, transparent);
+  border-radius: 2px;
+}
+
+.milkdown .ProseMirror .prov-revision {
+  background: color-mix(in oklch, var(--tint-revision) 22%, transparent);
+  border-radius: 2px;
+}
+
+#authorship-legend {
+  display: inline-flex;
+  gap: 10px;
+  font-style: normal;
+}
+
+#authorship-legend[hidden] {
+  display: none;
+}
+
+#authorship-legend i {
+  font-style: normal;
+  padding: 0 5px;
+  border-radius: 2px;
+}
+
+#authorship-legend .prov-external {
+  background: color-mix(in oklch, var(--tint-agent) 18%, transparent);
+}
+
+#authorship-legend .prov-revision {
+  background: color-mix(in oklch, var(--tint-revision) 22%, transparent);
+}
+
 /* ——— review mode ——— */
 
 /* Read-only page: no caret, and the current block carries an accent rule

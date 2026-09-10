@@ -74,6 +74,25 @@ pub fn request_path_in(dir: &Path, path: &str) -> PathBuf {
     dir.join(format!("{}.json", crate::path_hash(path)))
 }
 
+/// Marker left by a "changes requested" verdict so the next on-disk
+/// rewrite of the document is archived as the agent's revision. Lives
+/// beside the handshake so every window (and the CLI-spawned review
+/// window) sees the same answer.
+fn changes_marker_in(dir: &Path, path: &str) -> PathBuf {
+    dir.join(format!("{}.changes", crate::path_hash(path)))
+}
+
+pub fn mark_changes_requested_in(dir: &Path, path: &str) {
+    let _ = std::fs::create_dir_all(dir);
+    let _ = std::fs::write(changes_marker_in(dir, path), b"");
+}
+
+/// True (and consumed) when a changes-requested verdict is pending a
+/// rewrite for `path`.
+pub fn take_changes_requested_in(dir: &Path, path: &str) -> bool {
+    std::fs::remove_file(changes_marker_in(dir, path)).is_ok()
+}
+
 /// Write the request atomically so a concurrent poller never sees a
 /// half-written file.
 pub fn write_request_in(dir: &Path, req: &ReviewRequest) -> std::io::Result<()> {
@@ -241,6 +260,15 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn changes_marker_is_consumed_once() {
+        let dir = temp_dir("changes-marker");
+        assert!(!take_changes_requested_in(&dir, "/p.md"));
+        mark_changes_requested_in(&dir, "/p.md");
+        assert!(take_changes_requested_in(&dir, "/p.md"));
+        assert!(!take_changes_requested_in(&dir, "/p.md"));
     }
 
     #[test]

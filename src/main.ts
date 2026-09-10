@@ -17,6 +17,8 @@ import { collectExportFonts, exportHooksFor } from "./exporthooks";
 import { renderExportHtml } from "./exportrender";
 import { resolveImageSrc } from "./images";
 import { anchorFromMarkdown, offsetFromAnchor } from "./caretmap";
+import { attribute, type Origin, type RevisionText } from "./provenance";
+import { clearProvenance, setProvenance } from "./provview";
 import { buildOutline, readingMinutes, sectionAtOffset, type OutlineEntry } from "./outline";
 import { decisionFilePath, readTakeaway, writeTakeaway } from "./decisionfile";
 import {
@@ -130,6 +132,7 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
   if (doc.dirty && reviewRequest?.state === "waiting") documentEditedDuringReview = true;
   renderStatus(markdown);
   scheduleOutlineRefresh();
+  scheduleAuthorshipRefresh();
   renderTitle();
 }, {
   // Consulted when each image node renders, so it must read the live path.
@@ -203,7 +206,7 @@ async function loadFromPath(path: string, options?: { visit?: boolean }): Promis
   recordRecent(path);
   saveSessionNow();
   void loadAnnotationsForOpenFile();
-  void archiveCurrentRevision();
+  void archiveCurrentRevision("unknown").then(refreshAuthorship);
   if (options?.visit !== false) {
     nav.visit(path);
     renderNavButtons();
@@ -300,7 +303,7 @@ async function saveFile(saveAs = false): Promise<void> {
   renderTabs();
   recordRecent(path);
   saveSessionNow();
-  void archiveCurrentRevision();
+  void archiveCurrentRevision("folio").then(refreshAuthorship);
   renderTitle();
   syncWatch();
 }
@@ -444,6 +447,7 @@ function syncMenuState(): void {
     typewriter: typewriterMode,
     review: reviewMode,
     panel: isPanelOpen(),
+    authorship: authorshipOn,
     theme: appliedTheme,
     floating: floatMode,
     watch: watchEnabled,
@@ -753,7 +757,7 @@ async function pollDisk(): Promise<void> {
   // A rewrite mid-review must not bounce the reviewer out of review mode.
   const stayInReview = reviewMode;
   await loadContent(incoming, path);
-  void archiveCurrentRevision();
+  void archiveCurrentRevision("external").then(refreshAuthorship);
   if (!sourceMode) {
     // The reload recreated the editor — re-render annotation marks too.
     renderAnnotationsNow();
@@ -1330,15 +1334,62 @@ interface RevisionMeta {
 
 /** Archive the current version of the open file and refresh the History
  *  menu. Called on open, on watched reload, and on save. */
-async function archiveCurrentRevision(): Promise<void> {
+async function archiveCurrentRevision(origin: Origin): Promise<void> {
   const path = doc.filePath;
   if (!path) return;
   let rendered = "";
   editor.withView((view) => {
     rendered = renderedText(view);
   });
-  await invoke("archive_revision", { path, markdown: currentMarkdown(), rendered });
+  await invoke("archive_revision", { path, markdown: currentMarkdown(), rendered, origin });
   await refreshRevisionMenu();
+}
+
+// ——— authorship ———
+//
+// Who wrote which words, from the revision archive's origins: agent
+// rewrites are tinted, the reviewer's own words are not. Off by default.
+
+const AUTHORSHIP_KEY = "folio-authorship";
+let authorshipOn = localStorage.getItem(AUTHORSHIP_KEY) === "on";
+let authorshipTimer: ReturnType<typeof setTimeout> | null = null;
+const authorshipLegend = document.querySelector<HTMLElement>("#authorship-legend")!;
+
+function toggleAuthorship(): void {
+  authorshipOn = !authorshipOn;
+  localStorage.setItem(AUTHORSHIP_KEY, authorshipOn ? "on" : "off");
+  document.body.classList.toggle("authorship", authorshipOn);
+  authorshipLegend.hidden = !authorshipOn;
+  if (authorshipOn) void refreshAuthorship();
+  else editor.withView(clearProvenance);
+  syncMenuState();
+}
+
+async function refreshAuthorship(): Promise<void> {
+  if (!authorshipOn || sourceMode) return;
+  const path = doc.filePath;
+  if (!path) {
+    editor.withView(clearProvenance);
+    return;
+  }
+  let revisions: RevisionText[];
+  try {
+    revisions = await invoke<RevisionText[]>("list_revision_contents", { path });
+  } catch {
+    return;
+  }
+  if (doc.filePath !== path) return;
+  editor.withView((view) => {
+    setProvenance(view, attribute(revisions, renderedText(view)));
+  });
+}
+
+/** Typing changes attribution (new words are the reviewer's); recompute
+ *  once it settles. */
+function scheduleAuthorshipRefresh(): void {
+  if (!authorshipOn) return;
+  if (authorshipTimer !== null) clearTimeout(authorshipTimer);
+  authorshipTimer = setTimeout(() => void refreshAuthorship(), 600);
 }
 
 async function refreshRevisionMenu(): Promise<void> {
@@ -1556,6 +1607,9 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return;
     case "toggle-panel":
       togglePanel();
+      return;
+    case "toggle-authorship":
+      toggleAuthorship();
       return;
     case "close-tab":
       return closeActiveTab();
@@ -1848,6 +1902,8 @@ void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
 });
 // Align the native menu checkmarks with the actual (possibly persisted)
 // view-mode state.
+document.body.classList.toggle("authorship", authorshipOn);
+authorshipLegend.hidden = !authorshipOn;
 syncMenuState();
 // Ask for telemetry consent on first launch; otherwise honor the choice.
 initTelemetryFlow();

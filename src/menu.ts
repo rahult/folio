@@ -20,6 +20,7 @@ export type MenuAction =
   | { kind: "toggle-typewriter-mode" }
   | { kind: "toggle-review-mode" }
   | { kind: "toggle-panel" }
+  | { kind: "toggle-authorship" }
   | { kind: "close-tab" }
   | { kind: "next-tab" }
   | { kind: "prev-tab" }
@@ -97,6 +98,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-review-mode" };
     case "view.panel":
       return { kind: "toggle-panel" };
+    case "view.authorship":
+      return { kind: "toggle-authorship" };
     case "file.close":
       return { kind: "close-tab" };
     case "view.next-tab":

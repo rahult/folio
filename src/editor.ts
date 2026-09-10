@@ -29,6 +29,7 @@ import { adjustHeadingLevel, type EditorCommand, type HeadingDirection } from ".
 import { diffViewPlugin } from "./diffview";
 import { annotationPlugin } from "./annotview";
 import { reviewViewPlugin } from "./reviewview";
+import { provViewPlugin } from "./provview";
 import { mermaidRenderPreview } from "./mermaid";
 import { alnumCount, positionForAnchor, type CaretAnchor, type TextSegment } from "./caretmap";
 import { TextSelection } from "@milkdown/kit/prose/state";
@@ -128,6 +129,8 @@ export class MarkdownEditor {
     this.crepe.editor.use(annotationPlugin);
     // Review Mode: read-only page, current-block rule, inline entry field.
     this.crepe.editor.use(reviewViewPlugin);
+    // Authorship tints (who wrote which words).
+    this.crepe.editor.use(provViewPlugin);
 
     await this.crepe.create();
   }

@@ -488,11 +488,21 @@ fn set_default_markdown_handler(_bundle_id: &str) -> Result<(), String> {
 
 const MAX_REVISIONS: usize = 20;
 
+fn unknown_origin() -> String {
+    "unknown".to_string()
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct RevisionContent {
     markdown: String,
     rendered: String,
     archived_at: u64,
+    /// Who produced this version: "external" (rewritten on disk while
+    /// watched), "revision" (the first rewrite after a changes-requested
+    /// verdict), "folio" (saved here), or "unknown" (archives from before
+    /// origins were recorded, and the file as first opened).
+    #[serde(default = "unknown_origin")]
+    origin: String,
 }
 
 #[derive(serde::Serialize)]
@@ -500,6 +510,15 @@ struct RevisionMeta {
     seq: u64,
     archived_at: u64,
     preview: String,
+    origin: String,
+}
+
+/// One link of the authorship chain: rendered text plus who wrote it.
+#[derive(serde::Serialize)]
+struct RevisionText {
+    seq: u64,
+    rendered: String,
+    origin: String,
 }
 
 /// FNV-1a hex of the reviewed file's path — stable directory name.
@@ -544,6 +563,7 @@ fn archive_in_dir(
     markdown: &str,
     rendered: &str,
     now: u64,
+    origin: &str,
 ) -> Result<u64, String> {
     fs::create_dir_all(dir).map_err(|e| format!("failed to create history dir: {e}"))?;
     let seqs = revision_seqs(dir);
@@ -559,6 +579,7 @@ fn archive_in_dir(
         markdown: markdown.to_string(),
         rendered: rendered.to_string(),
         archived_at: now,
+        origin: origin.to_string(),
     };
     let json = serde_json::to_string(&content).map_err(|e| e.to_string())?;
     fs::write(dir.join(format!("{seq}.json")), json)
@@ -589,6 +610,7 @@ fn list_in_dir(dir: &std::path::Path) -> Vec<RevisionMeta> {
                 seq,
                 archived_at: content.archived_at,
                 preview,
+                origin: content.origin,
             })
         })
         .collect();
@@ -614,8 +636,32 @@ fn archive_revision(
     path: String,
     markdown: String,
     rendered: String,
+    origin: String,
 ) -> Result<u64, String> {
-    archive_in_dir(&history_dir(&app, &path)?, &markdown, &rendered, now_secs())
+    // The first rewrite after "changes requested" is the agent's revision,
+    // whichever window happens to archive it.
+    let origin = if origin == "external"
+        && reviewgate::take_changes_requested_in(&reviewgate::review_dir(), &path)
+    {
+        "revision".to_string()
+    } else {
+        origin
+    };
+    archive_in_dir(&history_dir(&app, &path)?, &markdown, &rendered, now_secs(), &origin)
+}
+
+/// Every archived revision's rendered text and origin, oldest first — the
+/// input to the authorship chain.
+#[tauri::command]
+fn list_revision_contents(app: AppHandle<Wry>, path: String) -> Result<Vec<RevisionText>, String> {
+    let dir = history_dir(&app, &path)?;
+    Ok(revision_seqs(&dir)
+        .into_iter()
+        .filter_map(|seq| {
+            let content = read_revision_file(&dir, seq).ok()?;
+            Some(RevisionText { seq, rendered: content.rendered, origin: content.origin })
+        })
+        .collect())
 }
 
 /// List archived revisions, newest first.
@@ -797,11 +843,12 @@ fn config_dir(app: &AppHandle<Wry>) -> Result<std::path::PathBuf, String> {
 /// rebuild and re-set the whole menu.) Checkmarks are carried over — a
 /// rebuild must not reset view/watch state.
 fn rebuild_menu(app: &AppHandle<Wry>) {
-    const CHECK_IDS: [&str; 12] = [
+    const CHECK_IDS: [&str; 13] = [
         "view.focus-mode",
         "view.typewriter-mode",
         "view.review-mode",
         "view.panel",
+        "view.authorship",
         "view.float-on-top",
         "file.watch",
         "view.telemetry",
@@ -886,6 +933,7 @@ fn sync_menu_state(
     typewriter: bool,
     review: bool,
     panel: bool,
+    authorship: bool,
     theme: String,
     floating: bool,
     watch: bool,
@@ -897,6 +945,7 @@ fn sync_menu_state(
         ("view.typewriter-mode", typewriter),
         ("view.review-mode", review),
         ("view.panel", panel),
+        ("view.authorship", authorship),
         ("view.float-on-top", floating),
         ("file.watch", watch),
         ("view.telemetry", telemetry),
@@ -1237,6 +1286,13 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             Some("CmdOrCtrl+Shift+O"),
             false,
         )?)
+        .item(&check_item(
+            app,
+            "view.authorship",
+            "Authorship",
+            Some("CmdOrCtrl+Shift+A"),
+            false,
+        )?)
         .separator()
         .item(&menu_item(app, "view.next-tab", "Next Tab", Some("Ctrl+Tab"))?)
         .item(&menu_item(app, "view.prev-tab", "Previous Tab", Some("Ctrl+Shift+Tab"))?)
@@ -1331,7 +1387,11 @@ fn resolve_review(
         &feedback,
         document_edited,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    if state == reviewgate::ReviewState::Changes {
+        reviewgate::mark_changes_requested_in(&reviewgate::review_dir(), &path);
+    }
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1421,6 +1481,7 @@ pub fn run() {
             delete_annotation,
             set_revision_menu,
             archive_revision,
+            list_revision_contents,
             list_revisions,
             read_revision,
             register_default_markdown_handler,
@@ -1713,8 +1774,8 @@ mod tests {
     #[test]
     fn archive_stores_and_lists_revisions_newest_first() {
         let dir = history_test_dir("basic");
-        archive_in_dir(&dir, "# v1\n", "v1 rendered", 1000).unwrap();
-        archive_in_dir(&dir, "# v2\n", "v2 rendered", 2000).unwrap();
+        archive_in_dir(&dir, "# v1\n", "v1 rendered", 1000, "external").unwrap();
+        archive_in_dir(&dir, "# v2\n", "v2 rendered", 2000, "external").unwrap();
 
         let list = list_in_dir(&dir);
         assert_eq!(list.len(), 2);
@@ -1733,8 +1794,8 @@ mod tests {
     #[test]
     fn archive_skips_duplicates_of_the_latest_revision() {
         let dir = history_test_dir("dedupe");
-        let first = archive_in_dir(&dir, "# same\n", "same", 1000).unwrap();
-        let second = archive_in_dir(&dir, "# same\n", "same", 2000).unwrap();
+        let first = archive_in_dir(&dir, "# same\n", "same", 1000, "external").unwrap();
+        let second = archive_in_dir(&dir, "# same\n", "same", 2000, "external").unwrap();
 
         assert_eq!(first, second);
         assert_eq!(list_in_dir(&dir).len(), 1);
@@ -1743,10 +1804,27 @@ mod tests {
     }
 
     #[test]
+    fn revisions_record_their_origin_and_default_to_unknown() {
+        let dir = history_test_dir("origin");
+        archive_in_dir(&dir, "# a\n", "a", 1, "external").unwrap();
+        archive_in_dir(&dir, "# b\n", "b", 2, "folio").unwrap();
+        let list = list_in_dir(&dir);
+        assert_eq!(list[0].origin, "folio");
+        assert_eq!(list[1].origin, "external");
+        // An archive written before origins existed reads as unknown.
+        fs::write(
+            dir.join("3.json"),
+            r##"{"markdown":"# c","rendered":"c","archived_at":3}"##,
+        )
+        .unwrap();
+        assert_eq!(read_revision_file(&dir, 3).unwrap().origin, "unknown");
+    }
+
+    #[test]
     fn archive_prunes_to_the_newest_twenty() {
         let dir = history_test_dir("prune");
         for i in 0..25 {
-            archive_in_dir(&dir, &format!("# v{i}\n"), "rendered", 1000 + i).unwrap();
+            archive_in_dir(&dir, &format!("# v{i}\n"), "rendered", 1000 + i, "external").unwrap();
         }
 
         let seqs = revision_seqs(&dir);

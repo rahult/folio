@@ -129,6 +129,11 @@ The skill expects `folio` on PATH (or falls back to the app bundle):
 mkdir -p ~/.local/bin && printf '#!/bin/sh\nexec /Applications/Folio.app/Contents/MacOS/folio "$@"\n' > ~/.local/bin/folio && chmod +x ~/.local/bin/folio
 ```
 
+**View → Authorship** (⇧⌘A) tints who wrote which words: text an agent
+wrote on disk in a quiet blue, text it rewrote after you requested changes
+in green, and your own words untinted. Nothing to paste or mark: Folio
+knows from the revisions it archives while watching the file.
+
 **File → Revision History** archives every on-disk version of the reviewed
 file (newest 20) and diffs any of them against the current document — see
 exactly what changed between v1 and v4 without leaving the editor.
