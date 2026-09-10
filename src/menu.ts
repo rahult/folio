@@ -18,6 +18,7 @@ export type MenuAction =
   | { kind: "toggle-source-mode" }
   | { kind: "toggle-focus-mode" }
   | { kind: "toggle-typewriter-mode" }
+  | { kind: "toggle-review-mode" }
   | { kind: "toggle-float" }
   | { kind: "toggle-watch" }
   | { kind: "toggle-telemetry" }
@@ -88,6 +89,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "toggle-focus-mode" };
     case "view.typewriter-mode":
       return { kind: "toggle-typewriter-mode" };
+    case "view.review-mode":
+      return { kind: "toggle-review-mode" };
     case "view.float-on-top":
       return { kind: "toggle-float" };
     case "view.telemetry":

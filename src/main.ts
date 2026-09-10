@@ -395,6 +395,7 @@ async function exportPdf(): Promise<void> {
 
 let focusMode = false;
 let typewriterMode = false;
+let reviewMode = false;
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -404,6 +405,7 @@ function syncMenuState(): void {
   void invoke("sync_menu_state", {
     focus: focusMode,
     typewriter: typewriterMode,
+    review: reviewMode,
     theme: appliedTheme,
     floating: floatMode,
     watch: watchEnabled,
