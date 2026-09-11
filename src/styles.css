@@ -1577,6 +1577,114 @@ body.review-mode #editor .milkdown .ProseMirror {
   text-align: left;
 }
 
+/* lenses tab */
+#analysis-root {
+  padding: 4px 12px 16px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.lens-card {
+  margin: 10px 0 14px;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper-raised);
+}
+
+.lens-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.lens-title {
+  font-weight: 600;
+}
+
+.lens-meta {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.lens-body {
+  font-family: var(--font-prose);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.lens-body h1,
+.lens-body h2,
+.lens-body h3,
+.lens-body h4 {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 10px 0 4px;
+}
+
+.lens-body p {
+  margin: 0 0 8px;
+}
+
+.lens-body ul,
+.lens-body ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.lens-body li {
+  margin-bottom: 3px;
+}
+
+.lens-body code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--paper-sunken);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+}
+
+.lens-body blockquote {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.lens-actions {
+  margin-top: 4px;
+}
+
+.lens-settings-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 16px;
+  padding: 6px 0;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  background: none;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lens-settings-toggle:hover {
+  color: var(--ink);
+}
+
 /* outline — headings with their section's reading time */
 #outline-list {
   list-style: none;

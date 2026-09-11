@@ -41,6 +41,15 @@ import {
   writeTakeaway,
 } from "./decisionfile";
 import { JOURNAL_HEADER, dueRevisits, journalEntryLine, parseJournal, type JournalEntry } from "./journal";
+import {
+  BUILTIN_LENSES,
+  appendLensResult,
+  buildLensMessages,
+  parseAnalysis,
+  parseLensFile,
+  type Lens,
+} from "./lenses";
+import { renderMarkdownSafe } from "./exportrender";
 import { documentDir, join } from "@tauri-apps/api/path";
 import {
   activeTab,
@@ -49,6 +58,7 @@ import {
   onOutlinePick,
   onPanelChange,
   openPanel,
+  renderAnalysis,
   renderDecide,
   renderHistory,
   renderOutline,
@@ -607,7 +617,14 @@ editor.onSelectionUpdate(() => {
   if (typewriterMode) scrollCaretToTypewriterLine();
   trackCurrentSection();
   if (!wikiComplete.hidden && !wikiPrefix()) closeWikiComplete();
+  if (isPanelOpen() && activeTab() === "analysis") scheduleAnalysisRefresh();
 });
+
+let analysisTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleAnalysisRefresh(): void {
+  if (analysisTimer !== null) clearTimeout(analysisTimer);
+  analysisTimer = setTimeout(() => void refreshAnalysis(), 250);
+}
 
 // ——— reading panel: outline, stats, takeaway ———
 
@@ -682,7 +699,11 @@ function goToHeading(entry: OutlineEntry): void {
 }
 
 onOutlinePick(goToHeading);
-onPanelChange(syncMenuState);
+onPanelChange(() => {
+  syncMenuState();
+  // Custom lenses are plain files; pick up new ones whenever the tab shows.
+  if (isPanelOpen() && activeTab() === "analysis") void loadCustomLenses().then(() => void refreshAnalysis());
+});
 sourceEditor.addEventListener("selectionchange", trackCurrentSection);
 document.addEventListener("selectionchange", () => {
   if (sourceMode && document.activeElement === sourceEditor) trackCurrentSection();
@@ -712,6 +733,7 @@ async function loadTakeaway(): Promise<void> {
   if (doc.filePath !== path) return;
   setTakeaway(decisionFileText ? readTakeaway(decisionFileText) : "");
   void refreshDecide();
+  void loadAnalysis();
 }
 
 /** Write a new version of the decision file, keeping the in-memory copy
@@ -730,6 +752,206 @@ async function writeDecisionFile(next: string): Promise<boolean> {
   } catch {
     if (doc.filePath === path) markTakeawaySaveFailed(true);
     return false;
+  }
+}
+
+// ——— lenses ———
+//
+// A document (or a selected passage) read through a mental model by the
+// user's own model endpoint. Results go to <doc>.analysis.md; the key
+// stays in the keychain and the request is made from Rust.
+
+const LENS_SETTINGS_KEY = "folio-lens-settings";
+const LENS_SELECTED_KEY = "folio-lens-selected";
+
+interface LensSettings {
+  baseUrl: string;
+  model: string;
+}
+
+function loadLensSettings(): LensSettings {
+  try {
+    const raw = localStorage.getItem(LENS_SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<LensSettings>;
+      return { baseUrl: parsed.baseUrl ?? "", model: parsed.model ?? "" };
+    }
+  } catch {
+    // fall through
+  }
+  return { baseUrl: "", model: "" };
+}
+
+let lensSettings = loadLensSettings();
+let lensHasKey = false;
+let lensSettingsOpen = !lensSettings.baseUrl;
+let selectedLens = localStorage.getItem(LENS_SELECTED_KEY) ?? BUILTIN_LENSES[0].id;
+let customLenses: Lens[] = [];
+let lensRunning = false;
+let lensStatus = "";
+let analysisFileText: string | null = null;
+let lensesFolderPath = "~/Documents/Folio/lenses";
+
+function analysisFilePath(docPath: string): string {
+  return `${docPath}.analysis.md`;
+}
+
+async function loadAnalysis(): Promise<void> {
+  const path = doc.filePath;
+  if (!path) {
+    analysisFileText = null;
+    void refreshAnalysis();
+    return;
+  }
+  try {
+    analysisFileText = await invoke<string>("read_text_file", { path: analysisFilePath(path) });
+  } catch {
+    analysisFileText = null;
+  }
+  if (doc.filePath !== path) return;
+  void refreshAnalysis();
+}
+
+async function loadCustomLenses(): Promise<void> {
+  try {
+    const files = await invoke<{ name: string; text: string }[]>("list_custom_lenses");
+    customLenses = files.map((f) => parseLensFile(f.name, f.text));
+  } catch {
+    customLenses = [];
+  }
+}
+
+function allLenses(): Lens[] {
+  return [...BUILTIN_LENSES, ...customLenses];
+}
+
+/** The passage a lens would focus on: the selection, or the current block
+ *  in Review Mode; null means the whole document. */
+function lensSelection(): string | null {
+  if (sourceMode) {
+    const { selectionStart, selectionEnd, value } = sourceEditor;
+    return selectionEnd > selectionStart ? value.slice(selectionStart, selectionEnd) : null;
+  }
+  let text = "";
+  editor.withView((view) => {
+    const { from, to } = view.state.selection;
+    if (to > from) text = view.state.doc.textBetween(from, to, "\n", " ");
+    else if (reviewMode) text = targetQuote(view);
+  });
+  return text.trim() ? text : null;
+}
+
+async function refreshAnalysis(): Promise<void> {
+  const entries = parseAnalysis(analysisFileText ?? "");
+  const results = await Promise.all(
+    entries.map(async (e) => ({ lens: e.lens, model: e.model, date: e.date, scope: e.scope, html: await renderMarkdownSafe(e.body) })),
+  );
+  renderAnalysis(
+    {
+      enabled: doc.filePath !== null,
+      lenses: allLenses().map(({ id, name, description, builtin }) => ({ id, name, description, builtin })),
+      selectedLens,
+      selection: lensSelection(),
+      running: lensRunning,
+      status: lensStatus,
+      results,
+      settings: { ...lensSettings, hasKey: lensHasKey, open: lensSettingsOpen },
+      lensesFolder: lensesFolderPath,
+    },
+    {
+      onSelectLens: (id) => {
+        selectedLens = id;
+        localStorage.setItem(LENS_SELECTED_KEY, id);
+        void refreshAnalysis();
+      },
+      onRun: () => void runSelectedLens(),
+      onToggleSettings: () => {
+        lensSettingsOpen = !lensSettingsOpen;
+        void refreshAnalysis();
+      },
+      onSaveSettings: (settings) => {
+        void (async () => {
+          lensSettings = { baseUrl: settings.baseUrl, model: settings.model };
+          localStorage.setItem(LENS_SETTINGS_KEY, JSON.stringify(lensSettings));
+          if (settings.key !== null) {
+            try {
+              await invoke("set_llm_key", { key: settings.key });
+            } catch (err) {
+              lensStatus = `Could not store the key: ${String(err)}`;
+            }
+            lensHasKey = settings.key !== "" && (await invoke<boolean>("has_llm_key").catch(() => false));
+          }
+          lensSettingsOpen = false;
+          if (!lensStatus) lensStatus = "Saved.";
+          void refreshAnalysis();
+        })();
+      },
+      onOpenLensesFolder: () => {
+        void (async () => {
+          try {
+            const folder = await invoke<string>("lenses_folder");
+            await openPath(folder);
+          } catch {
+            // nothing to open
+          }
+        })();
+      },
+      onAnnotate: ({ lens, scope }) => {
+        // A lens finding becomes a comment on the passage it ran on (or the
+        // block under the caret), quoting the lens so the agent knows why.
+        if (scope !== "document") {
+          editor.withView((view) => {
+            const { segments } = docSegments(view);
+            const range = findQuoteRange(segments, scope, view.state.doc.content.size);
+            if (range) {
+              view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, range.from, range.to)).scrollIntoView());
+            }
+          });
+        }
+        openInlineEntry("comment", `From the “${lens}” lens: `);
+      },
+    },
+  );
+}
+
+async function runSelectedLens(): Promise<void> {
+  const path = doc.filePath;
+  const lens = allLenses().find((l) => l.id === selectedLens);
+  if (!path || !lens || lensRunning) return;
+  if (!lensSettings.baseUrl || !lensSettings.model) {
+    lensSettingsOpen = true;
+    lensStatus = "Set the endpoint and model first.";
+    void refreshAnalysis();
+    return;
+  }
+  const selection = lensSelection();
+  const { system, user } = buildLensMessages(lens, doc.fileName, currentMarkdown(), selection);
+  lensRunning = true;
+  lensStatus = `Asking ${lensSettings.model}…`;
+  trackEvent("lens_run", { lens: lens.id });
+  void refreshAnalysis();
+  try {
+    const result = await invoke<{ text: string; model: string; usage: { prompt_tokens: number; completion_tokens: number } }>(
+      "run_lens",
+      { baseUrl: lensSettings.baseUrl, model: lensSettings.model, system, user, maxTokens: 1200 },
+    );
+    if (doc.filePath !== path) return;
+    const next = appendLensResult(analysisFileText, doc.fileName, path, {
+      lens: lens.name,
+      model: result.model,
+      date: new Date().toISOString().slice(0, 10),
+      scope: selection ?? "document",
+      body: result.text.trim() || "(the model returned nothing)",
+    });
+    await invoke("write_text_file", { path: analysisFilePath(path), contents: next });
+    analysisFileText = next;
+    const tokens = result.usage.prompt_tokens + result.usage.completion_tokens;
+    lensStatus = tokens > 0 ? `Done · ${tokens.toLocaleString()} tokens` : "Done.";
+  } catch (err) {
+    lensStatus = `Failed: ${String(err)}`;
+  } finally {
+    lensRunning = false;
+    void refreshAnalysis();
   }
 }
 
@@ -1426,7 +1648,7 @@ function selectionOrBlockQuote(view: EditorView): string {
  *  mode's c / r: open the inline entry under the target passage. In
  *  review mode the target is the current block (or a selection inside it);
  *  while editing it is the selection or the block under the caret. */
-function openInlineEntry(kind: "comment" | "replace"): void {
+function openInlineEntry(kind: "comment" | "replace", prefill = ""): void {
   if (sourceMode || !doc.filePath) return;
   editor.withView((view) => {
     const quote = reviewMode ? targetQuote(view) : selectionOrBlockQuote(view);
@@ -1434,6 +1656,7 @@ function openInlineEntry(kind: "comment" | "replace"): void {
     if (!reviewMode) setCurrentByPos(view, view.state.selection.from);
     openEntry(view, {
       kind,
+      prefill,
       onSubmit: (body) => {
         closeEntry(view);
         addAnnotation(kind, quote, body);
@@ -1966,6 +2189,9 @@ function runReviewAction(action: ReviewAction): void {
     case "decide":
       openPanel("decide");
       return;
+    case "lens":
+      openPanel("analysis");
+      return;
   }
 }
 
@@ -2455,6 +2681,12 @@ void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
 document.body.classList.toggle("authorship", authorshipOn);
 authorshipLegend.hidden = !authorshipOn;
 void refreshDueRevisits().then(() => void refreshDecide());
+void (async () => {
+  await loadCustomLenses();
+  lensHasKey = await invoke<boolean>("has_llm_key").catch(() => false);
+  lensesFolderPath = await invoke<string>("lenses_folder").catch(() => lensesFolderPath);
+  void refreshAnalysis();
+})();
 syncMenuState();
 // Ask for telemetry consent on first launch; otherwise honor the choice.
 initTelemetryFlow();

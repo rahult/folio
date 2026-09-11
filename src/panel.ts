@@ -7,7 +7,7 @@
 
 import type { OutlineEntry } from "./outline";
 
-export type PanelTab = "outline" | "annotations" | "history" | "decide";
+export type PanelTab = "outline" | "annotations" | "history" | "analysis" | "decide";
 
 const TAB_KEY = "folio-panel-tab";
 
@@ -16,14 +16,17 @@ const tabButtons: Record<PanelTab, HTMLButtonElement> = {
   outline: document.querySelector<HTMLButtonElement>("#panel-tab-outline")!,
   annotations: document.querySelector<HTMLButtonElement>("#panel-tab-annotations")!,
   history: document.querySelector<HTMLButtonElement>("#panel-tab-history")!,
+  analysis: document.querySelector<HTMLButtonElement>("#panel-tab-analysis")!,
   decide: document.querySelector<HTMLButtonElement>("#panel-tab-decide")!,
 };
 const tabPanels: Record<PanelTab, HTMLElement> = {
   outline: document.querySelector<HTMLElement>("#panel-outline")!,
   annotations: document.querySelector<HTMLElement>("#panel-annotations")!,
   history: document.querySelector<HTMLElement>("#panel-history")!,
+  analysis: document.querySelector<HTMLElement>("#panel-analysis")!,
   decide: document.querySelector<HTMLElement>("#panel-decide")!,
 };
+const analysisRoot = document.querySelector<HTMLElement>("#analysis-root")!;
 const decideRoot = document.querySelector<HTMLElement>("#decide-root")!;
 const historyList = document.querySelector<HTMLOListElement>("#history-list")!;
 const closeBtn = document.querySelector<HTMLButtonElement>("#panel-close")!;
@@ -42,7 +45,9 @@ let cursor = -1;
 function restoreTab(): PanelTab {
   try {
     const stored = localStorage.getItem(TAB_KEY);
-    return stored === "annotations" || stored === "history" || stored === "decide" ? stored : "outline";
+    return stored === "annotations" || stored === "history" || stored === "analysis" || stored === "decide"
+      ? stored
+      : "outline";
   } catch {
     return "outline";
   }
@@ -534,4 +539,162 @@ export function renderDecide(model: DecideModel, on: DecideHandlers): void {
   const foot = note(`Journal: ${model.journalPath}`);
   foot.className = "decide-note decide-foot";
   root.append(foot);
+}
+
+// ——— lenses (analysis) tab ———
+
+export interface AnalysisModel {
+  enabled: boolean;
+  lenses: { id: string; name: string; description: string; builtin: boolean }[];
+  selectedLens: string;
+  /** The selected passage, or null for the whole document. */
+  selection: string | null;
+  running: boolean;
+  status: string;
+  results: { lens: string; model: string; date: string; scope: string; html: string }[];
+  settings: { baseUrl: string; model: string; hasKey: boolean; open: boolean };
+  lensesFolder: string;
+}
+
+export interface AnalysisHandlers {
+  onSelectLens(id: string): void;
+  onRun(): void;
+  onToggleSettings(): void;
+  onSaveSettings(settings: { baseUrl: string; model: string; key: string | null }): void;
+  onOpenLensesFolder(): void;
+  onAnnotate(result: { lens: string; scope: string }): void;
+}
+
+export function renderAnalysis(model: AnalysisModel, on: AnalysisHandlers): void {
+  const root = analysisRoot;
+  root.replaceChildren();
+  if (!model.enabled) {
+    root.append(note("Save the document to run a lens over it."));
+    return;
+  }
+
+  // Run controls
+  root.append(h("Read it through a lens"));
+  const select = document.createElement("select");
+  select.className = "decide-select";
+  const groups: [string, typeof model.lenses][] = [
+    ["Built in", model.lenses.filter((l) => l.builtin)],
+    ["Yours", model.lenses.filter((l) => !l.builtin)],
+  ];
+  for (const [label, lenses] of groups) {
+    if (lenses.length === 0) continue;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    for (const lens of lenses) {
+      const opt = document.createElement("option");
+      opt.value = lens.id;
+      opt.textContent = lens.name;
+      opt.selected = lens.id === model.selectedLens;
+      group.append(opt);
+    }
+    select.append(group);
+  }
+  select.addEventListener("change", () => on.onSelectLens(select.value));
+  root.append(select);
+  const chosen = model.lenses.find((l) => l.id === model.selectedLens);
+  if (chosen?.description) root.append(note(chosen.description));
+
+  const scope = note(
+    model.selection
+      ? `On the selection: “${model.selection.replace(/\s+/g, " ").slice(0, 90)}${model.selection.length > 90 ? "…" : ""}”`
+      : "On the whole document. Select a passage to focus a lens on it.",
+  );
+  root.append(scope);
+
+  const run = document.createElement("button");
+  run.type = "button";
+  run.className = "decide-button primary";
+  run.textContent = model.running ? "Running…" : "Run lens";
+  run.disabled = model.running || !model.settings.baseUrl || !model.settings.model;
+  run.addEventListener("click", () => on.onRun());
+  root.append(run);
+  if (model.status) root.append(note(model.status));
+
+  // Results
+  if (model.results.length > 0) root.append(h("Results"));
+  for (const r of model.results) {
+    const card = document.createElement("article");
+    card.className = "lens-card";
+    const head = document.createElement("div");
+    head.className = "lens-head";
+    const title = document.createElement("span");
+    title.className = "lens-title";
+    title.textContent = r.lens;
+    const meta = document.createElement("span");
+    meta.className = "lens-meta";
+    meta.textContent = `${r.date} · ${r.model}${r.scope === "document" ? "" : " · on a passage"}`;
+    head.append(title, meta);
+    const body = document.createElement("div");
+    body.className = "lens-body";
+    body.innerHTML = r.html;
+    const actions = document.createElement("div");
+    actions.className = "lens-actions";
+    const annotate = document.createElement("button");
+    annotate.type = "button";
+    annotate.className = "decide-button";
+    annotate.textContent = "Turn into a comment";
+    annotate.title = "Open a comment on the passage (or the document) quoting this lens";
+    annotate.addEventListener("click", () => on.onAnnotate({ lens: r.lens, scope: r.scope }));
+    actions.append(annotate);
+    card.append(head, body, actions);
+    root.append(card);
+  }
+
+  // Settings
+  const settingsHead = document.createElement("button");
+  settingsHead.type = "button";
+  settingsHead.className = "lens-settings-toggle";
+  settingsHead.textContent = model.settings.open
+    ? "Model settings ▾"
+    : `Model: ${model.settings.model || "not set"} · ${model.settings.baseUrl || "no endpoint"} ▸`;
+  settingsHead.addEventListener("click", () => on.onToggleSettings());
+  root.append(settingsHead);
+  if (model.settings.open) {
+    const base = document.createElement("input");
+    base.type = "text";
+    base.className = "decide-input";
+    base.placeholder = "http://localhost:11434/v1";
+    base.value = model.settings.baseUrl;
+    const mdl = document.createElement("input");
+    mdl.type = "text";
+    mdl.className = "decide-input";
+    mdl.placeholder = "llama3.2:3b";
+    mdl.value = model.settings.model;
+    const key = document.createElement("input");
+    key.type = "password";
+    key.className = "decide-input";
+    key.placeholder = model.settings.hasKey ? "key stored in the keychain — leave blank to keep" : "API key (blank for local servers)";
+    key.autocomplete = "off";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "decide-button primary";
+    save.textContent = "Save";
+    save.addEventListener("click", () =>
+      on.onSaveSettings({ baseUrl: base.value.trim(), model: mdl.value.trim(), key: key.value === "" ? null : key.value }),
+    );
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "decide-button";
+    clear.textContent = "Forget key";
+    clear.addEventListener("click", () => on.onSaveSettings({ baseUrl: base.value.trim(), model: mdl.value.trim(), key: "" }));
+    const folder = document.createElement("button");
+    folder.type = "button";
+    folder.className = "decide-link";
+    folder.textContent = `Your lenses: ${model.lensesFolder}`;
+    folder.addEventListener("click", () => on.onOpenLensesFolder());
+    root.append(
+      field("OpenAI-compatible endpoint", base),
+      field("Model", mdl),
+      field("Key", key),
+      note("The key is kept in the OS keychain and used only from Folio's own process; the page never sees it. Ollama and LM Studio need no key."),
+      save,
+      clear,
+      folder,
+    );
+  }
 }

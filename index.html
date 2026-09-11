@@ -134,6 +134,7 @@
             <button id="panel-tab-outline" type="button" role="tab" aria-selected="true" aria-controls="panel-outline">Outline</button>
             <button id="panel-tab-annotations" type="button" role="tab" aria-selected="false" aria-controls="panel-annotations">Annotations</button>
             <button id="panel-tab-history" type="button" role="tab" aria-selected="false" aria-controls="panel-history">History</button>
+            <button id="panel-tab-analysis" type="button" role="tab" aria-selected="false" aria-controls="panel-analysis">Lenses</button>
             <button id="panel-tab-decide" type="button" role="tab" aria-selected="false" aria-controls="panel-decide">Decide</button>
           </div>
           <button id="panel-close" type="button" title="Hide panel" aria-label="Hide panel">
@@ -158,6 +159,9 @@
         </section>
         <section id="panel-history" role="tabpanel" aria-labelledby="panel-tab-history" hidden>
           <ol id="history-list" aria-label="Revision history"></ol>
+        </section>
+        <section id="panel-analysis" role="tabpanel" aria-labelledby="panel-tab-analysis" hidden>
+          <div id="analysis-root"></div>
         </section>
         <section id="panel-decide" role="tabpanel" aria-labelledby="panel-tab-decide" hidden>
           <div id="decide-root"></div>

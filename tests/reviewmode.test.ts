@@ -27,6 +27,7 @@ describe("reviewKeyAction", () => {
     expect(reviewKeyAction(k("e"), closed)).toEqual({ kind: "edit" });
     expect(reviewKeyAction(k("o"), closed)).toEqual({ kind: "outline" });
     expect(reviewKeyAction(k("m"), closed)).toEqual({ kind: "decide" });
+    expect(reviewKeyAction(k("l"), closed)).toEqual({ kind: "lens" });
     expect(reviewKeyAction(k("?", { shiftKey: true }), closed)).toEqual({ kind: "hint" });
   });
 

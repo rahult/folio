@@ -71,3 +71,15 @@ describe("renderExportHtml", () => {
     expect(html).toContain('<img src="a.png" alt="a">');
   });
 });
+
+import { renderMarkdownSafe } from "../src/exportrender";
+
+describe("renderMarkdownSafe", () => {
+  it("renders Markdown but drops raw HTML", async () => {
+    const html = await renderMarkdownSafe("## A\n\n- one <script>alert(1)</script>\n\n<img src=x onerror=alert(1)>\n");
+    expect(html).toContain("<h2>A</h2>");
+    expect(html).toContain("<li>one");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("onerror");
+  });
+});

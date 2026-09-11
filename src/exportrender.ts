@@ -108,3 +108,14 @@ function walk(node: { type: string; children?: unknown[] }, visit: (n: { type: s
   visit(node);
   for (const child of node.children ?? []) walk(child as { type: string; children?: unknown[] }, visit);
 }
+
+/**
+ * Markdown from an untrusted source (a model's output) to HTML with raw
+ * HTML dropped and no hooks: headings, lists, emphasis, code, links only.
+ */
+export async function renderMarkdownSafe(markdown: string): Promise<string> {
+  const tree = parser.parse(markdown) as Root;
+  const processor = unified().use(remarkRehype).use(rehypeStringify);
+  const hast = await processor.run(tree);
+  return processor.stringify(hast);
+}

@@ -13,6 +13,8 @@ import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/
 
 export interface EntrySpec {
   kind: "comment" | "replace";
+  /** Text the field starts with (a lens finding, for instance). */
+  prefill?: string;
   onSubmit: (body: string) => void;
   onCancel: () => void;
 }
@@ -47,6 +49,7 @@ function entryWidget(spec: EntrySpec): HTMLElement {
   const field = document.createElement("textarea");
   field.rows = 2;
   field.placeholder = ENTRY_PLACEHOLDER[spec.kind];
+  if (spec.prefill) field.value = spec.prefill;
   field.addEventListener("keydown", (e) => {
     // The field owns the keyboard: nothing here is a review key or an
     // editor command.
@@ -63,7 +66,10 @@ function entryWidget(spec: EntrySpec): HTMLElement {
   // ProseMirror would otherwise treat clicks in the widget as selection.
   wrap.addEventListener("mousedown", (e) => e.stopPropagation());
   wrap.append(label, field);
-  requestAnimationFrame(() => field.focus());
+  requestAnimationFrame(() => {
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  });
   return wrap;
 }
 

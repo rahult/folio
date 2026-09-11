@@ -29,6 +29,10 @@ Release history is in GitHub Releases; this is the feature-level view.
 - Provenance: Authorship tints (agent / revised / yours) from archived
   revisions; History tab linking each revision to the feedback it answered
   and whether each requested passage changed.
+- Lenses: the Lenses tab runs the document or a passage through built-in
+  or custom mental-model prompts on a bring-your-own OpenAI-compatible
+  endpoint (key in the keychain, request from Rust); results in
+  `<doc>.analysis.md`, each turnable into a comment.
 - Decide: Decide tab with section recall, premortem (nudged once before an
   approval), debiasing checklist, decision record with write-once
   confidence, revisits, due-revisit list, and the journal at
@@ -36,11 +40,9 @@ Release history is in GitHub Releases; this is the feature-level view.
 
 ## Next (in order)
 
-1. **Interrogate stage.** The `<doc>.analysis.md` contract (summary,
-   claims, assumptions, gaps, risks, options, recommendation), an Analysis
-   tab rendering it as cards, `/folio analyse` producing it through the
-   agent, one key turning any claim or question into a comment annotation.
-   Optional direct model key for people without an agent, off by default.
+1. **Interrogate through the agent.** `/folio lens <name>` so a coding
+   agent can produce a lens result into `<doc>.analysis.md` for people
+   with no model endpoint; the tab already renders whatever is there.
 2. **Calibration view.** Confidence against outcome across a folder's
    decision files, shown only once there are enough entries to mean
    something. Depends on the Decide tab (shipped).

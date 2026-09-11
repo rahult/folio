@@ -107,6 +107,32 @@ one-paragraph summary; it saves beside the document as
 shows the whole document's reading time next to the word count.
 **Annotations** is the second tab.
 
+### Read it through a lens, with your own model
+
+The **Lenses** tab (`l` in Review Mode) runs the document, or the passage
+you have selected, through a mental model and keeps the result beside the
+document in `<doc>.analysis.md`:
+
+- **Council of experts** — five specialists, each with a verdict and their
+  strongest objection, and where they disagree.
+- **Second-order effects** — the consequences of the consequences, by
+  horizon and by who bears them.
+- **Two-way door** — which decisions are reversible, which are not, and
+  whether the deliberation matches.
+- **Working backwards** — the press release and FAQ this would need, with
+  the gaps marked instead of invented.
+- **Premortem**, **Inversion**, **Steelman and strawman**, and
+  **Load-bearing assumptions**.
+
+Add your own as Markdown files in `~/Documents/Folio/lenses/` (a `name:`
+and `description:` frontmatter, then the prompt). Any finding can be turned
+into a comment annotation on the passage, so it feeds the review loop.
+
+Bring your own model: one OpenAI-compatible endpoint (base URL, model,
+optional key). Ollama and LM Studio work with no key at all. The key is
+kept in the OS keychain and the request is made from Folio's own process,
+so nothing secret enters the page, and nothing runs unless you press Run.
+
 ### Decide, and remember why
 
 The reading panel's **Decide** tab (`m` in Review Mode) is the thinking

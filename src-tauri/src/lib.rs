@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
 pub mod reviewgate;
 mod skillcli;
+mod lenses;
 
 /// File extensions Folio opens; mirrors `fileAssociations` in tauri.conf.json.
 const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
@@ -1610,6 +1611,11 @@ pub fn run() {
             write_text_file,
             write_binary_file,
             write_text_file_mkdir,
+            lenses::set_llm_key,
+            lenses::has_llm_key,
+            lenses::run_lens,
+            lenses::list_custom_lenses,
+            lenses::lenses_folder,
             print_document,
             sync_menu_state,
             take_startup_request,
