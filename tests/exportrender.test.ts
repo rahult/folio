@@ -82,4 +82,14 @@ describe("renderMarkdownSafe", () => {
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("onerror");
   });
+
+  it("neutralizes script URLs in links and drops images", async () => {
+    const html = await renderMarkdownSafe(
+      "[click](javascript:alert(1)) and [ok](https://example.com) and ![t](https://evil.example/pixel.png)\n",
+    );
+    expect(html).not.toContain("javascript:");
+    expect(html).toContain('href="https://example.com"');
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("pixel.png");
+  });
 });

@@ -13,6 +13,7 @@
 import type { Code, Image, Root } from "mdast";
 import type { Element } from "hast";
 import type { Raw, State } from "mdast-util-to-hast";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
@@ -109,13 +110,21 @@ function walk(node: { type: string; children?: unknown[] }, visit: (n: { type: s
   for (const child of node.children ?? []) walk(child as { type: string; children?: unknown[] }, visit);
 }
 
+/** rehype-sanitize's default schema (GitHub's), minus images: a model's
+ *  output must not be able to load remote resources from the page. */
+const SAFE_SCHEMA = {
+  ...defaultSchema,
+  tagNames: (defaultSchema.tagNames ?? []).filter((tag) => tag !== "img"),
+};
+
 /**
- * Markdown from an untrusted source (a model's output) to HTML with raw
- * HTML dropped and no hooks: headings, lists, emphasis, code, links only.
+ * Markdown from an untrusted source (a model's output) to HTML: raw HTML
+ * is dropped, link protocols are limited to http(s)/mailto, images are
+ * removed, and only GitHub's safe element and attribute set survives.
  */
 export async function renderMarkdownSafe(markdown: string): Promise<string> {
   const tree = parser.parse(markdown) as Root;
-  const processor = unified().use(remarkRehype).use(rehypeStringify);
+  const processor = unified().use(remarkRehype).use(rehypeSanitize, SAFE_SCHEMA).use(rehypeStringify);
   const hast = await processor.run(tree);
   return processor.stringify(hast);
 }
