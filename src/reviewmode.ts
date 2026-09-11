@@ -20,6 +20,7 @@ export type ReviewAction =
   | { kind: "send" }
   | { kind: "edit" }
   | { kind: "outline" }
+  | { kind: "decide" }
   | { kind: "hint" };
 
 export interface KeyLike {
@@ -45,6 +46,7 @@ const KEYS: Record<string, ReviewAction> = {
   Enter: { kind: "send" },
   e: { kind: "edit" },
   o: { kind: "outline" },
+  m: { kind: "decide" },
   "?": { kind: "hint" },
 };
 
@@ -71,6 +73,6 @@ export function verdictFor(annotations: { kind: AnnotationKind }[]): Verdict {
 /** The review bar's key legend. */
 export function hintText(waiting: boolean): string {
   const keys =
-    "j/k move · c comment · r replace · d delete · a looks good · x remove · n/p next · o outline · e edit";
+    "j/k move · c comment · r replace · d delete · a looks good · x remove · n/p next · o outline · m decide · e edit";
   return waiting ? `${keys} · ⏎ send` : `${keys} · no review waiting`;
 }

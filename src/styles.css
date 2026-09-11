@@ -1404,6 +1404,179 @@ body.review-mode #editor .milkdown .ProseMirror {
   white-space: nowrap;
 }
 
+/* decide tab */
+#decide-root {
+  padding: 4px 12px 16px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.decide-h {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 16px 0 6px;
+}
+
+.decide-note {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.decide-foot {
+  margin-top: 18px;
+  overflow-wrap: anywhere;
+}
+
+.decide-field {
+  display: block;
+  margin: 0 0 8px;
+}
+
+.decide-field > span {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.decide-input,
+.decide-textarea,
+.decide-select {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  caret-color: var(--accent);
+  outline: none;
+}
+
+.decide-textarea {
+  resize: vertical;
+}
+
+.decide-input:focus,
+.decide-textarea:focus,
+.decide-select:focus {
+  border-color: var(--accent);
+}
+
+.decide-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.decide-checklist li {
+  margin: 0 0 6px;
+  line-height: 1.45;
+}
+
+.decide-checklist label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.decide-checklist input {
+  accent-color: var(--accent);
+  margin-top: 3px;
+}
+
+.decide-conf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.decide-conf-row input[type="range"] {
+  flex: 1 1 auto;
+  accent-color: var(--accent);
+}
+
+.decide-conf {
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+}
+
+.decide-button {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.decide-button.primary {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: var(--paper);
+  font-weight: 500;
+}
+
+.decide-record {
+  margin: 0 0 8px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+
+.decide-record dt {
+  color: var(--ink-faint);
+}
+
+.decide-record dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.decide-revisits,
+.decide-due {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.decide-revisits li,
+.decide-due li {
+  margin-bottom: 4px;
+}
+
+.decide-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
 /* outline — headings with their section's reading time */
 #outline-list {
   list-style: none;

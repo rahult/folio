@@ -107,6 +107,27 @@ one-paragraph summary; it saves beside the document as
 shows the whole document's reading time next to the word count.
 **Annotations** is the second tab.
 
+### Decide, and remember why
+
+The reading panel's **Decide** tab (`m` in Review Mode) is the thinking
+you do before and after a verdict, all saved in `<doc>.decision.md`:
+
+- **Recall** — one line per section, from memory, in your own words.
+- **Premortem** — "it is six months on and this went badly; what
+  happened?" Approving a review nudges you to write one once; a second
+  Enter sends anyway.
+- **Before deciding** — three questions, each skippable: consider the
+  opposite, check the base rate, ask who benefits.
+- **Decision** — the choice, whether it is reversible, your confidence,
+  reasons, and a revisit date. Confidence is written once and never
+  edited, so the revisit can compare it with what happened.
+- **Revisits** — what actually happened: better, as expected, or worse.
+
+Every recorded decision is also one line in `~/Documents/Folio/decisions.md`,
+and documents whose revisit date has passed show up at the top of the tab.
+None of it is graded or required; the mechanism is you producing the
+sentence.
+
 ### Ask your agent to open a review: the `/folio` skill
 
 `skills/folio/` is an [Agent Skill](https://agentskills.io) that teaches a

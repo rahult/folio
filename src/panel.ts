@@ -7,7 +7,7 @@
 
 import type { OutlineEntry } from "./outline";
 
-export type PanelTab = "outline" | "annotations" | "history";
+export type PanelTab = "outline" | "annotations" | "history" | "decide";
 
 const TAB_KEY = "folio-panel-tab";
 
@@ -16,12 +16,15 @@ const tabButtons: Record<PanelTab, HTMLButtonElement> = {
   outline: document.querySelector<HTMLButtonElement>("#panel-tab-outline")!,
   annotations: document.querySelector<HTMLButtonElement>("#panel-tab-annotations")!,
   history: document.querySelector<HTMLButtonElement>("#panel-tab-history")!,
+  decide: document.querySelector<HTMLButtonElement>("#panel-tab-decide")!,
 };
 const tabPanels: Record<PanelTab, HTMLElement> = {
   outline: document.querySelector<HTMLElement>("#panel-outline")!,
   annotations: document.querySelector<HTMLElement>("#panel-annotations")!,
   history: document.querySelector<HTMLElement>("#panel-history")!,
+  decide: document.querySelector<HTMLElement>("#panel-decide")!,
 };
+const decideRoot = document.querySelector<HTMLElement>("#decide-root")!;
 const historyList = document.querySelector<HTMLOListElement>("#history-list")!;
 const closeBtn = document.querySelector<HTMLButtonElement>("#panel-close")!;
 export const takeawayField = document.querySelector<HTMLTextAreaElement>("#takeaway")!;
@@ -39,7 +42,7 @@ let cursor = -1;
 function restoreTab(): PanelTab {
   try {
     const stored = localStorage.getItem(TAB_KEY);
-    return stored === "annotations" || stored === "history" ? stored : "outline";
+    return stored === "annotations" || stored === "history" || stored === "decide" ? stored : "outline";
   } catch {
     return "outline";
   }
@@ -263,4 +266,272 @@ export function renderHistory(entries: HistoryEntry[], onPick: (seq: number) => 
       return li;
     }),
   );
+}
+
+// ——— decide tab ———
+//
+// The thinking the reader does before and after a verdict: recall in their
+// own words, a premortem, three debiasing questions, then the decision
+// record — with a confidence that locks once recorded — and revisits.
+// Everything is optional and nothing is graded; the value is in the
+// reader producing each sentence.
+
+export interface DecideModel {
+  enabled: boolean;
+  headings: string[];
+  recall: Map<string, string>;
+  premortem: string;
+  checked: Set<string>;
+  checklistItems: readonly string[];
+  decision: {
+    choice: string;
+    reversible: boolean | null;
+    confidence: number | null;
+    reasons: string;
+    decided: string;
+    revisit: string;
+  } | null;
+  revisits: { date: string; outcome: string; note: string }[];
+  /** Other documents whose revisit date has passed. */
+  due: { docName: string; docPath: string; revisit: string }[];
+  journalPath: string;
+}
+
+export interface DecideHandlers {
+  onRecall(heading: string, text: string): void;
+  onPremortem(text: string): void;
+  onChecklist(item: string, checked: boolean): void;
+  onRecord(record: { choice: string; reversible: boolean | null; confidence: number; reasons: string; revisit: string }): void;
+  onRevisit(entry: { outcome: string; note: string }): void;
+  onOpen(docPath: string): void;
+}
+
+function field(label: string, control: HTMLElement): HTMLElement {
+  const wrap = document.createElement("label");
+  wrap.className = "decide-field";
+  const span = document.createElement("span");
+  span.textContent = label;
+  wrap.append(span, control);
+  return wrap;
+}
+
+function h(text: string): HTMLElement {
+  const el = document.createElement("h3");
+  el.className = "decide-h";
+  el.textContent = text;
+  return el;
+}
+
+function note(text: string): HTMLElement {
+  const el = document.createElement("p");
+  el.className = "decide-note";
+  el.textContent = text;
+  return el;
+}
+
+function debounced(fn: () => void, ms = 800): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+
+function plusDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export function renderDecide(model: DecideModel, on: DecideHandlers): void {
+  const root = decideRoot;
+  root.replaceChildren();
+  if (!model.enabled) {
+    root.append(note("Save the document to keep a decision beside it."));
+    return;
+  }
+
+  if (model.due.length > 0) {
+    root.append(h("Due for revisit"));
+    const list = document.createElement("ul");
+    list.className = "decide-due";
+    for (const item of model.due) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "decide-link";
+      btn.textContent = `${item.docName} — was due ${item.revisit}`;
+      btn.addEventListener("click", () => on.onOpen(item.docPath));
+      li.append(btn);
+      list.append(li);
+    }
+    root.append(list);
+  }
+
+  // Recall
+  root.append(h("Recall"), note("One line per section, from memory, in your own words."));
+  const headings = model.headings.slice(0, 24);
+  if (headings.length === 0) root.append(note("No headings to recall."));
+  for (const heading of headings) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "decide-input";
+    input.value = model.recall.get(heading) ?? "";
+    input.placeholder = "What did this section say?";
+    const save = debounced(() => on.onRecall(heading, input.value));
+    input.addEventListener("input", save);
+    input.addEventListener("blur", () => on.onRecall(heading, input.value));
+    root.append(field(heading, input));
+  }
+
+  // Premortem
+  root.append(h("Premortem"));
+  const pre = document.createElement("textarea");
+  pre.className = "decide-textarea";
+  pre.rows = 3;
+  pre.placeholder = "It is six months on and this went badly. What happened?";
+  pre.value = model.premortem;
+  const savePre = debounced(() => on.onPremortem(pre.value));
+  pre.addEventListener("input", savePre);
+  pre.addEventListener("blur", () => on.onPremortem(pre.value));
+  root.append(pre);
+
+  // Checklist
+  root.append(h("Before deciding"));
+  const list = document.createElement("ul");
+  list.className = "decide-checklist";
+  for (const item of model.checklistItems) {
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = model.checked.has(item);
+    box.addEventListener("change", () => on.onChecklist(item, box.checked));
+    const text = document.createElement("span");
+    text.textContent = item;
+    label.append(box, text);
+    li.append(label);
+    list.append(li);
+  }
+  root.append(list);
+
+  // Decision
+  root.append(h("Decision"));
+  const d = model.decision;
+  if (d && d.confidence !== null) {
+    const dl = document.createElement("dl");
+    dl.className = "decide-record";
+    const row = (k: string, v: string) => {
+      const dt = document.createElement("dt");
+      dt.textContent = k;
+      const dd = document.createElement("dd");
+      dd.textContent = v || "—";
+      dl.append(dt, dd);
+    };
+    row("Choice", d.choice);
+    row("Reversible", d.reversible === null ? "" : d.reversible ? "yes" : "no");
+    row("Confidence", `${d.confidence}% (recorded ${d.decided || "—"}, not editable)`);
+    row("Reasons", d.reasons);
+    row("Revisit", d.revisit);
+    root.append(dl);
+
+    root.append(h("Revisits"));
+    if (model.revisits.length > 0) {
+      const rl = document.createElement("ul");
+      rl.className = "decide-revisits";
+      for (const r of model.revisits) {
+        const li = document.createElement("li");
+        li.textContent = `${r.date} · ${r.outcome}${r.note ? ` · ${r.note}` : ""}`;
+        rl.append(li);
+      }
+      root.append(rl);
+    }
+    const outcome = document.createElement("select");
+    outcome.className = "decide-select";
+    for (const o of ["as expected", "better", "worse"]) {
+      const opt = document.createElement("option");
+      opt.value = o;
+      opt.textContent = o;
+      outcome.append(opt);
+    }
+    const noteField = document.createElement("input");
+    noteField.type = "text";
+    noteField.className = "decide-input";
+    noteField.placeholder = "What actually happened?";
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "decide-button";
+    add.textContent = "Add revisit";
+    add.addEventListener("click", () => on.onRevisit({ outcome: outcome.value, note: noteField.value }));
+    root.append(field("Outcome", outcome), field("Note", noteField), add);
+  } else {
+    const choice = document.createElement("input");
+    choice.type = "text";
+    choice.className = "decide-input";
+    choice.placeholder = "What are you deciding?";
+    choice.value = d?.choice ?? "";
+    const reversible = document.createElement("select");
+    reversible.className = "decide-select";
+    for (const [v, label] of [["", "—"], ["yes", "yes, easy to undo"], ["no", "no, hard to undo"]]) {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = label;
+      reversible.append(opt);
+    }
+    reversible.value = d?.reversible === null || d?.reversible === undefined ? "" : d.reversible ? "yes" : "no";
+    const confidence = document.createElement("input");
+    confidence.type = "range";
+    confidence.min = "50";
+    confidence.max = "100";
+    confidence.step = "5";
+    confidence.value = "70";
+    const confLabel = document.createElement("span");
+    confLabel.className = "decide-conf";
+    confLabel.textContent = "70%";
+    confidence.addEventListener("input", () => {
+      confLabel.textContent = `${confidence.value}%`;
+    });
+    const confWrap = document.createElement("div");
+    confWrap.className = "decide-conf-row";
+    confWrap.append(confidence, confLabel);
+    const reasons = document.createElement("textarea");
+    reasons.className = "decide-textarea";
+    reasons.rows = 3;
+    reasons.placeholder = "Why, in a sentence or two.";
+    reasons.value = d?.reasons ?? "";
+    const revisit = document.createElement("input");
+    revisit.type = "date";
+    revisit.className = "decide-input";
+    revisit.value = d?.revisit || plusDays(30);
+    const record = document.createElement("button");
+    record.type = "button";
+    record.className = "decide-button primary";
+    record.textContent = "Record decision";
+    record.addEventListener("click", () => {
+      if (!choice.value.trim()) {
+        choice.focus();
+        return;
+      }
+      on.onRecord({
+        choice: choice.value,
+        reversible: reversible.value === "" ? null : reversible.value === "yes",
+        confidence: Number(confidence.value),
+        reasons: reasons.value,
+        revisit: revisit.value,
+      });
+    });
+    root.append(
+      field("Choice", choice),
+      field("Reversible", reversible),
+      field("Confidence that this is right", confWrap),
+      field("Reasons", reasons),
+      field("Revisit on", revisit),
+      note("Confidence is written once and never edited, so the revisit can compare it with what happened."),
+      record,
+    );
+  }
+
+  const foot = note(`Journal: ${model.journalPath}`);
+  foot.className = "decide-note decide-foot";
+  root.append(foot);
 }

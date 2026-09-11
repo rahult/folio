@@ -24,7 +24,24 @@ import { parseFeedback, requestOutcomes, revisionLabel } from "./ledger";
 import { rankFiles } from "./quickopen";
 import { headingForAnchor, parseWikilink, resolveWikilink } from "./wikilink";
 import { buildOutline, readingMinutes, sectionAtOffset, type OutlineEntry } from "./outline";
-import { decisionFilePath, readTakeaway, writeTakeaway } from "./decisionfile";
+import {
+  CHECKLIST_ITEMS,
+  appendRevisit,
+  decisionFilePath,
+  parseChecklist,
+  parseDecision,
+  parseRecall,
+  parseRevisits,
+  readSection,
+  readTakeaway,
+  writeChecklist,
+  writeDecision,
+  writeRecall,
+  writeSection,
+  writeTakeaway,
+} from "./decisionfile";
+import { JOURNAL_HEADER, dueRevisits, journalEntryLine, parseJournal, type JournalEntry } from "./journal";
+import { documentDir, join } from "@tauri-apps/api/path";
 import {
   activeTab,
   isPanelOpen,
@@ -32,6 +49,7 @@ import {
   onOutlinePick,
   onPanelChange,
   openPanel,
+  renderDecide,
   renderHistory,
   renderOutline,
   renderStats,
@@ -614,6 +632,7 @@ function refreshOutline(): void {
   outline = buildOutline(currentMarkdown());
   currentSection = sectionAtOffset(outline, caretOffset());
   renderOutline(outline, currentSection);
+  if (isPanelOpen() && activeTab() === "decide") void refreshDecide();
 }
 
 /** Typing rebuilds the outline at most every 300 ms. */
@@ -692,6 +711,155 @@ async function loadTakeaway(): Promise<void> {
   // The document may have changed while the read was in flight.
   if (doc.filePath !== path) return;
   setTakeaway(decisionFileText ? readTakeaway(decisionFileText) : "");
+  void refreshDecide();
+}
+
+/** Write a new version of the decision file, keeping the in-memory copy
+ *  in step; reports failure through the takeaway field's red rule. */
+async function writeDecisionFile(next: string): Promise<boolean> {
+  const path = doc.filePath;
+  if (!path) return false;
+  if (next === decisionFileText) return true;
+  try {
+    await invoke("write_text_file", { path: decisionFilePath(path), contents: next });
+    if (doc.filePath === path) {
+      decisionFileText = next;
+      markTakeawaySaveFailed(false);
+    }
+    return true;
+  } catch {
+    if (doc.filePath === path) markTakeawaySaveFailed(true);
+    return false;
+  }
+}
+
+// ——— decide tab ———
+//
+// Recall, premortem, checklist, the decision record, revisits: all in
+// <doc>.decision.md; one line per decision in the journal so revisits can
+// be found later.
+
+let journalPath = "";
+let dueEntries: JournalEntry[] = [];
+
+async function resolveJournalPath(): Promise<string> {
+  if (journalPath) return journalPath;
+  try {
+    journalPath = await join(await documentDir(), "Folio", "decisions.md");
+  } catch {
+    journalPath = "";
+  }
+  return journalPath;
+}
+
+async function readJournal(): Promise<JournalEntry[]> {
+  const path = await resolveJournalPath();
+  if (!path) return [];
+  try {
+    return parseJournal(await invoke<string>("read_text_file", { path }));
+  } catch {
+    return [];
+  }
+}
+
+async function appendJournal(entry: JournalEntry): Promise<void> {
+  const path = await resolveJournalPath();
+  if (!path) return;
+  let existing = "";
+  try {
+    existing = await invoke<string>("read_text_file", { path });
+  } catch {
+    existing = "";
+  }
+  const body = existing ? `${existing.replace(/\n+$/, "")}\n${journalEntryLine(entry)}\n` : `${JOURNAL_HEADER}\n${journalEntryLine(entry)}\n`;
+  await invoke("write_text_file_mkdir", { path, contents: body });
+}
+
+/** Journal entries whose revisit is due, checked against each document's
+ *  own revisit list. Computed at launch and after a decision is recorded. */
+async function refreshDueRevisits(): Promise<void> {
+  const entries = await readJournal();
+  const today = new Date().toISOString().slice(0, 10);
+  const files = new Map<string, string>();
+  for (const entry of entries) {
+    if (!entry.revisit || entry.revisit > today || files.has(entry.docPath)) continue;
+    try {
+      files.set(entry.docPath, await invoke<string>("read_text_file", { path: decisionFilePath(entry.docPath) }));
+    } catch {
+      files.set(entry.docPath, "");
+    }
+  }
+  dueEntries = dueRevisits(entries, today, (docPath) => parseRevisits(files.get(docPath) ?? ""));
+}
+
+async function refreshDecide(): Promise<void> {
+  const path = doc.filePath;
+  const text = decisionFileText ?? "";
+  renderDecide(
+    {
+      enabled: path !== null,
+      headings: outline.filter((e) => e.level <= 2).map((e) => e.text),
+      recall: parseRecall(text),
+      premortem: readSection(text, "## Premortem"),
+      checked: parseChecklist(text),
+      checklistItems: CHECKLIST_ITEMS,
+      decision: parseDecision(text),
+      revisits: parseRevisits(text),
+      due: dueEntries
+        .filter((e) => e.docPath !== path)
+        .map((e) => ({ docName: e.docName, docPath: e.docPath, revisit: e.revisit })),
+      journalPath: journalPath || "~/Documents/Folio/decisions.md",
+    },
+    {
+      onRecall: (heading, value) => {
+        const recall = parseRecall(decisionFileText ?? "");
+        recall.set(heading, value);
+        void writeDecisionFile(writeRecall(decisionFileText, doc.fileName, path ?? "", recall));
+      },
+      onPremortem: (value) => {
+        void writeDecisionFile(writeSection(decisionFileText, "## Premortem", value, doc.fileName, path ?? ""));
+      },
+      onChecklist: (item, checked) => {
+        const set = parseChecklist(decisionFileText ?? "");
+        if (checked) set.add(item);
+        else set.delete(item);
+        void writeDecisionFile(writeChecklist(decisionFileText, doc.fileName, path ?? "", set));
+      },
+      onRecord: (record) => {
+        if (!path) return;
+        const decided = new Date().toISOString().slice(0, 10);
+        const full = { ...record, decided };
+        void (async () => {
+          const ok = await writeDecisionFile(writeDecision(decisionFileText, doc.fileName, path, full));
+          if (!ok) return;
+          trackEvent("decision_recorded");
+          await appendJournal({
+            date: decided,
+            docPath: path,
+            docName: doc.fileName,
+            choice: record.choice,
+            confidence: record.confidence,
+            reversible: record.reversible,
+            revisit: record.revisit,
+          });
+          await refreshDueRevisits();
+          void refreshDecide();
+        })();
+      },
+      onRevisit: (entry) => {
+        if (!decisionFileText) return;
+        const date = new Date().toISOString().slice(0, 10);
+        void (async () => {
+          await writeDecisionFile(
+            appendRevisit(decisionFileText!, { date, outcome: entry.outcome as "better" | "as expected" | "worse", note: entry.note }),
+          );
+          await refreshDueRevisits();
+          void refreshDecide();
+        })();
+      },
+      onOpen: (docPath) => void loadFromPath(docPath),
+    },
+  );
 }
 
 async function saveTakeaway(): Promise<void> {
@@ -1388,8 +1556,12 @@ function renderReviewBar(): void {
   // waiting; the verdict buttons only show while an agent is blocked.
   reviewBar.hidden = !(model.visible || reviewMode);
   reviewBar.classList.toggle("legend-only", reviewMode && !model.visible);
-  reviewBarHint.textContent =
-    reviewMode && hintVisible ? hintText(reviewRequest?.state === "waiting") : "";
+  const nudging = reviewRequest?.state === "waiting" && premortemNudged === reviewRequest.requestedAt;
+  reviewBarHint.textContent = nudging
+    ? PREMORTEM_NUDGE
+    : reviewMode && hintVisible
+      ? hintText(reviewRequest?.state === "waiting")
+      : "";
   reviewBarHint.hidden = reviewBarHint.textContent === "";
   if (!model.visible) {
     reviewBar.classList.remove("sent");
@@ -1439,6 +1611,29 @@ function showVerdictConfirmation(verdict: Verdict): void {
     renderReviewBar();
   }, 1600);
 }
+
+/** Before an approval, ask once for a premortem — a sentence on how this
+ *  could go wrong — unless one is already written. The second Enter (or
+ *  click) sends regardless; the prompt is a pause, not a gate. */
+let premortemNudged: string | null = null;
+
+async function sendVerdictWithPremortem(verdict: Verdict): Promise<void> {
+  const request = reviewRequest;
+  if (
+    verdict === "approved" &&
+    request?.state === "waiting" &&
+    premortemNudged !== request.requestedAt &&
+    !readSection(decisionFileText ?? "", "## Premortem")
+  ) {
+    premortemNudged = request.requestedAt;
+    renderReviewBar();
+    return;
+  }
+  await submitVerdict(verdict);
+}
+
+const PREMORTEM_NUDGE =
+  "Before approving: how might this go wrong? A line in the Decide tab (m) — or send anyway (⏎)";
 
 /** Send the verdict back to the blocked agent: the same structured feedback
  *  `Export Review Feedback` writes, plus the handshake resolution that
@@ -1501,7 +1696,7 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
   showVerdictConfirmation(verdict);
 }
 
-reviewApproveBtn.addEventListener("click", () => void submitVerdict("approved"));
+reviewApproveBtn.addEventListener("click", () => void sendVerdictWithPremortem("approved"));
 reviewChangesBtn.addEventListener("click", () => void submitVerdict("changes"));
 setInterval(() => void refreshReviewRequest(true), REVIEW_POLL_MS);
 
@@ -1756,7 +1951,7 @@ function runReviewAction(action: ReviewAction): void {
       return;
     }
     case "send":
-      if (reviewRequest?.state === "waiting") void submitVerdict(verdictFor(annotations));
+      if (reviewRequest?.state === "waiting") void sendVerdictWithPremortem(verdictFor(annotations));
       return;
     case "edit":
       exitReviewMode();
@@ -1767,6 +1962,9 @@ function runReviewAction(action: ReviewAction): void {
       return;
     case "outline":
       togglePanel("outline");
+      return;
+    case "decide":
+      openPanel("decide");
       return;
   }
 }
@@ -2256,6 +2454,7 @@ void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
 // view-mode state.
 document.body.classList.toggle("authorship", authorshipOn);
 authorshipLegend.hidden = !authorshipOn;
+void refreshDueRevisits().then(() => void refreshDecide());
 syncMenuState();
 // Ask for telemetry consent on first launch; otherwise honor the choice.
 initTelemetryFlow();

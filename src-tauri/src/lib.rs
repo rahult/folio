@@ -939,6 +939,16 @@ fn read_text_file(path: String) -> Result<String, String> {
 }
 
 /// Write a UTF-8 text file to disk, creating or overwriting it.
+/// Write text, creating parent directories (the decision journal lives in
+/// a folder that may not exist yet).
+#[tauri::command]
+fn write_text_file_mkdir(path: String, contents: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+    }
+    fs::write(&path, contents).map_err(|e| format!("failed to write {path}: {e}"))
+}
+
 /// Write bytes (a .docx package) to disk.
 #[tauri::command]
 fn write_binary_file(path: String, contents: Vec<u8>) -> Result<(), String> {
@@ -1591,6 +1601,7 @@ pub fn run() {
             read_text_file,
             write_text_file,
             write_binary_file,
+            write_text_file_mkdir,
             print_document,
             sync_menu_state,
             take_startup_request,

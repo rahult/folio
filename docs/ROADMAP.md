@@ -29,30 +29,25 @@ Release history is in GitHub Releases; this is the feature-level view.
 - Provenance: Authorship tints (agent / revised / yours) from archived
   revisions; History tab linking each revision to the feedback it answered
   and whether each requested passage changed.
+- Decide: Decide tab with section recall, premortem (nudged once before an
+  approval), debiasing checklist, decision record with write-once
+  confidence, revisits, due-revisit list, and the journal at
+  `~/Documents/Folio/decisions.md`.
 
 ## Next (in order)
 
-1. **Decide stage.** Decide tab in the reading panel: section recall
-   prompts (retrieval practice), a premortem prompt before a verdict
-   (skippable), a debiasing checklist (consider the opposite, base rate,
-   incentives; every item skippable), the decision record (choice,
-   reversible or not, confidence that cannot be edited afterwards,
-   reasons, revisit date), revisit entries with outcome, and a journal
-   across documents at `~/Documents/Folio/decisions.md`. Evidence:
-   retrieval practice and self-explanation (strong), premortem and
-   debiasing (moderate), calibration (strong in-domain).
-2. **Interrogate stage.** The `<doc>.analysis.md` contract (summary,
+1. **Interrogate stage.** The `<doc>.analysis.md` contract (summary,
    claims, assumptions, gaps, risks, options, recommendation), an Analysis
    tab rendering it as cards, `/folio analyse` producing it through the
    agent, one key turning any claim or question into a comment annotation.
    Optional direct model key for people without an agent, off by default.
-3. **Calibration view.** Confidence against outcome across a folder's
+2. **Calibration view.** Confidence against outcome across a folder's
    decision files, shown only once there are enough entries to mean
-   something. Depends on 1.
-4. **Missing-warrant annotation kind** in Review Mode (Toulmin): the reviewer
+   something. Depends on the Decide tab (shipped).
+3. **Missing-warrant annotation kind** in Review Mode (Toulmin): the reviewer
    marks a claim whose grounds are absent; goes into feedback as a request.
-5. **Feynman-mode takeaway**: write the takeaway with the page hidden.
-6. **Prose-density signal** per section in the outline (grade level, not
+4. **Feynman-mode takeaway**: write the takeaway with the page hidden.
+5. **Prose-density signal** per section in the outline (grade level, not
    called readability), with long-sentence highlighting on demand.
 
 ## Later
