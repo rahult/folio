@@ -10,7 +10,13 @@
 use std::path::{Path, PathBuf};
 
 pub const SKILL_NAME: &str = "folio";
-pub const SKILL_MD: &str = include_str!("../../skills/folio/SKILL.md");
+const SKILL_MD_RAW: &str = include_str!("../../skills/folio/SKILL.md");
+
+/// The bundled skill with LF line endings whatever the checkout used
+/// (Windows git may have written the source file with CRLF).
+pub fn skill_text() -> String {
+    SKILL_MD_RAW.replace("\r\n", "\n")
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Target {
@@ -104,7 +110,7 @@ pub fn install_in(cmd: &SkillCommand, root: &Path) -> Result<Vec<PathBuf>, Strin
     for (_, path) in install_paths(cmd, root) {
         let dir = path.parent().ok_or_else(|| "bad skill path".to_string())?;
         std::fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
-        std::fs::write(&path, SKILL_MD).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+        std::fs::write(&path, skill_text()).map_err(|e| format!("could not write {}: {e}", path.display()))?;
         written.push(path);
     }
     Ok(written)
@@ -138,7 +144,7 @@ pub fn run(cmd: &SkillCommand) -> i32 {
             0
         }
         SkillAction::Show => {
-            print!("{SKILL_MD}");
+            print!("{}", skill_text());
             0
         }
         SkillAction::Where => {
