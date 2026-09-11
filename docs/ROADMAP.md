@@ -1,119 +1,91 @@
-# Folio — Roadmap to a $10 Editor
+# Folio roadmap
 
-_Research compiled July 2026. Sources: competitor pricing pages and reviews —
-[Typora vs Obsidian vs VS Code (2026)](https://www.markdown-to-word.online/markdown-editors-comparison/),
-[Typora review](https://www.scalarly.com/startup-stack/typora-the-seamless-markdown-editor-for-writers-and-developers/),
-[iA Writer review](https://elephas.app/blog/iawriter-review),
-[Best markdown editors 2024](https://downloadchaos.com/blog/best-markdown-editors-2024),
-[AI spec review tools 2026](https://www.augmentcode.com/tools/best-ai-spec-review-tools-for-development-teams)._
+_A living list. Move items between sections as they ship; add new ones at
+the bottom of the section they belong to with a line on why. Research
+behind most entries: `docs/research/`. Designs: `docs/superpowers/specs/`._
 
-## The market, in one paragraph
+Folio is a calm Markdown editor that is becoming a place to think about a
+document: read it, argue with it, decide, remember why. It is free, local,
+file-based, and works with coding agents through files. It does not sync,
+does not host plugins, and does not write prose for you.
 
-| Editor | Price | What people actually pay for |
-| --- | --- | --- |
-| Typora | $14.99 one-time (3 devices) | The WYSIWYG writing feel + broad export (PDF, HTML, **Word**, LaTeX) |
-| iA Writer | $29.99 **per platform** | Focus aesthetics, style check, docx export |
-| Ulysses | ~$39.99/yr subscription | Best-in-class Word export, library, goals, sync |
-| Bear | $2.99/mo subscription | Polish + sync |
-| Obsidian | Free (Catalyst $25) | Linking, plugins — free core kills "me-too" editors |
-| MarkText / Zettlr / VS Code | Free | "Good enough" WYSIWYG / academic features / devs |
+## Shipped
 
-Two conclusions:
+Release history is in GitHub Releases; this is the feature-level view.
 
-1. **Nobody pays for editing.** Every free alternative edits fine. Money
-   changes hands for *what leaves the editor* (export fidelity — Word/docx
-   above all), *how it feels to write for hours* (focus, themes, typewriter),
-   and *how much of your life it organizes* (library, goals, sync).
-2. **There is an unowned wedge:** reviewing AI-agent output. Agents (Kimi,
-   Claude Code, Codex) emit markdown — plans, specs, docs — and developers
-   currently review it in terminals or web UIs. No markdown editor is built
-   for *reviewing and approving* that stream. Folio's float mode (shipped
-   v0.4.0) is already the seed of this.
+- Editor: WYSIWYG page, source mode with caret preserved, tabs, five
+  themes, overlay title strip with quiet chrome, focus and typewriter
+  modes, zoom, relative images, native menus, session restore, auto-update.
+- Export: HTML with embedded fonts, images, and Mermaid; PDF from the same
+  rendering; Word (.docx) with real styles.
+- Navigation: Quick Open (⌘P) over the project, wikilinks with completion,
+  heading targets, back/forward, Open Recent.
+- Agent review: float-on-top live reload with rewrite diffs, annotations
+  (comment/delete/replace/looks good), Review Mode single keys, the
+  `folio review --wait` gate with exit codes, the user-invoked `/folio`
+  skill, structured feedback with line numbers and a Keep-as-is section.
+- Reading: reading panel with outline, per-section reading time, current
+  section, takeaway saved to `<doc>.decision.md`.
+- Provenance: Authorship tints (agent / revised / yours) from archived
+  revisions; History tab linking each revision to the feedback it answered
+  and whether each requested passage changed.
 
-## Pricing position
+## Next (in order)
 
-**$10 one-time, per user (3 devices), free trial of Pro via the existing
-license flow.** Sits visibly below Typora ($14.99) and a third of iA Writer
-($29.99/platform), while offering something neither has. One-time is a
-deliberate contrast to Ulysses/Bear subscriptions — "calm software" pricing
-matches the brand.
+1. **Decide stage.** Decide tab in the reading panel: section recall
+   prompts (retrieval practice), a premortem prompt before a verdict
+   (skippable), a debiasing checklist (consider the opposite, base rate,
+   incentives; every item skippable), the decision record (choice,
+   reversible or not, confidence that cannot be edited afterwards,
+   reasons, revisit date), revisit entries with outcome, and a journal
+   across documents at `~/Documents/Folio/decisions.md`. Evidence:
+   retrieval practice and self-explanation (strong), premortem and
+   debiasing (moderate), calibration (strong in-domain).
+2. **Interrogate stage.** The `<doc>.analysis.md` contract (summary,
+   claims, assumptions, gaps, risks, options, recommendation), an Analysis
+   tab rendering it as cards, `/folio analyse` producing it through the
+   agent, one key turning any claim or question into a comment annotation.
+   Optional direct model key for people without an agent, off by default.
+3. **Calibration view.** Confidence against outcome across a folder's
+   decision files, shown only once there are enough entries to mean
+   something. Depends on 1.
+4. **Missing-warrant annotation kind** in Review Mode (Toulmin): the reviewer
+   marks a claim whose grounds are absent; goes into feedback as a request.
+5. **Feynman-mode takeaway**: write the takeaway with the page hidden.
+6. **Prose-density signal** per section in the outline (grade level, not
+   called readability), with long-sentence highlighting on demand.
 
-## Jobs to be done
+## Later
 
-- **JTBD-1 (the writer):** "When I draft in markdown, I want to think about
-  the sentence, not the syntax — and hand off a Word/PDF/HTML file that
-  looks right without fixing it afterward."
-- **JTBD-2 (the engineer × agent — the wedge):** "When my coding agent
-  rewrites a plan/spec/doc, I want to *see what it did* at a glance, keep it
-  in view while I work, and approve or correct it fast — so I stay the
-  reviewer, not the proofreader-by-diff-in-a-terminal."
-- **JTBD-3 (the note-taker):** "When I come back to a document days later,
-  I want to resume instantly and find my place."
+- Review queue: `folio review a.md b.md c.md` shows the set in the panel
+  ordered by reading time with verdict state.
+- CriticMarkup import/export as the annotation interchange format.
+- Per-section read progress persisted with the decision file.
+- Redundancy scan for agent-written prose (near-duplicate paragraphs).
+- Publish the `.feedback.md` format as a spec with a JSON sidecar.
+- Argdown-style argument map companion file, human-edited; an agent may
+  draft, never finalize.
+- User CSS themes on documented tokens; named export styles with a custom
+  CSS slot.
+- Math (Crepe's LaTeX feature) in the page and the exports.
+- Section folding in the page.
+- Writing goals (word target in the status bar).
+- Callouts (`> [!note]`) rendered as styled blocks.
+- Revision history for every saved file, not only watched ones (largely
+  true already; make the archive origin visible in the File menu).
+- Fix upstream: Crepe's image block rewrites alt text as the aspect ratio
+  on save.
 
-## Prioritized roadmap
+## Not planned
 
-Impact = how much it moves the $10 decision. Effort in rough dev-days.
+Cloud sync, a plugin system, built-in AI writing, real-time collaboration,
+a database instead of files, blog publishing integrations. Each is argued
+in `docs/research/2026-09-11-markdown-editor-landscape.md`.
 
-### P0 — Close the export gap (table stakes for charging anything)
+## Traps to keep out
 
-| # | Feature | JTBD | Impact | Effort | Notes |
-| --- | --- | --- | --- | --- | --- |
-| 1 | **Word/docx export** (Pro) | 1 | ★★★★★ | 3–5 | The single most-cited paid feature across Typora/iA/Ulysses reviews. Bundle Pandoc (GPL — check licensing) or write docx via a Rust crate (`docx-rs`). HTML/PDF already shipped; docx completes the story. |
-| 2 | **Session restore** — reopen last file, caret, scroll | 3 | ★★★★ | 1 | Cheap, felt every launch. |
-| 3 | **Auto-reload everywhere** (generalize float-mode watching) | 2, 3 | ★★★★ | 1 | The watcher already exists; add a File-menu toggle so git checkouts/agent edits reload in normal windows too. |
-| 4 | **Recent files menu** | 3 | ★★★ | 1 | Native submenu, 10 entries. |
-
-### P1 — Own the agent-review wedge (differentiation)
-
-| # | Feature | JTBD | Impact | Effort | Notes |
-| --- | --- | --- | --- | --- | --- |
-| 5 | **Rewrite diff view** — highlight what changed on reload | 2 | ★★★★★ | 4–6 | The killer review feature: added/removed spans marked quietly in the rendered page. Milkdown has a diff plugin (`@milkdown/plugin-diff` — check fit) or compute a lightweight word-diff on markdown before rendering. Nobody else has this. |
-| 6 | **`folio review` CLI + pipe support** — `agent … | folio --float -` | 2 | ★★★★ | 2–3 | stdin → temp watched file; also `folio review <path>` alias for docs/UX. |
-| 7 | **Copy-for-agent button** — selection → clean markdown for pasting back into the agent | 2 | ★★★ | 1 | Closes the review → feedback loop in one click. |
-| 8 | **Approve/annotate workflow lite** — checkboxes/comments that write back to the file | 2 | ★★★ | 3–4 | Task-list toggling already round-trips; a "Reviewed ✓" stamp appends a marker line. Only if diff view lands well. |
-
-### P2 — Deepen the writing feel (retention, word-of-mouth)
-
-| # | Feature | JTBD | Impact | Effort | Notes |
-| --- | --- | --- | --- | --- | --- |
-| 9 | **Writing goals & stats** — word target, reading time, session count | 1 | ★★★ | 2 | Ulysses/MDOffice-style goals; quiet status-bar target ring. |
-| 10 | **Quick open (⌘P)** — fuzzy file switcher over recent + a folder | 3 | ★★★ | 2–3 | Library benefits without betraying the no-sidebar design. |
-| 11 | **Export themes** — 2–3 styled PDF/HTML templates | 1 | ★★★ | 2 | Multiplies the value of the export pipeline already built. |
-| 12 | **Custom user themes** (CSS drop-in) | 1 | ★★ | 1–2 | Cheap once theme tokens are documented. |
-
-### P3 — Later / only if traction
-
-- **Multi-window** (two docs side by side) — window plumbing exists post float-mode.
-- **ePub / RTF export** — rides the docx pipeline.
-- **Presentation mode** (markdown → slides).
-- **Explicit non-goals:** cloud sync (server costs, scope creep — iCloud/Dropbox
-  folders already work), plugin ecosystem (maintenance sink), collaboration
-  (different product), AI writing features (off-brand; the agents write
-  elsewhere — Folio is where you *review* them).
-
-## Suggested Pro/free split at $10
-
-- **Free (already generous, drives installs):** full WYSIWYG editor, source
-  mode, native menus, float-mode live review (the demo of the wedge), zoom,
-  table editing, Paper theme.
-- **Pro ($10):** the export bundle (HTML + PDF + **docx**, export themes),
-  focus/typewriter, Night + Newsprint + custom themes, **rewrite diff view**,
-  `folio review` CLI/pipe, writing goals.
-
-The free tier's float mode is the top-of-funnel: engineers discover Folio as
-"the agent review pane," and the diff view + export bundle is what converts.
-
-## Release sequence
-
-1. **v0.5** — P0: docx export, session restore, auto-reload everywhere, recent files
-2. **v0.6** — P1: rewrite diff view, `folio review` CLI + pipe, copy-for-agent
-3. **v0.7** — P2: goals & stats, quick open, export themes
-4. Re-evaluate with sales data before P3.
-
-**Status (July 2026):** v0.5 shipped P0 items 2–4 (session restore,
-auto-reload everywhere, recent files) and all of P1 (rewrite diff view,
-`folio review` + stdin pipe, copy-for-agent). P1 follow-up shipped the
-[plannotator](https://plannotator.ai/)-style review loop: inline
-annotations (comment / delete / replace) with structured feedback export,
-and revision history with diffs. Next up: docx export (P0-1),
-the largest remaining item before the $10 launch.
+Speed reading, gamified streaks, mandatory checklists, auto-generated
+summaries in place of the reader's own sentence, grading the reader's
+recall, editable confidence after the fact. The mechanism in every
+technique above is the person producing the thought; a feature that
+produces it for them removes the benefit.
