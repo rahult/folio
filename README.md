@@ -136,13 +136,22 @@ wait for the verdict, apply the feedback, resubmit until approved. It is
 **user-invoked only**: the agent never opens Folio on its own, you type
 `/folio` (optionally with a path) when you want to read something properly.
 
-```bash
-# Claude Code — user-wide, or drop it in a repo's .claude/skills/
-mkdir -p ~/.claude/skills && cp -r skills/folio ~/.claude/skills/
+Install it whichever way suits you:
 
-# Codex, Copilot CLI, Gemini CLI, and others that read ~/.agents/skills/
-mkdir -p ~/.agents/skills && cp -r skills/folio ~/.agents/skills/
+```bash
+# With the skills CLI (skills.sh) — any supported agent, project or global
+npx skills add rahult/folio            # add -g for your user directory
+
+# With Folio itself — writes the skill bundled in the app
+folio skill install                    # ~/.claude/skills and ~/.agents/skills
+folio skill install --agent claude     # one harness only
+folio skill install --project          # into ./.claude/skills and ./.agents/skills
+
+# By hand
+cp -r skills/folio ~/.claude/skills/
 ```
+
+[![skills.sh](https://skills.sh/b/rahult/folio)](https://skills.sh/rahult/folio)
 
 The skill expects `folio` on PATH (or falls back to the app bundle):
 

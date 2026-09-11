@@ -309,7 +309,8 @@ Ship to **10% of users** for a day, then *everyone*. Roll back with `deploy --un
 
         <div class="loop-install">
           <p>Install the skill once. It is user-invoked only.</p>
-          <pre><code>git clone https://github.com/rahult/folio &amp;&amp; cp -r folio/skills/folio ~/.claude/skills/</code></pre>
+          <pre><code>npx skills add rahult/folio      # via skills.sh, any agent
+folio skill install              # or from Folio's own command line</code></pre>
           <p class="loop-exit">
             The CLI exits 0 on approve, 2 on changes requested, 3 if the
             review is still open, so an agent can branch on the result.

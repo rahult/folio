@@ -10,6 +10,7 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
 pub mod reviewgate;
+mod skillcli;
 
 /// File extensions Folio opens; mirrors `fileAssociations` in tauri.conf.json.
 const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
@@ -1529,6 +1530,13 @@ pub fn run() {
     // Resolved before the builder runs: a second invocation gets this far
     // before tauri-plugin-single-instance sends it away, which is what lets
     // it resolve piped stdin into a real path the primary can open.
+    // `folio skill …` installs or prints the bundled agent skill and exits;
+    // it never becomes the app.
+    let argv: Vec<String> = std::env::args().collect();
+    if let Some(cmd) = skillcli::parse(&argv) {
+        std::process::exit(skillcli::run(&cmd));
+    }
+
     let cli = parse_cli_args(std::env::args());
 
     // `--wait` / `--collect` never become the app: they branch out here,
