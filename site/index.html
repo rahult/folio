@@ -22,6 +22,7 @@
       <nav aria-label="Sections">
         <a href="#write">Writing</a>
         <a href="#review">Agent review</a>
+        <a href="#think">Thinking</a>
         <a href="#keys">Shortcuts</a>
         <a href="#download">Download</a>
         <a href="https://github.com/rahult/folio">GitHub</a>
@@ -35,8 +36,9 @@
           <h1 id="hero-title">Markdown, rendered as you write it.</h1>
           <p class="lede">
             One page, no split panes. Folio is a small native editor for
-            people who write in Markdown, and a review window for the plans
-            your coding agent writes. Free and open source.
+            people who write in Markdown, a review window for the plans your
+            coding agent writes, and a place to think about a document
+            before you decide. Free and open source.
           </p>
           <div class="hero-actions">
             <a
@@ -315,6 +317,88 @@ folio skill install              # or from Folio's own command line</code></pre>
             The CLI exits 0 on approve, 2 on changes requested, 3 if the
             review is still open, so an agent can branch on the result.
           </p>
+        </div>
+      </section>
+
+      <!-- ——— thinking ——— -->
+      <section id="think" class="think" aria-labelledby="think-title">
+        <header class="section-head">
+          <h2 id="think-title">For thinking about what you read</h2>
+          <p>
+            A reading panel beside the page, in three tabs that follow the
+            order you actually work in: read it, see who changed what, decide
+            and remember why. Everything is a plain Markdown file beside the
+            document, and nothing is graded.
+          </p>
+        </header>
+
+        <div class="think-grid">
+          <article class="think-card">
+            <figure class="visual visual-outline" aria-label="The outline with reading time per section">
+              <div class="mini-tabs"><b>Outline</b><span>Annotations</span><span>History</span><span>Decide</span></div>
+              <div class="mini-takeaway">Ship in stages; the flag is the real safety net.</div>
+              <div class="mini-stats">1,240 words · 6 min</div>
+              <ul class="mini-outline">
+                <li class="l1">Rollout plan<i>6 min</i></li>
+                <li class="l2 current">Canary<i>2 min</i></li>
+                <li class="l2">Rollback<i>1 min</i></li>
+                <li class="l2">Open questions<i>3 min</i></li>
+              </ul>
+            </figure>
+            <h3>Read</h3>
+            <p>
+              The outline shows each section's reading time and marks the
+              one you are in. A "what I took from it" field asks for one
+              paragraph in your own words and keeps it beside the document.
+            </p>
+          </article>
+
+          <article class="think-card">
+            <figure class="visual visual-authorship" aria-label="Authorship tints and the history ledger">
+              <p class="mini-prose">
+                Ship to <span class="agent">ten percent of users for a day, then everyone.</span>
+                Watch the error rate. Roll back with the flag; <span class="revised">the on-call
+                engineer owns it.</span>
+              </p>
+              <div class="mini-ledger">
+                <div class="mini-ledger-head">revised after your feedback · 2 of 3 requested passages changed</div>
+                <div><b class="ok">✓</b> replace <i>"Ship to all users at once"</i></div>
+                <div><b class="ok">✓</b> comment <i>"Roll back with the flag"</i></div>
+                <div><b>–</b> delete <i>"Watch the error rate"</i></div>
+              </div>
+            </figure>
+            <h3>See who wrote what</h3>
+            <p>
+              Authorship tints the words an agent wrote in blue and the ones
+              it rewrote after your feedback in green; your own words stay
+              plain. The History tab ties each revision to the change
+              requests it answered and shows which passages actually moved.
+            </p>
+          </article>
+
+          <article class="think-card">
+            <figure class="visual visual-decide" aria-label="The Decide tab">
+              <div class="mini-label">Premortem</div>
+              <div class="mini-field">It is six months on and this went badly because the flag was never wired up.</div>
+              <div class="mini-label">Before deciding</div>
+              <div class="mini-check"><b>☑</b> Considered the opposite</div>
+              <div class="mini-check"><b>☐</b> Checked the base rate</div>
+              <div class="mini-label">Decision</div>
+              <dl class="mini-record">
+                <dt>Choice</dt><dd>Approve the canary plan</dd>
+                <dt>Confidence</dt><dd>70% · recorded, not editable</dd>
+                <dt>Revisit</dt><dd>in 30 days</dd>
+              </dl>
+            </figure>
+            <h3>Decide, and remember why</h3>
+            <p>
+              Recall each section from memory, write a premortem, answer
+              three debiasing questions, then record the choice with a
+              confidence that cannot be edited afterwards. Revisits log what
+              actually happened, and a journal across documents lists the
+              ones that are due.
+            </p>
+          </article>
         </div>
       </section>
 

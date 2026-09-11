@@ -1216,3 +1216,205 @@ kbd {
   background: var(--accent);
   color: var(--paper-raised);
 }
+
+/* ——— thinking ——— */
+
+.think-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2.5rem 2rem;
+}
+
+.think-card h3 {
+  font-size: 1.3rem;
+  line-height: 1.2;
+  margin: 1.1rem 0 0.5rem;
+}
+
+.think-card p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.think-card .visual {
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--paper-raised);
+  padding: 0.9rem 1rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  min-height: 15.5rem;
+}
+
+.mini-tabs {
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 0.7rem;
+}
+
+.mini-tabs b {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 0.45rem;
+  margin-bottom: -0.55rem;
+}
+
+.mini-takeaway {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.mini-stats {
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  padding: 0.4rem 0 0.5rem;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 0.3rem;
+}
+
+.mini-outline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mini-outline li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0.5rem;
+  color: var(--ink-soft);
+}
+
+.mini-outline li.l1 {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.mini-outline li.l2 {
+  padding-left: 1.3rem;
+}
+
+.mini-outline li.current {
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--ink);
+}
+
+.mini-outline i {
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+.mini-prose {
+  font-family: var(--font-prose);
+  font-size: 0.98rem;
+  line-height: 1.55;
+  margin: 0 0 0.8rem;
+  color: var(--ink);
+}
+
+.mini-prose .agent {
+  background: color-mix(in oklch, oklch(0.6 0.1 250) 18%, transparent);
+  border-radius: 2px;
+}
+
+.mini-prose .revised {
+  background: color-mix(in oklch, oklch(0.62 0.12 150) 22%, transparent);
+  border-radius: 2px;
+}
+
+.mini-ledger {
+  border-top: 1px solid var(--hairline);
+  padding-top: 0.6rem;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.mini-ledger-head {
+  color: var(--ink);
+  margin-bottom: 0.2rem;
+}
+
+.mini-ledger b {
+  display: inline-block;
+  width: 1rem;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.mini-ledger b.ok {
+  color: oklch(0.55 0.13 150);
+}
+
+.mini-ledger i {
+  font-family: var(--font-prose);
+}
+
+.mini-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0.55rem 0 0.25rem;
+}
+
+.mini-label:first-child {
+  margin-top: 0;
+}
+
+.mini-field {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 0.76rem;
+}
+
+.mini-check {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  padding: 0.1rem 0;
+}
+
+.mini-check b {
+  font-weight: 400;
+  margin-right: 0.35rem;
+  color: var(--accent);
+}
+
+.mini-record {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.6rem;
+  font-size: 0.76rem;
+}
+
+.mini-record dt {
+  color: var(--ink-faint);
+}
+
+.mini-record dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+@media (max-width: 52rem) {
+  .think-grid {
+    grid-template-columns: 1fr;
+  }
+}
