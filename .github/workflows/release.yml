@@ -70,6 +70,9 @@ jobs:
       matrix:
         platform: [macos-latest, windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.platform }}
+    # Apple notarization occasionally hangs; fail fast so the job can be
+    # rerun instead of burning the six-hour cap.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
