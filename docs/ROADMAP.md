@@ -37,30 +37,30 @@ Release history is in GitHub Releases; this is the feature-level view.
   approval), debiasing checklist, decision record with write-once
   confidence, revisits, due-revisit list, and the journal at
   `~/Documents/Folio/decisions.md`.
+- Command line: `folio` is its own small binary (ADR 0002) bundled beside
+  the app and shipped as tarballs with an install script; Folio → Install
+  Command Line Tool. Feedback, Analysis, Revisions, the gate, and the skill
+  live in `folio-core` (ADR 0001).
 
 ## Next (in order)
 
-1. **Workspace split.** `folio-core` (gate, Feedback, Analysis, Revisions,
-   lenses, skill) shared by the app and a small static `folio` CLI that
-   fronts the app (ADR 0002). Behaviour-preserving release. Design:
-   `docs/superpowers/specs/2026-09-13-terminal-review-design.md`, stage 1.
-2. **Interrogate through the agent.** `/folio lens <name> [path]` in the
+1. **Interrogate through the agent.** `/folio lens <name> [path]` in the
    existing skill: the agent reads the lens via `folio lens show`, reads
    the document itself, and appends a Reading with `folio lens append`.
    Built-in lenses move to `lenses/*.md`; the Lenses tab polls the
    companion while open. Design:
    `docs/superpowers/specs/2026-09-13-agent-lens-design.md`.
-3. **Terminal Review Mode.** `folio review --tui` draws Review Mode in a
+2. **Terminal Review Mode.** `folio review --tui` draws Review Mode in a
    herdr or tmux pane, or any terminal over SSH, with the same keys and
    Feedback; `FOLIO_REVIEW=tui` picks it over the window. Design: the
    terminal-review spec, stage 3.
-4. **Calibration view.** Confidence against outcome across a folder's
+3. **Calibration view.** Confidence against outcome across a folder's
    decision files, shown only once there are enough entries to mean
    something. Depends on the Decide tab (shipped).
-5. **Missing-warrant annotation kind** in Review Mode (Toulmin): the reviewer
+4. **Missing-warrant annotation kind** in Review Mode (Toulmin): the reviewer
    marks a claim whose grounds are absent; goes into feedback as a request.
-6. **Feynman-mode takeaway**: write the takeaway with the page hidden.
-7. **Prose-density signal** per section in the outline (grade level, not
+5. **Feynman-mode takeaway**: write the takeaway with the page hidden.
+6. **Prose-density signal** per section in the outline (grade level, not
    called readability), with long-sentence highlighting on demand.
 
 ## Later

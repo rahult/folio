@@ -167,6 +167,7 @@ Install it whichever way suits you:
 ```bash
 # With the skills CLI (skills.sh) — any supported agent, project or global
 npx skills add rahult/folio            # add -g for your user directory
+npx skills add rahult/folio -a pi     # Pi: invoked as /skill:folio
 
 # With Folio itself — writes the skill bundled in the app
 folio skill install                    # ~/.claude/skills and ~/.agents/skills
@@ -179,11 +180,18 @@ cp -r skills/folio ~/.claude/skills/
 
 [![skills.sh](https://skills.sh/b/rahult/folio)](https://skills.sh/rahult/folio)
 
-The skill expects `folio` on PATH (or falls back to the app bundle):
+The skill expects `folio` on PATH. In the app choose **Folio → Install
+Command Line Tool…**, which links the bundled command into
+`/usr/local/bin` or `~/.local/bin`. On a machine without the app (a server
+you review on over SSH, a container an agent runs in), install just the
+command:
 
-```bash
-mkdir -p ~/.local/bin && printf '#!/bin/sh\nexec /Applications/Folio.app/Contents/MacOS/folio "$@"\n' > ~/.local/bin/folio && chmod +x ~/.local/bin/folio
+```sh
+curl -fsSL https://raw.githubusercontent.com/rahult/folio/main/scripts/install.sh | sh
 ```
+
+or download `folio-<target>.tar.gz` from the latest release. `cargo install
+--path src-tauri/crates/cli` works from a checkout.
 
 **View → Authorship** (⇧⌘A) tints who wrote which words: text an agent
 wrote on disk in a quiet blue, text it rewrote after you requested changes
