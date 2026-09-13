@@ -51,12 +51,3 @@ export function barModel(request: ReviewRequest | null, annotationCount: number)
     primary: annotationCount > 0 ? "changes" : "approved",
   };
 }
-
-/**
- * A reviewer may answer by editing the document rather than annotating it.
- * The agent has no way to notice that on its own, so say it plainly.
- */
-export function feedbackWithEditNote(feedback: string, documentEdited: boolean): string {
-  if (!documentEdited) return feedback;
-  return `${feedback.trimEnd()}\n\n---\n\nThe reviewer edited the document directly during this review — re-read the file before acting on this feedback.\n`;
-}

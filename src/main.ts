@@ -80,14 +80,13 @@ import { TabList, type Tab, type TabSnapshot } from "./tabs";
 import { renderedText, showReloadDiff, docSegments } from "./diffview";
 import { findQuoteRange } from "./quotematch";
 import {
-  buildFeedback,
   loadAnnotations,
   makeAnnotation,
   type Annotation,
   type AnnotationKind,
 } from "./annotations";
 import { renderAnnotations } from "./annotview";
-import { barModel, feedbackWithEditNote, type ReviewRequest, type Verdict } from "./reviewgate";
+import { barModel, type ReviewRequest, type Verdict } from "./reviewgate";
 import { hintText, reviewKeyAction, verdictFor, type ReviewAction } from "./reviewmode";
 import {
   closeEntry,
@@ -1705,7 +1704,12 @@ async function copyText(text: string): Promise<void> {
  *  the clipboard and a `<file>.feedback.md` beside the reviewed file. */
 async function exportReviewFeedback(): Promise<void> {
   trackEvent("export_feedback");
-  const feedback = buildFeedback(doc.fileName, annotations, diskContent ?? undefined);
+  const feedback = await invoke<string>("build_feedback", {
+    fileName: doc.fileName,
+    annotations,
+    source: diskContent ?? null,
+    documentEdited: false,
+  });
   await copyText(feedback);
   if (doc.filePath) {
     await invoke("write_text_file", {
@@ -1893,11 +1897,13 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
   // way, any previous sticky error no longer describes the current attempt.
   reviewBarError = null;
   trackEvent("review_verdict", { verdict });
-  const feedback = feedbackWithEditNote(
-    buildFeedback(doc.fileName, annotations, diskContent ?? undefined),
-    documentEditedDuringReview,
-  );
   try {
+    const feedback = await invoke<string>("build_feedback", {
+      fileName: doc.fileName,
+      annotations,
+      source: diskContent ?? null,
+      documentEdited: documentEditedDuringReview,
+    });
     await invoke("write_text_file", { path: `${path}.feedback.md`, contents: feedback });
     await invoke("resolve_review", {
       path,

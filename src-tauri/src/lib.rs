@@ -10,6 +10,7 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
 use folio_core::archive::{self, RevisionContent, RevisionMeta, RevisionText};
+use folio_core::feedback::Annotation;
 use folio_core::gate as reviewgate;
 use folio_core::skill as skillcli;
 mod lenses;
@@ -538,17 +539,6 @@ fn read_revision(app: AppHandle<Wry>, path: String, seq: u64) -> Result<Revision
 // Review annotations persist in <config>/folio.db so they survive webview
 // data clears and are queryable outside the app. Core logic takes a
 // &Connection so it is unit-testable in memory.
-
-/// One review annotation; field names match the frontend model exactly.
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct Annotation {
-    id: String,
-    kind: String,
-    quote: String,
-    body: String,
-    created_at: String,
-}
 
 fn init_annotation_db(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -1269,6 +1259,18 @@ fn resolve_review(
     Ok(())
 }
 
+/// The Feedback text for the current annotations — the same bytes the
+/// app writes to `<doc>.feedback.md` and hands to the gate.
+#[tauri::command]
+fn build_feedback(
+    file_name: String,
+    annotations: Vec<Annotation>,
+    source: Option<String>,
+    document_edited: bool,
+) -> String {
+    folio_core::feedback::build(&file_name, &annotations, source.as_deref(), document_edited)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Resolved before the builder runs: a second invocation gets this far
@@ -1377,7 +1379,8 @@ pub fn run() {
             read_revision,
             register_default_markdown_handler,
             review_request_state,
-            resolve_review
+            resolve_review,
+            build_feedback
         ])
         .setup(move |app| {
             // Reaching setup proves we are the primary instance, so our own

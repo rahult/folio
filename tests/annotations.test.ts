@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildFeedback,
-  locateQuote,
   loadAnnotations,
   makeAnnotation,
   saveAnnotations,
@@ -43,105 +41,6 @@ describe("annotation persistence", () => {
     const a = makeAnnotation("comment", "q", "b");
     const b = makeAnnotation("comment", "q", "b");
     expect(a.id).not.toBe(b.id);
-  });
-});
-
-describe("buildFeedback", () => {
-  it("approves when there are no annotations", () => {
-    const feedback = buildFeedback("plan.md", []);
-    expect(feedback).toContain("# Review feedback: plan.md");
-    expect(feedback).toContain("**approved**");
-  });
-
-  it("serializes a comment with its quoted context", () => {
-    const feedback = buildFeedback("plan.md", [
-      makeAnnotation("comment", "migrate everything at once", "Split into two phases."),
-    ]);
-    expect(feedback).toContain("**changes requested** (1 annotation)");
-    expect(feedback).toContain('## 1. Comment on "migrate everything at once"');
-    expect(feedback).toContain("> migrate everything at once");
-    expect(feedback).toContain("Split into two phases.");
-  });
-
-  it("serializes deletions and replacements as instructions", () => {
-    const feedback = buildFeedback("plan.md", [
-      makeAnnotation("delete", "drop the users table", ""),
-      makeAnnotation("replace", "use Redis", "use Postgres with JSONB"),
-    ]);
-    expect(feedback).toContain('## 1. Delete "drop the users table"');
-    expect(feedback).toContain("Remove this section.");
-    expect(feedback).toContain('## 2. Replace "use Redis"');
-    expect(feedback).toContain("use Postgres with JSONB");
-    expect(feedback).toContain("(2 annotations)");
-  });
-
-  it("collapses multiline quotes into one line", () => {
-    const longQuote = "line one\n\nline two   with   spacing";
-    const feedback = buildFeedback("plan.md", [makeAnnotation("comment", longQuote, "hm")]);
-    expect(feedback).toContain('"line one line two with spacing"');
-  });
-});
-
-describe("locateQuote", () => {
-  const text = "# Plan\n\nShip to all users at once.\nWatch the error rate.\n\nRoll back by flag.\n";
-
-  it("finds a single-line quote", () => {
-    expect(locateQuote(text, "Ship to all users at once.")).toEqual({ startLine: 3, endLine: 3 });
-  });
-
-  it("finds a quote spanning lines, tolerant of whitespace", () => {
-    expect(locateQuote(text, "at once.   Watch the")).toEqual({ startLine: 3, endLine: 4 });
-  });
-
-  it("sees through list markers, headings, and inline marks", () => {
-    const md = "## Steps\n\n* Asterisk bullet\n* Second **item**\n\n1. First\n2. `Second`\n\n- [x] Done task\n";
-    expect(locateQuote(md, "Asterisk bullet Second item")).toEqual({ startLine: 3, endLine: 4 });
-    expect(locateQuote(md, "First Second")).toEqual({ startLine: 6, endLine: 7 });
-    expect(locateQuote(md, "Done task")).toEqual({ startLine: 9, endLine: 9 });
-    expect(locateQuote(md, "Steps")).toEqual({ startLine: 1, endLine: 1 });
-  });
-
-  it("returns null when the words are not there", () => {
-    expect(locateQuote(text, "canary rollout")).toBeNull();
-    expect(locateQuote(text, "")).toBeNull();
-  });
-});
-
-describe("buildFeedback with approve marks and line numbers", () => {
-  const text = "# Plan\n\nShip to all users at once.\n\nRoll back by flag.\n";
-
-  it("heads entries with line ranges when the source is given", () => {
-    const out = buildFeedback("plan.md", [makeAnnotation("delete", "Ship to all users at once.", "")], text);
-    expect(out).toContain('## 1. Delete L3 "Ship to all users at once."');
-  });
-
-  it("lists approve marks under Keep as is and keeps the verdict approved", () => {
-    const out = buildFeedback("plan.md", [makeAnnotation("approve", "Roll back by flag.", "")], text);
-    expect(out).toContain("Verdict: **approved**");
-    expect(out).toContain("## Keep as is");
-    expect(out).toContain('- L5 "Roll back by flag."');
-  });
-
-  it("puts change requests before Keep as is and counts only them", () => {
-    const out = buildFeedback(
-      "plan.md",
-      [
-        makeAnnotation("approve", "Roll back by flag.", ""),
-        makeAnnotation("comment", "Ship to all users at once.", "Too fast."),
-      ],
-      text,
-    );
-    expect(out).toContain("Verdict: **changes requested** (1 annotation)");
-    expect(out.indexOf("## 1. Comment")).toBeLessThan(out.indexOf("## Keep as is"));
-  });
-
-  it("omits line ranges without a source text or when the quote is not found", () => {
-    expect(buildFeedback("plan.md", [makeAnnotation("comment", "Ship to all", "x")])).toContain(
-      '## 1. Comment on "Ship to all"',
-    );
-    expect(buildFeedback("plan.md", [makeAnnotation("comment", "gone", "x")], text)).toContain(
-      '## 1. Comment on "gone"',
-    );
   });
 
   it("accepts approve when loading persisted annotations", () => {

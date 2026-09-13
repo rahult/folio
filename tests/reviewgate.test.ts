@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  barModel,
-  feedbackWithEditNote,
-  type ReviewRequest,
-  type ReviewState,
-} from "../src/reviewgate";
+import { barModel, type ReviewRequest, type ReviewState } from "../src/reviewgate";
 
 function request(state: ReviewState, agent = "claude"): ReviewRequest {
   return {
@@ -60,17 +55,5 @@ describe("review bar model", () => {
     expect(a).not.toBe(b);
     (a as { visible: boolean }).visible = true;
     expect(b.visible).toBe(false);
-  });
-});
-
-describe("edit note", () => {
-  it("is absent when the document was untouched", () => {
-    expect(feedbackWithEditNote("# Feedback\n", false)).toBe("# Feedback\n");
-  });
-
-  it("tells the agent to re-read a document edited during review", () => {
-    const out = feedbackWithEditNote("# Feedback\n", true);
-    expect(out).toContain("# Feedback");
-    expect(out).toMatch(/re-read/i);
   });
 });
