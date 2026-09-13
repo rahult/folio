@@ -135,6 +135,10 @@ describe("actionForMenuId", () => {
     expect(actionForMenuId("view.telemetry")).toEqual({ kind: "toggle-telemetry" });
   });
 
+  it("maps the command line tool item", () => {
+    expect(actionForMenuId("app.install-cli")).toEqual({ kind: "install-cli" });
+  });
+
   it("maps revision menu ids to their sequence number", () => {
     expect(actionForMenuId("file.revision.3")).toEqual({ kind: "open-revision", seq: 3 });
     expect(actionForMenuId("file.revision.x")).toBeNull();

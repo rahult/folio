@@ -867,6 +867,12 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             "Check for Updates…",
             None,
         )?)
+        .item(&menu_item(
+            app,
+            "app.install-cli",
+            "Install Command Line Tool…",
+            None,
+        )?)
         .separator()
         .about(Some(AboutMetadata::default()))
         .separator()
@@ -1287,6 +1293,48 @@ fn append_reading(
     Ok(next)
 }
 
+/// Folio → Install Command Line Tool: symlink the bundled `folio` command
+/// into /usr/local/bin, or ~/.local/bin when that is not writable. On
+/// Windows there is no conventional link target, so it names the folder.
+#[tauri::command]
+fn install_cli_tool() -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe.parent().ok_or("no app directory")?;
+    let cli = dir.join(if cfg!(windows) { "folio.exe" } else { "folio" });
+    if !cli.is_file() {
+        return Err(format!("This build has no command line tool ({}).", cli.display()));
+    }
+    #[cfg(windows)]
+    {
+        Ok(format!("Add this folder to your PATH to use `folio` from a terminal:\n{}", dir.display()))
+    }
+    #[cfg(unix)]
+    {
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("no home directory")?;
+        for target in [std::path::PathBuf::from("/usr/local/bin"), home.join(".local").join("bin")] {
+            if fs::create_dir_all(&target).is_err() {
+                continue;
+            }
+            let link = target.join("folio");
+            if let Ok(meta) = fs::symlink_metadata(&link) {
+                if meta.file_type().is_symlink() || meta.is_file() {
+                    if fs::remove_file(&link).is_err() {
+                        continue;
+                    }
+                }
+            }
+            if std::os::unix::fs::symlink(&cli, &link).is_ok() {
+                return Ok(format!(
+                    "Installed {}.\nIf `folio` is not found in a new terminal, add {} to your PATH.",
+                    link.display(),
+                    target.display()
+                ));
+            }
+        }
+        Err("Could not write to /usr/local/bin or ~/.local/bin.".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Resolved before the builder runs: a second invocation gets this far
@@ -1397,7 +1445,8 @@ pub fn run() {
             review_request_state,
             resolve_review,
             build_feedback,
-            append_reading
+            append_reading,
+            install_cli_tool
         ])
         .setup(move |app| {
             // Reaching setup proves we are the primary instance, so our own

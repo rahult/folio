@@ -315,6 +315,17 @@ async function makeDefaultApp(): Promise<void> {
   }
 }
 
+/** Folio → Install Command Line Tool: link the bundled `folio` command
+ *  into a directory on PATH and say where it went. */
+async function installCliTool(): Promise<void> {
+  try {
+    const where = await invoke<string>("install_cli_tool");
+    await message(where, { title: "Command Line Tool" });
+  } catch (err) {
+    await message(String(err), { title: "Command Line Tool", kind: "error" });
+  }
+}
+
 async function saveFile(saveAs = false): Promise<void> {
   let path = doc.filePath;
   if (saveAs || path === null) {
@@ -2299,6 +2310,8 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return makeDefaultApp();
     case "check-updates":
       return checkForUpdates(true);
+    case "install-cli":
+      return installCliTool();
     case "editor-command":
       // Formatting commands operate on the WYSIWYG document only.
       if (!sourceMode) editor.runCommand(action.command);
