@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   BUILTIN_LENSES,
@@ -82,5 +83,18 @@ describe("analysis file", () => {
     expect(entries[0].body).toBe("### Top\n\nb");
     expect(entries[1].scope).toBe("document");
     expect(entries[1].model).toBe("llama3.2:3b");
+  });
+
+  it("parses the Analysis file the Rust core writes", () => {
+    const text = readFileSync("src-tauri/crates/core/tests/fixtures/analysis/two-readings.md", "utf8");
+    const entries = parseAnalysis(text);
+    expect(entries.map((e) => [e.lens, e.date, e.model])).toEqual([
+      ["Inversion", "2026-09-15", "claude (agent)"],
+      ["Council", "2026-09-14", "llama3.2:3b"],
+    ]);
+    expect(entries[0].scope).toBe("the passage");
+    expect(entries[0].body).toBe("### Top\n\nb");
+    expect(entries[1].scope).toBe("document");
+    expect(entries[1].body).toBe("- one\n- two");
   });
 });

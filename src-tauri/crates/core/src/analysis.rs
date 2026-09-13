@@ -94,4 +94,13 @@ mod tests {
         assert!(out.contains("\n### Top\n\n#### Sub\n\n####### not a heading\n"));
         assert!(out.contains(&format!("Scope: \"{}\"", "x".repeat(160))));
     }
+
+    #[test]
+    fn two_appends_produce_the_shared_fixture_byte_for_byte() {
+        let first = append(None, "plan.md", "/p.md", &reading("Council", "2026-09-14", "document", "- one\n- two"));
+        let mut second = reading("Inversion", "2026-09-15", "the passage", "# Top\n\nb");
+        second.producer = "claude (agent)".into();
+        let out = append(Some(&first), "plan.md", "/p.md", &second);
+        assert_eq!(out, include_str!("../tests/fixtures/analysis/two-readings.md"));
+    }
 }
