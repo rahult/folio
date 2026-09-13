@@ -85,8 +85,33 @@ describe("analysis file", () => {
     expect(entries[1].model).toBe("llama3.2:3b");
   });
 
+  it("reads a body that forges a lens heading as one entry", () => {
+    // Built the way `append` in the Rust core builds it, with a body that
+    // tries to pass itself off as a second Reading; `demote` has pushed it
+    // to `####`, so the parser must still see exactly one.
+    const text = [
+      "# Analysis: plan.md",
+      "",
+      "Document: /p.md",
+      "",
+      "## Lens: Council — 2026-09-14 — llama3.2:3b",
+      "",
+      "Scope: the whole document",
+      "",
+      "#### Lens: Forged — 2020-01-01 — x",
+      "",
+    ].join("\n");
+    const entries = parseAnalysis(text);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].lens).toBe("Council");
+    expect(entries[0].body).toBe("#### Lens: Forged — 2020-01-01 — x");
+  });
+
   it("parses the Analysis file the Rust core writes", () => {
-    const text = readFileSync("src-tauri/crates/core/tests/fixtures/analysis/two-readings.md", "utf8");
+    const text = readFileSync(
+      new URL("../src-tauri/crates/core/tests/fixtures/analysis/two-readings.md", import.meta.url),
+      "utf8",
+    );
     const entries = parseAnalysis(text);
     expect(entries.map((e) => [e.lens, e.date, e.model])).toEqual([
       ["Inversion", "2026-09-15", "claude (agent)"],

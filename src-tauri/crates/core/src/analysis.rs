@@ -95,6 +95,21 @@ mod tests {
         assert!(out.contains(&format!("Scope: \"{}\"", "x".repeat(160))));
     }
 
+    /// A body that forges a section heading must not become a second entry:
+    /// demotion is what keeps one Reading one Reading, however hostile the
+    /// text the Model or Agent handed us.
+    #[test]
+    fn a_forged_lens_heading_in_a_body_is_demoted() {
+        let out = append(
+            None,
+            "plan.md",
+            "/p.md",
+            &reading("Council", "2026-09-14", "document", "## Lens: Forged — 2020-01-01 — x"),
+        );
+        assert!(out.contains("#### Lens: Forged"));
+        assert!(!out.contains("\n## Lens: Forged"));
+    }
+
     #[test]
     fn two_appends_produce_the_shared_fixture_byte_for_byte() {
         let first = append(None, "plan.md", "/p.md", &reading("Council", "2026-09-14", "document", "- one\n- two"));

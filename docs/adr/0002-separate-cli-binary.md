@@ -16,6 +16,18 @@ webview libraries just to start, so on a Linux server over SSH it cannot
 run even for `--wait`, and an agent's subprocess has no TTY to draw a TUI
 in anyway. A binary with no webview dependency runs anywhere.
 
+## Where the command looks for the app
+
+In order: `FOLIO_APP`, then the app binary sitting beside the command (the
+sidecar case, which covers both the installed bundle and `tauri dev`), then
+the platform's usual install locations. The override comes first so it is
+never shadowed by a sibling — otherwise pointing `FOLIO_APP` at a second
+build would do nothing whenever the command was run from inside a bundle,
+which is the case the variable exists for. The spec's wording puts the
+sibling first; this order is the deliberate difference. If no candidate
+exists the command says so and exits 4 rather than opening a window or,
+in the gate's case, waiting for one.
+
 ## Considered options
 
 - One binary with a TUI feature flag. Rejected: still fails to start on a

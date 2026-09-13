@@ -98,3 +98,21 @@ _Avoid_: assistant, AI, bot
 A language-model endpoint the person brings, which only answers a prompt
 Folio sends it. Runs Lenses. Never acts on files.
 _Avoid_: agent, LLM, assistant
+
+### What Folio is made of
+
+**Command**:
+The `folio` binary a person or an Agent runs from a terminal. Separate from
+the app (ADR 0002), it runs the Gate, the skill, and later the terminal
+Review Mode; anything that needs a window it delegates to the app.
+_Avoid_: CLI tool, folio-cli, the app
+
+**Core**:
+`folio-core`, the library the Command and the app both link. It owns the
+Companion file formats, so the two binaries can never disagree about what
+is on disk.
+_Avoid_: shared crate, common
+
+A note on a word that is not ours: "sidecar" is Tauri's term for the
+Command bundled beside the app inside the app's own package. It is a build
+arrangement, never a Companion.

@@ -52,6 +52,11 @@ fn is_marker(word: &str) -> bool {
 }
 
 /// A word stripped of surrounding punctuation (`**bold**,` → `bold`).
+///
+/// `is_alphanumeric` is Alphabetic ∪ Numeric, slightly broader than the
+/// `\p{L}\p{N}` the TypeScript side trims by; it is harmless here because
+/// both sides tokenize the source and the quote the same way, so a quote
+/// still matches the text it was taken from.
 fn word_core(word: &str) -> &str {
     word.trim_matches(|c: char| !c.is_alphanumeric())
 }
@@ -91,10 +96,14 @@ pub fn locate_quote(source: &str, quote: &str) -> Option<LineRange> {
 }
 
 /// The longest quote a heading or "Keep as is" bullet carries; longer ones
-/// are cut short with an ellipsis, as the TypeScript `oneLine` does.
+/// are cut short with an ellipsis, as the TypeScript `oneLine` does. The
+/// limit counts `char`s (Unicode scalar values) where the TypeScript counts
+/// UTF-16 code units, so the two cut at a different point only for
+/// astral-plane characters — emoji and the like.
 const QUOTE_MAX: usize = 72;
 
-/// Whitespace runs collapsed to one space, trimmed, and cut to `QUOTE_MAX`.
+/// Whitespace runs collapsed to one space, trimmed, and cut to `QUOTE_MAX`
+/// `char`s — see the note on `QUOTE_MAX` about counting.
 fn one_line(text: &str) -> String {
     let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.chars().count() <= QUOTE_MAX {
