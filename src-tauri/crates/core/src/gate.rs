@@ -191,43 +191,45 @@ pub fn wait_for_verdict_in(
     }
 }
 
-/// Open a review window for `path` in the running app — or start the app if
-/// nothing is running. Spawned detached and *without* the gate flags, so the
-/// child is an ordinary `folio review <path>` invocation that the existing
-/// spool handoff routes to the primary instance.
-fn spawn_review_window(path: &str) {
-    let Ok(exe) = std::env::current_exe() else {
-        return;
-    };
-    let _ = std::process::Command::new(exe)
-        .args(["review", path])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+/// `folio review --wait|--collect <path>`. Prints the feedback Markdown to
+/// stdout on a decision and returns the process exit code. `open_window`
+/// is how the caller shows the review (the app spawns itself; the CLI
+/// starts the app) — the gate never knows which binary it is in.
+pub fn run_cli(
+    paths: &[String],
+    wait: bool,
+    agent: &str,
+    timeout_secs: u64,
+    open_window: &dyn Fn(&str),
+) -> i32 {
+    run_cli_in(&review_dir(), paths, wait, agent, timeout_secs, open_window)
 }
 
-/// `folio review --wait|--collect <path>`. Prints the feedback Markdown to
-/// stdout on a decision and returns the process exit code.
-pub fn run_cli(paths: &[String], wait: bool, agent: &str, timeout_secs: u64) -> i32 {
+pub fn run_cli_in(
+    dir: &Path,
+    paths: &[String],
+    wait: bool,
+    agent: &str,
+    timeout_secs: u64,
+    open_window: &dyn Fn(&str),
+) -> i32 {
     let Some(path) = paths.first() else {
         eprintln!("folio: no markdown file to review");
         return 4;
     };
-    let dir = review_dir();
-    sweep_stale_in(&dir, STALE_SECS);
+    sweep_stale_in(dir, STALE_SECS);
 
     if wait {
         let req = ReviewRequest::waiting(path, agent, std::process::id());
-        if write_request_in(&dir, &req).is_err() {
+        if write_request_in(dir, &req).is_err() {
             eprintln!("folio: could not open a review request");
             return 4;
         }
-        spawn_review_window(path);
-        match wait_for_verdict_in(&dir, path, timeout_secs, 200) {
+        open_window(path);
+        match wait_for_verdict_in(dir, path, timeout_secs, 200) {
             Some(decided) => {
                 print!("{}", decided.feedback.as_deref().unwrap_or_default());
-                clear_in(&dir, path);
+                clear_in(dir, path);
                 exit_code(decided.state)
             }
             None => {
@@ -236,7 +238,7 @@ pub fn run_cli(paths: &[String], wait: bool, agent: &str, timeout_secs: u64) -> 
             }
         }
     } else {
-        match read_request_in(&dir, path) {
+        match read_request_in(dir, path) {
             None => {
                 eprintln!("folio: no review was requested for {path}");
                 4
@@ -247,7 +249,7 @@ pub fn run_cli(paths: &[String], wait: bool, agent: &str, timeout_secs: u64) -> 
             }
             Some(decided) => {
                 print!("{}", decided.feedback.as_deref().unwrap_or_default());
-                clear_in(&dir, path);
+                clear_in(dir, path);
                 exit_code(decided.state)
             }
         }
@@ -392,5 +394,34 @@ mod tests {
     fn waiting_gives_up_when_there_is_no_request_at_all() {
         let dir = temp_dir("wait-none");
         assert!(wait_for_verdict_in(&dir, "/docs/absent.md", 0, 0).is_none());
+    }
+
+    #[test]
+    fn run_cli_wait_opens_the_window_and_returns_the_verdict_code() {
+        let dir = temp_dir("run-cli-wait");
+        let path = "/tmp/plan.md".to_string();
+        let opened = std::sync::Mutex::new(Vec::new());
+        // Resolve the request from another thread once run_cli has written it,
+        // the way the review window does in real use.
+        let resolver = {
+            let dir = dir.clone();
+            let path = path.clone();
+            std::thread::spawn(move || {
+                for _ in 0..100 {
+                    if read_request_in(&dir, &path).is_some() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                resolve_in(&dir, &path, ReviewState::Approved, "# ok\n", false).unwrap();
+            })
+        };
+        let code = run_cli_in(&dir, &[path.clone()], true, "claude", 5, &|p| {
+            opened.lock().unwrap().push(p.to_string())
+        });
+        resolver.join().unwrap();
+        assert_eq!(code, 0);
+        assert_eq!(opened.lock().unwrap().as_slice(), &[path.clone()]);
+        assert!(read_request_in(&dir, &path).is_none(), "cleared after collection");
     }
 }

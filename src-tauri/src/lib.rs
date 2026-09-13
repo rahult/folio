@@ -9,12 +9,11 @@ use tauri::menu::{
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
-pub mod reviewgate;
+use folio_core::gate as reviewgate;
 mod skillcli;
 mod lenses;
 
-/// File extensions Folio opens; mirrors `fileAssociations` in tauri.conf.json.
-const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mdown", "mkd"];
+use folio_core::cliargs::{self, CliOptions};
 
 /// What a window should do the moment its webview comes up: which files to
 /// open and whether to start in floating review mode. Keyed by window label
@@ -65,118 +64,6 @@ fn file_name(path: &str) -> String {
         .and_then(|n| n.to_str())
         .unwrap_or(path)
         .to_string()
-}
-
-/// Gate flags from a `folio review --wait/--collect` invocation. Meaningful
-/// only to the invoking process, so they are skipped by serde: the spool
-/// entry and the per-window startup request stay exactly as they were.
-#[derive(Clone)]
-struct GateOptions {
-    wait: bool,
-    collect: bool,
-    timeout_secs: u64,
-    agent: String,
-}
-
-impl Default for GateOptions {
-    fn default() -> Self {
-        Self {
-            wait: false,
-            collect: false,
-            timeout_secs: reviewgate::DEFAULT_TIMEOUT_SECS,
-            agent: "agent".to_string(),
-        }
-    }
-}
-
-/// CLI invocation split into markdown files to open and whether the
-/// floating review window was requested. Doubles as the per-window startup
-/// request handed to a freshly created window.
-#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CliOptions {
-    paths: Vec<String>,
-    float: bool,
-    #[serde(skip)]
-    gate: GateOptions,
-}
-
-/// Write piped markdown to a temp file so it can be opened (and watched)
-/// like any other document. Returns None for empty input.
-fn write_temp_markdown(contents: &str, dir: &std::path::Path) -> Option<std::path::PathBuf> {
-    if contents.trim().is_empty() {
-        return None;
-    }
-    let path = dir.join(format!("folio-review-{}.md", std::process::id()));
-    fs::write(&path, contents).ok()?;
-    Some(path)
-}
-
-/// Read piped stdin into a temp markdown file (`folio --float -`). Skipped
-/// when stdin is a terminal — otherwise an interactive launch would block
-/// waiting for input.
-fn stdin_to_temp() -> Option<std::path::PathBuf> {
-    use std::io::{IsTerminal, Read};
-    let mut stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        return None;
-    }
-    let mut contents = String::new();
-    stdin.read_to_string(&mut contents).ok()?;
-    write_temp_markdown(&contents, &std::env::temp_dir())
-}
-
-/// Filter CLI arguments down to existing markdown files, lifting out the
-/// `--float` / `-f` flag, the `review` subcommand (implies float), and `-`
-/// (read markdown from stdin). Windows and Linux pass the opened file as
-/// argv[1]; macOS may inject `-psn_…`, which the extension filter drops
-/// naturally.
-fn parse_cli_args(args: impl IntoIterator<Item = String>) -> CliOptions {
-    let mut float = false;
-    let mut paths = Vec::new();
-    let mut gate = GateOptions::default();
-    // `--timeout 60` / `--agent claude` consume the next argument; this
-    // remembers which one is owed so the value is never read as a path.
-    let mut pending: Option<&'static str> = None;
-    for arg in args.into_iter().skip(1) {
-        if let Some(flag) = pending.take() {
-            match flag {
-                "timeout" => {
-                    if let Ok(secs) = arg.parse::<u64>() {
-                        gate.timeout_secs = secs;
-                    }
-                }
-                _ => gate.agent = arg,
-            }
-            continue;
-        }
-        match arg.as_str() {
-            "--float" | "-f" => float = true,
-            "review" => float = true,
-            "--wait" => gate.wait = true,
-            "--collect" => gate.collect = true,
-            "--timeout" => pending = Some("timeout"),
-            "--agent" => pending = Some("agent"),
-            "-" => {
-                if let Some(path) = stdin_to_temp() {
-                    paths.push(path.to_string_lossy().into_owned());
-                }
-            }
-            _ => {
-                let path = std::path::Path::new(&arg);
-                let is_markdown = path.is_file()
-                    && path
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map(|ext| MARKDOWN_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
-                        .unwrap_or(false);
-                if is_markdown {
-                    paths.push(arg);
-                }
-            }
-        }
-    }
-    CliOptions { paths, float, gate }
 }
 
 // ——— multiple windows ———
@@ -277,6 +164,22 @@ fn open_window(app: &AppHandle<Wry>, request: CliOptions) -> tauri::Result<Webvi
         .inner_size(800.0, 600.0)
         .position(80.0 + offset, 80.0 + offset)
         .build()
+}
+
+/// Open a review window for `path` in the running app — or start the app
+/// if nothing is running. Spawned detached and *without* the gate flags,
+/// so the child is an ordinary `folio-app review <path>` invocation that
+/// the spool handoff routes to the primary instance.
+fn spawn_review_window(path: &str) {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let _ = std::process::Command::new(exe)
+        .args(["review", path])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 /// The window a global action (menu command, OS file-open) applies to: the
@@ -529,15 +432,9 @@ struct RevisionText {
     feedback: Option<String>,
 }
 
-/// FNV-1a hex of the reviewed file's path — stable directory name.
-pub(crate) fn path_hash(path: &str) -> String {
-    let mut hash: u64 = 0xcbf29ce484222325;
-    for byte in path.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    format!("{hash:016x}")
-}
+/// FNV-1a hex of the reviewed file's path — stable directory name. Lives in
+/// the core so the gate hashes paths the same way in either binary.
+pub(crate) use folio_core::path_hash;
 
 fn revision_seqs(dir: &std::path::Path) -> Vec<u64> {
     let mut seqs: Vec<u64> = fs::read_dir(dir)
@@ -1538,7 +1435,7 @@ pub fn run() {
         std::process::exit(skillcli::run(&cmd));
     }
 
-    let cli = parse_cli_args(std::env::args());
+    let cli = cliargs::parse(std::env::args());
 
     // `--wait` / `--collect` never become the app: they branch out here,
     // before the Tauri builder, so the review CLI is a plain blocking poller
@@ -1549,6 +1446,7 @@ pub fn run() {
             cli.gate.wait,
             &cli.gate.agent,
             cli.gate.timeout_secs,
+            &spawn_review_window,
         ));
     }
 
@@ -1740,100 +1638,6 @@ mod tests {
     /// case-insensitive, so differing only in extension case collides).
     fn temp_file(stem: &str, ext: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("folio-test-{stem}-{}.{ext}", std::process::id()))
-    }
-
-    #[test]
-    fn parse_cli_args_keeps_existing_markdown_files() {
-        let md = temp_file("args", "md");
-        let txt = temp_file("args", "txt");
-        fs::write(&md, "# hi").unwrap();
-        fs::write(&txt, "not markdown").unwrap();
-
-        let cli = parse_cli_args(
-            [
-                "folio".to_string(),
-                md.to_string_lossy().into_owned(),
-                txt.to_string_lossy().into_owned(),
-                "-psn_0_12345".to_string(),
-                temp_file("args", "missing.md").to_string_lossy().into_owned(),
-            ]
-            .into_iter(),
-        );
-
-        assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
-        assert!(!cli.float);
-
-        fs::remove_file(&md).ok();
-        fs::remove_file(&txt).ok();
-    }
-
-    #[test]
-    fn parse_cli_args_matches_extensions_case_insensitively() {
-        let upper = temp_file("args-upper", "MD");
-        fs::write(&upper, "# hi").unwrap();
-
-        let cli =
-            parse_cli_args(["folio".to_string(), upper.to_string_lossy().into_owned()].into_iter());
-
-        assert_eq!(cli.paths, vec![upper.to_string_lossy().into_owned()]);
-
-        fs::remove_file(&upper).ok();
-    }
-
-    #[test]
-    fn parse_cli_args_lifts_out_the_float_flag() {
-        let md = temp_file("args-float", "md");
-        fs::write(&md, "# hi").unwrap();
-
-        for flag in ["--float", "-f"] {
-            let cli = parse_cli_args(
-                [
-                    "folio".to_string(),
-                    flag.to_string(),
-                    md.to_string_lossy().into_owned(),
-                ]
-                .into_iter(),
-            );
-            assert!(cli.float, "{flag} should request float mode");
-            assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
-        }
-
-        fs::remove_file(&md).ok();
-    }
-
-    #[test]
-    fn parse_cli_args_review_subcommand_implies_float() {
-        let md = temp_file("args-review", "md");
-        fs::write(&md, "# hi").unwrap();
-
-        let cli = parse_cli_args(
-            [
-                "folio".to_string(),
-                "review".to_string(),
-                md.to_string_lossy().into_owned(),
-            ]
-            .into_iter(),
-        );
-
-        assert!(cli.float);
-        assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
-
-        fs::remove_file(&md).ok();
-    }
-
-    #[test]
-    fn write_temp_markdown_writes_nonempty_content_only() {
-        let dir = std::env::temp_dir().join(format!("folio-test-tmp-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-
-        let path = write_temp_markdown("# piped\n", &dir).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "# piped\n");
-        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("md"));
-
-        assert!(write_temp_markdown("   \n ", &dir).is_none());
-        assert!(write_temp_markdown("", &dir).is_none());
-
-        fs::remove_dir_all(&dir).ok();
     }
 
     fn spool_test_dir(name: &str) -> std::path::PathBuf {
@@ -2052,90 +1856,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_cli_args_lifts_out_the_wait_flag() {
-        let md = temp_file("args-wait", "md");
-        fs::write(&md, "# hi").unwrap();
-        let cli = parse_cli_args(
-            [
-                "folio".to_string(),
-                "review".to_string(),
-                "--wait".to_string(),
-                md.to_string_lossy().into_owned(),
-            ]
-            .into_iter(),
-        );
-        assert!(cli.gate.wait);
-        assert!(!cli.gate.collect);
-        assert!(cli.float);
-        assert_eq!(cli.paths.len(), 1);
-        assert_eq!(cli.gate.timeout_secs, reviewgate::DEFAULT_TIMEOUT_SECS);
-        assert_eq!(cli.gate.agent, "agent");
-
-        fs::remove_file(&md).ok();
-    }
-
-    #[test]
-    fn parse_cli_args_lifts_out_the_collect_flag() {
-        let md = temp_file("args-collect", "md");
-        let cli = parse_cli_args(
-            [
-                "folio".to_string(),
-                "review".to_string(),
-                "--collect".to_string(),
-                md.to_string_lossy().into_owned(),
-            ]
-            .into_iter(),
-        );
-        assert!(cli.gate.collect);
-        assert!(!cli.gate.wait);
-    }
-
-    #[test]
-    fn parse_cli_args_reads_timeout_and_agent_values() {
-        let md = temp_file("args-opts", "md");
-        fs::write(&md, "# hi").unwrap();
-        let cli = parse_cli_args(
-            [
-                "folio".to_string(),
-                "review".to_string(),
-                "--wait".to_string(),
-                "--timeout".to_string(),
-                "60".to_string(),
-                "--agent".to_string(),
-                "claude".to_string(),
-                md.to_string_lossy().into_owned(),
-            ]
-            .into_iter(),
-        );
-        assert_eq!(cli.gate.timeout_secs, 60);
-        assert_eq!(cli.gate.agent, "claude");
-        // The values must not be mistaken for document paths.
-        assert_eq!(cli.paths.len(), 1);
-
-        fs::remove_file(&md).ok();
-    }
-
-    #[test]
-    fn parse_cli_args_ignores_a_malformed_timeout() {
-        let md = temp_file("args-badtimeout", "md");
-        let cli = parse_cli_args(
-            [
-                "folio".to_string(),
-                "review".to_string(),
-                "--wait".to_string(),
-                "--timeout".to_string(),
-                "soon".to_string(),
-                md.to_string_lossy().into_owned(),
-            ]
-            .into_iter(),
-        );
-        assert_eq!(cli.gate.timeout_secs, reviewgate::DEFAULT_TIMEOUT_SECS);
-    }
-
-    #[test]
     fn gate_flags_are_absent_from_a_plain_invocation() {
         let md = temp_file("args-plain", "md");
-        let cli = parse_cli_args(
+        let cli = cliargs::parse(
             ["folio".to_string(), md.to_string_lossy().into_owned()].into_iter(),
         );
         assert!(!cli.gate.wait);
@@ -2145,7 +1868,7 @@ mod tests {
     #[test]
     fn gate_options_do_not_travel_through_the_spool() {
         let md = temp_file("args-spool", "md");
-        let mut cli = parse_cli_args(
+        let mut cli = cliargs::parse(
             ["folio".to_string(), md.to_string_lossy().into_owned()].into_iter(),
         );
         cli.gate.wait = true;
