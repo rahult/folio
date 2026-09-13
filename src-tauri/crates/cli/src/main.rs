@@ -39,6 +39,14 @@ fn main() {
     }
     let cli = cliargs::parse(argv);
     if cli.gate.wait || cli.gate.collect {
+        // Checked before the gate runs: once `run_cli` has written a waiting
+        // request it polls for the whole timeout and returns 3 ("still open"),
+        // so a missing app would tell the agent a review is waiting when no
+        // window was ever opened. Exit 4 ("could not open") up front instead.
+        if app::locate().is_none() {
+            eprintln!("folio: {}", app::NOT_FOUND);
+            std::process::exit(4);
+        }
         std::process::exit(gate::run_cli(
             &cli.paths,
             cli.gate.wait,
