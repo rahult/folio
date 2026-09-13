@@ -161,35 +161,6 @@ export interface LensResultEntry {
 
 const ENTRY_HEADING = /^## Lens: (.+?) — (\d{4}-\d{2}-\d{2}) — (.+)$/;
 
-/** Headings inside a result are pushed down so they cannot collide with
- *  the file's own `##` entry headings. */
-function demote(body: string): string {
-  return body
-    .split("\n")
-    .map((line) => (/^#{1,6} /.test(line) ? `##${line}` : line))
-    .join("\n")
-    .trim();
-}
-
-export function appendLensResult(
-  fileText: string | null,
-  docName: string,
-  docPath: string,
-  entry: LensResultEntry,
-): string {
-  const head = fileText ?? `# Analysis: ${docName}\n\nDocument: ${docPath}\n`;
-  const scopeLine = entry.scope === "document" ? "Scope: the whole document" : `Scope: "${entry.scope.replace(/\s+/g, " ").trim().slice(0, 160)}"`;
-  const section = [
-    `## Lens: ${entry.lens} — ${entry.date} — ${entry.model}`,
-    "",
-    scopeLine,
-    "",
-    demote(entry.body),
-    "",
-  ].join("\n");
-  return `${head.replace(/\n+$/, "")}\n\n${section}`;
-}
-
 export function parseAnalysis(fileText: string): LensResultEntry[] {
   const out: LensResultEntry[] = [];
   const lines = fileText.split("\n");

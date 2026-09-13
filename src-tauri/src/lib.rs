@@ -1271,6 +1271,22 @@ fn build_feedback(
     folio_core::feedback::build(&file_name, &annotations, source.as_deref(), document_edited)
 }
 
+/// Append a Reading to `<path>.analysis.md`, creating the file with its
+/// head when absent. Returns the whole file so the panel can re-render
+/// without another read.
+#[tauri::command]
+fn append_reading(
+    path: String,
+    doc_name: String,
+    reading: folio_core::analysis::Reading,
+) -> Result<String, String> {
+    let file = format!("{path}.analysis.md");
+    let existing = fs::read_to_string(&file).ok();
+    let next = folio_core::analysis::append(existing.as_deref(), &doc_name, &path, &reading);
+    fs::write(&file, &next).map_err(|e| format!("failed to write {file}: {e}"))?;
+    Ok(next)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Resolved before the builder runs: a second invocation gets this far
@@ -1380,7 +1396,8 @@ pub fn run() {
             register_default_markdown_handler,
             review_request_state,
             resolve_review,
-            build_feedback
+            build_feedback,
+            append_reading
         ])
         .setup(move |app| {
             // Reaching setup proves we are the primary instance, so our own

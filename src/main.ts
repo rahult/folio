@@ -43,7 +43,6 @@ import {
 import { JOURNAL_HEADER, dueRevisits, journalEntryLine, parseJournal, type JournalEntry } from "./journal";
 import {
   BUILTIN_LENSES,
-  appendLensResult,
   buildLensMessages,
   parseAnalysis,
   parseLensFile,
@@ -935,15 +934,17 @@ async function runSelectedLens(): Promise<void> {
       { baseUrl: lensSettings.baseUrl, model: lensSettings.model, system, user, maxTokens: 1200 },
     );
     if (doc.filePath !== path) return;
-    const next = appendLensResult(analysisFileText, doc.fileName, path, {
-      lens: lens.name,
-      model: result.model,
-      date: new Date().toISOString().slice(0, 10),
-      scope: selection ?? "document",
-      body: result.text.trim() || "(the model returned nothing)",
+    analysisFileText = await invoke<string>("append_reading", {
+      path,
+      docName: doc.fileName,
+      reading: {
+        lens: lens.name,
+        producer: result.model,
+        date: new Date().toISOString().slice(0, 10),
+        scope: selection ?? "document",
+        body: result.text.trim() || "(the model returned nothing)",
+      },
     });
-    await invoke("write_text_file", { path: analysisFilePath(path), contents: next });
-    analysisFileText = next;
     const tokens = result.usage.prompt_tokens + result.usage.completion_tokens;
     lensStatus = tokens > 0 ? `Done · ${tokens.toLocaleString()} tokens` : "Done.";
   } catch (err) {

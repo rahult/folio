@@ -3,6 +3,7 @@
 //! Revisions), the lens folder, and the embedded agent skill. Used by the
 //! app and by the `folio` command (ADR 0001, ADR 0002).
 
+pub mod analysis;
 pub mod archive;
 pub mod cliargs;
 pub mod feedback;
