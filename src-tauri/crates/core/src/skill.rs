@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 pub const SKILL_NAME: &str = "folio";
-const SKILL_MD_RAW: &str = include_str!("../../skills/folio/SKILL.md");
+const SKILL_MD_RAW: &str = include_str!("../../../../skills/folio/SKILL.md");
 
 /// The bundled skill with LF line endings whatever the checkout used
 /// (Windows git may have written the source file with CRLF).

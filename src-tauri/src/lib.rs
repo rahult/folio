@@ -10,7 +10,7 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
 use folio_core::gate as reviewgate;
-mod skillcli;
+use folio_core::skill as skillcli;
 mod lenses;
 
 use folio_core::cliargs::{self, CliOptions};

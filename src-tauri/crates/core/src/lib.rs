@@ -5,6 +5,7 @@
 
 pub mod cliargs;
 pub mod gate;
+pub mod skill;
 
 /// FNV-1a hex of a file's path — a stable, filesystem-safe directory or
 /// file name for the per-document state (review handshakes, revision
