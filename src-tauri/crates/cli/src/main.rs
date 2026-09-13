@@ -21,6 +21,19 @@ const HELP: &str = "folio — Folio from the command line
 Set FOLIO_APP to the app binary if Folio is installed somewhere unusual.
 ";
 
+/// The exit code to stop at before the gate runs, or `None` to let the gate
+/// answer for itself.
+///
+/// Only `--wait` needs the app: once `gate::run_cli` has written a waiting
+/// request it polls for the whole timeout and returns 3 ("still open"), which
+/// would tell the agent a review is waiting when no window was ever opened.
+/// `--collect` only reads a verdict already on disk — the box that ran the
+/// review may be headless now, or someone else's script may be collecting —
+/// so it goes through and keeps the gate's own 0/2/3.
+fn missing_app_code(wait: bool, app_found: bool) -> Option<i32> {
+    (wait && !app_found).then_some(4)
+}
+
 fn main() {
     let argv: Vec<String> = std::env::args().collect();
     if let Some(cmd) = skill::parse(&argv) {
@@ -39,13 +52,9 @@ fn main() {
     }
     let cli = cliargs::parse(argv);
     if cli.gate.wait || cli.gate.collect {
-        // Checked before the gate runs: once `run_cli` has written a waiting
-        // request it polls for the whole timeout and returns 3 ("still open"),
-        // so a missing app would tell the agent a review is waiting when no
-        // window was ever opened. Exit 4 ("could not open") up front instead.
-        if app::locate().is_none() {
+        if let Some(code) = missing_app_code(cli.gate.wait, app::locate().is_some()) {
             eprintln!("folio: {}", app::NOT_FOUND);
-            std::process::exit(4);
+            std::process::exit(code);
         }
         std::process::exit(gate::run_cli(
             &cli.paths,
@@ -62,5 +71,20 @@ fn main() {
     if let Err(e) = app::launch(&app::window_args(&cli)) {
         eprintln!("folio: {e}");
         std::process::exit(4);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_wait_stops_when_the_app_is_missing() {
+        assert_eq!(missing_app_code(true, false), Some(4));
+        assert_eq!(missing_app_code(true, true), None);
+        // --collect reads a verdict off disk; it needs no window, so it falls
+        // through to the gate and its own 0/2/3 either way.
+        assert_eq!(missing_app_code(false, false), None);
+        assert_eq!(missing_app_code(false, true), None);
     }
 }
