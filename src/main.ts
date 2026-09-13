@@ -322,7 +322,10 @@ async function installCliTool(): Promise<void> {
     const where = await invoke<string>("install_cli_tool");
     await message(where, { title: "Command Line Tool" });
   } catch (err) {
-    await message(String(err), { title: "Command Line Tool", kind: "error" });
+    await message(
+      typeof err === "string" ? err : "Could not install the command line tool.",
+      { title: "Command Line Tool", kind: "error" },
+    );
   }
 }
 

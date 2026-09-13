@@ -1293,6 +1293,65 @@ fn append_reading(
     Ok(next)
 }
 
+/// Where the `folio` command ended up, and what the new link displaced
+/// there — `None` when nothing was in the way, or when the link already
+/// pointed at this build.
+#[cfg(unix)]
+#[derive(Debug, PartialEq, Eq)]
+struct Installed {
+    link: std::path::PathBuf,
+    replaced: Option<String>,
+}
+
+/// Link `cli` as `folio` in the first of `targets` that will take it.
+///
+/// Idempotent: a symlink already pointing at `cli` is left untouched and
+/// reported as having replaced nothing. Anything else in the way — a
+/// symlink somewhere else, or a regular file such as a hand-written shim —
+/// is removed and described, so the caller can say what it displaced. A
+/// directory is never removed; that target is skipped instead. Any failure
+/// at one target moves on to the next, and only an empty run is an error.
+#[cfg(unix)]
+fn install_link(
+    cli: &std::path::Path,
+    targets: &[std::path::PathBuf],
+) -> Result<Installed, String> {
+    for target in targets {
+        if fs::create_dir_all(target).is_err() {
+            continue;
+        }
+        let link = target.join("folio");
+        let mut replaced = None;
+        match fs::symlink_metadata(&link) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                let old = fs::read_link(&link).unwrap_or_default();
+                if old.as_path() == cli {
+                    return Ok(Installed { link, replaced: None });
+                }
+                if fs::remove_file(&link).is_err() {
+                    continue;
+                }
+                replaced = Some(format!("symlink → {}", old.display()));
+            }
+            Ok(meta) if meta.is_file() => {
+                if fs::remove_file(&link).is_err() {
+                    continue;
+                }
+                replaced = Some("file".to_string());
+            }
+            // A directory (or anything else) is not ours to delete.
+            Ok(_) => continue,
+            // Nothing there: the common case.
+            Err(_) => {}
+        }
+        if std::os::unix::fs::symlink(cli, &link).is_ok() {
+            return Ok(Installed { link, replaced });
+        }
+    }
+    let names: Vec<String> = targets.iter().map(|t| t.display().to_string()).collect();
+    Err(format!("Could not write to {}.", names.join(" or ")))
+}
+
 /// Folio → Install Command Line Tool: symlink the bundled `folio` command
 /// into /usr/local/bin, or ~/.local/bin when that is not writable. On
 /// Windows there is no conventional link target, so it names the folder.
@@ -1302,36 +1361,38 @@ fn install_cli_tool() -> Result<String, String> {
     let dir = exe.parent().ok_or("no app directory")?;
     let cli = dir.join(if cfg!(windows) { "folio.exe" } else { "folio" });
     if !cli.is_file() {
-        return Err(format!("This build has no command line tool ({}).", cli.display()));
+        return Err(format!(
+            "This build has no command line tool ({}).",
+            cli.display()
+        ));
     }
     #[cfg(windows)]
     {
-        Ok(format!("Add this folder to your PATH to use `folio` from a terminal:\n{}", dir.display()))
+        Ok(format!(
+            "Add this folder to your PATH to use `folio` from a terminal:\n{}",
+            dir.display()
+        ))
     }
     #[cfg(unix)]
     {
-        let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("no home directory")?;
-        for target in [std::path::PathBuf::from("/usr/local/bin"), home.join(".local").join("bin")] {
-            if fs::create_dir_all(&target).is_err() {
-                continue;
-            }
-            let link = target.join("folio");
-            if let Ok(meta) = fs::symlink_metadata(&link) {
-                if meta.file_type().is_symlink() || meta.is_file() {
-                    if fs::remove_file(&link).is_err() {
-                        continue;
-                    }
-                }
-            }
-            if std::os::unix::fs::symlink(&cli, &link).is_ok() {
-                return Ok(format!(
-                    "Installed {}.\nIf `folio` is not found in a new terminal, add {} to your PATH.",
-                    link.display(),
-                    target.display()
-                ));
-            }
+        // ~/.local/bin only when there is a home to hang it off; a missing
+        // HOME narrows the search rather than failing the whole command.
+        let mut targets = vec![std::path::PathBuf::from("/usr/local/bin")];
+        if let Some(home) = std::env::var_os("HOME") {
+            targets.push(std::path::PathBuf::from(home).join(".local").join("bin"));
         }
-        Err("Could not write to /usr/local/bin or ~/.local/bin.".to_string())
+        let installed = install_link(&cli, &targets)?;
+        let mut msg = format!("Installed {}.", installed.link.display());
+        if let Some(replaced) = &installed.replaced {
+            msg.push_str(&format!(" Replaced the existing {replaced}."));
+        }
+        if let Some(bin) = installed.link.parent() {
+            msg.push_str(&format!(
+                "\nIf `folio` is not found in a new terminal, add {} to your PATH.",
+                bin.display()
+            ));
+        }
+        Ok(msg)
     }
 }
 
@@ -1729,5 +1790,120 @@ mod tests {
         let back: CliOptions = serde_json::from_str(&json).unwrap();
         assert!(!back.gate.wait);
         assert_eq!(back.paths, cli.paths);
+    }
+
+    // ——— install_link ———
+    //
+    // Every case runs against a scratch directory: these tests must never
+    // reach /usr/local/bin or ~/.local/bin.
+
+    /// A fresh scratch root holding a stand-in for the bundled `folio`.
+    #[cfg(unix)]
+    fn cli_fixture(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let root = std::env::temp_dir()
+            .join(format!("folio-test-cli-{name}-{}", std::process::id()));
+        fs::remove_dir_all(&root).ok();
+        fs::create_dir_all(root.join("app")).unwrap();
+        let cli = root.join("app").join("folio");
+        fs::write(&cli, "#!/bin/sh\n").unwrap();
+        (root, cli)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_link_creates_the_symlink() {
+        let (root, cli) = cli_fixture("fresh");
+        let bin = root.join("bin");
+
+        let installed = install_link(&cli, &[bin.clone()]).unwrap();
+
+        assert_eq!(installed.link, bin.join("folio"));
+        assert_eq!(installed.replaced, None);
+        assert_eq!(fs::read_link(&installed.link).unwrap(), cli);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_link_is_a_no_op_the_second_time() {
+        let (root, cli) = cli_fixture("idempotent");
+        let bin = root.join("bin");
+        let first = install_link(&cli, &[bin.clone()]).unwrap();
+
+        let again = install_link(&cli, &[bin.clone()]).unwrap();
+
+        assert_eq!(again.link, first.link);
+        assert_eq!(again.replaced, None, "an existing link of ours replaces nothing");
+        assert_eq!(fs::read_link(&again.link).unwrap(), cli);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_link_replaces_a_regular_file_and_says_so() {
+        let (root, cli) = cli_fixture("shim");
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        // The hand-written shim the README used to tell people to make.
+        fs::write(bin.join("folio"), "#!/bin/sh\nexec /Applications/Folio.app…\n").unwrap();
+
+        let installed = install_link(&cli, &[bin.clone()]).unwrap();
+
+        assert_eq!(installed.replaced, Some("file".to_string()));
+        assert_eq!(fs::read_link(&installed.link).unwrap(), cli);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_link_replaces_a_symlink_elsewhere_and_names_its_target() {
+        let (root, cli) = cli_fixture("relink");
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let old = root.join("app").join("older-folio");
+        fs::write(&old, "#!/bin/sh\n").unwrap();
+        std::os::unix::fs::symlink(&old, bin.join("folio")).unwrap();
+
+        let installed = install_link(&cli, &[bin.clone()]).unwrap();
+
+        assert_eq!(
+            installed.replaced,
+            Some(format!("symlink → {}", old.display()))
+        );
+        assert_eq!(fs::read_link(&installed.link).unwrap(), cli);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_link_skips_a_directory_and_uses_the_next_target() {
+        let (root, cli) = cli_fixture("dir-in-the-way");
+        let blocked = root.join("bin1");
+        let fallback = root.join("bin2");
+        fs::create_dir_all(blocked.join("folio")).unwrap();
+
+        let installed = install_link(&cli, &[blocked.clone(), fallback.clone()]).unwrap();
+
+        assert_eq!(installed.link, fallback.join("folio"));
+        assert_eq!(installed.replaced, None);
+        assert!(blocked.join("folio").is_dir(), "the directory is left alone");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_link_reports_when_no_target_can_be_written() {
+        let (root, cli) = cli_fixture("unwritable");
+        // A regular file where a parent directory would have to go, so
+        // create_dir_all cannot succeed for either candidate.
+        fs::write(root.join("wall"), "not a directory").unwrap();
+        let one = root.join("wall").join("bin");
+        let two = root.join("wall").join("other");
+
+        let err = install_link(&cli, &[one.clone(), two.clone()]).unwrap_err();
+
+        assert!(err.contains(&one.display().to_string()), "{err}");
+        assert!(err.contains(&two.display().to_string()), "{err}");
+        fs::remove_dir_all(&root).ok();
     }
 }
