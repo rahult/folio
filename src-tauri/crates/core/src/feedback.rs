@@ -311,14 +311,34 @@ mod tests {
         assert_eq!(a.created_at, "t");
     }
 
-    /// Not covered by the fixtures: their quotes are all under the cut.
+    /// A quote past the 72-character cut, truncated by `one_line` exactly as
+    /// the TypeScript `oneLine` truncates it — trailing space before the
+    /// ellipsis included. 123 characters, and a contiguous word run of TEXT,
+    /// so the heading also carries a multi-line range.
+    const LONG_QUOTE: &str = "Ship to all users at once. Roll back by flag. Risks The migration runs in three passes, and the second pass switches reads.";
+
     #[test]
-    fn one_line_collapses_whitespace_and_cuts_long_quotes() {
+    fn matches_the_typescript_output_for_a_truncated_quote() {
+        let out = build(
+            "plan.md",
+            &[ann("comment", LONG_QUOTE, "Too long.")],
+            Some(TEXT),
+            false,
+        );
+        assert_eq!(
+            out,
+            include_str!("../tests/fixtures/feedback/long-quote.md")
+        );
+    }
+
+    /// The edges the long-quote fixture does not pin down: whitespace runs,
+    /// and a quote sitting exactly on the cut, which must not be truncated.
+    #[test]
+    fn one_line_collapses_whitespace_and_leaves_the_boundary_alone() {
         assert_eq!(one_line("  a\n\tb   c  "), "a b c");
-        let long = "word ".repeat(30);
-        let cut = one_line(&long);
+        assert_eq!(one_line(&"x".repeat(QUOTE_MAX)), "x".repeat(QUOTE_MAX));
+        let cut = one_line(&"x".repeat(QUOTE_MAX + 1));
         assert_eq!(cut.chars().count(), QUOTE_MAX);
         assert!(cut.ends_with('…'));
-        assert_eq!(one_line(&"x".repeat(QUOTE_MAX)), "x".repeat(QUOTE_MAX));
     }
 }
