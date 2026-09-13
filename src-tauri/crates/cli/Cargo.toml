@@ -1,0 +1,13 @@
+[package]
+name = "folio-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "The folio command: opens documents in Folio and runs reviews from a terminal"
+
+[[bin]]
+name = "folio"
+path = "src/main.rs"
+
+[dependencies]
+folio-core = { path = "../core" }

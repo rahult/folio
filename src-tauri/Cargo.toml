@@ -1,9 +1,20 @@
-[package]
-name = "folio"
+[workspace]
+members = ["crates/core", "crates/cli"]
+
+[workspace.package]
 version = "0.13.0"
-description = "Folio — a calm, Typora-style Markdown editor"
 authors = ["rahult"]
 edition = "2021"
+
+# The app is the workspace root so `tauri build`, `tauri dev`, and
+# tauri-action keep working unchanged. The command-line binary and the
+# shared core are members (ADR 0002).
+[package]
+name = "folio-app"
+version.workspace = true
+description = "Folio — a calm, Typora-style Markdown editor"
+authors.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -18,6 +29,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+folio-core = { path = "crates/core" }
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

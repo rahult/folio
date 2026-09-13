@@ -1117,10 +1117,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "folio"
+name = "folio-app"
 version = "0.13.0"
 dependencies = [
  "core-foundation 0.10.1",
+ "folio-core",
  "keyring",
  "reqwest",
  "rusqlite",
@@ -1133,6 +1134,21 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+]
+
+[[package]]
+name = "folio-cli"
+version = "0.13.0"
+dependencies = [
+ "folio-core",
+]
+
+[[package]]
+name = "folio-core"
+version = "0.13.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
