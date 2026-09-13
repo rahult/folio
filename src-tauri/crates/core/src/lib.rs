@@ -6,4 +6,5 @@
 pub mod archive;
 pub mod cliargs;
 pub mod gate;
+pub mod lenses;
 pub mod skill;

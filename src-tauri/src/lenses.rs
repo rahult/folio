@@ -5,7 +5,6 @@
 //! `~/Documents/Folio/lenses/`.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 const KEYRING_SERVICE: &str = "com.rahult.folio";
 const KEYRING_USER: &str = "llm-endpoint";
@@ -148,41 +147,19 @@ pub async fn run_lens(
     })
 }
 
-#[derive(Serialize)]
-pub struct LensFile {
-    name: String,
-    text: String,
-}
-
-fn lenses_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    Some(PathBuf::from(home).join("Documents").join("Folio").join("lenses"))
-}
-
 /// The user's own lenses: every `.md` under ~/Documents/Folio/lenses.
 #[tauri::command]
-pub fn list_custom_lenses() -> Vec<LensFile> {
-    let Some(dir) = lenses_dir() else { return Vec::new() };
-    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
-    let mut out: Vec<LensFile> = entries
-        .flatten()
-        .filter_map(|e| {
-            let path = e.path();
-            if path.extension().and_then(|x| x.to_str()) != Some("md") {
-                return None;
-            }
-            let text = std::fs::read_to_string(&path).ok()?;
-            Some(LensFile { name: path.file_stem()?.to_string_lossy().to_string(), text })
-        })
-        .collect();
-    out.sort_by(|a, b| a.name.cmp(&b.name));
-    out
+pub fn list_custom_lenses() -> Vec<folio_core::lenses::LensFile> {
+    match folio_core::lenses::default_dir() {
+        Some(dir) => folio_core::lenses::list_custom_in(&dir),
+        None => Vec::new(),
+    }
 }
 
 /// Where custom lenses live, creating the folder so the user can find it.
 #[tauri::command]
 pub fn lenses_folder() -> Result<String, String> {
-    let dir = lenses_dir().ok_or("no home directory")?;
+    let dir = folio_core::lenses::default_dir().ok_or("no home directory")?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.to_string_lossy().to_string())
 }
