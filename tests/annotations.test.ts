@@ -37,6 +37,16 @@ describe("annotation persistence", () => {
     expect(loadAnnotations("/p.md", storage2)).toEqual([]);
   });
 
+  it("drops an entry with no createdAt", () => {
+    const storage = fakeStorage({
+      "folio-annotations:/p.md": JSON.stringify([
+        { id: "a1", kind: "comment", quote: "q", body: "b" },
+        { id: "a2", kind: "comment", quote: "q", body: "b", createdAt: "2026-07-28T00:00:00Z" },
+      ]),
+    });
+    expect(loadAnnotations("/p.md", storage).map((a) => a.id)).toEqual(["a2"]);
+  });
+
   it("assigns unique ids", () => {
     const a = makeAnnotation("comment", "q", "b");
     const b = makeAnnotation("comment", "q", "b");

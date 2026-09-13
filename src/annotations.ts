@@ -42,6 +42,10 @@ export function loadAnnotations(path: string, storage: Storage = localStorage): 
         typeof (a as Annotation).id === "string" &&
         typeof (a as Annotation).quote === "string" &&
         typeof (a as Annotation).body === "string" &&
+        // Required, not cosmetic: the list crosses IPC into a Rust struct
+        // whose `created_at` has no default, so an entry without one would
+        // fail the whole deserialization.
+        typeof (a as Annotation).createdAt === "string" &&
         ["comment", "delete", "replace", "approve"].includes((a as Annotation).kind),
     );
   } catch {

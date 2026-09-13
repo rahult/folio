@@ -1381,7 +1381,14 @@ fn install_cli_tool() -> Result<String, String> {
         if let Some(home) = std::env::var_os("HOME") {
             targets.push(std::path::PathBuf::from(home).join(".local").join("bin"));
         }
-        let installed = install_link(&cli, &targets)?;
+        // A failed link still has to leave the person somewhere to go, the
+        // way the Windows arm does: name the folder the command sits in.
+        let installed = install_link(&cli, &targets).map_err(|e| {
+            format!(
+                "{e} Add {} to your PATH and run `folio` from there.",
+                cli.parent().unwrap_or(dir).display()
+            )
+        })?;
         let mut msg = format!("Installed {}.", installed.link.display());
         if let Some(replaced) = &installed.replaced {
             msg.push_str(&format!(" Replaced the existing {replaced}."));

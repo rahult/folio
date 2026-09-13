@@ -17,6 +17,10 @@ esac
 dir="${FOLIO_BIN_DIR:-$HOME/.local/bin}"
 mkdir -p "$dir"
 url="https://github.com/rahult/folio/releases/latest/download/folio-$triple.tar.gz"
+# Removed first: if a previous install left a symlink here (the app's
+# "Install Command Line Tool" makes one), tar would follow it and write
+# through to the link's target instead of replacing it.
+rm -f "$dir/folio"
 curl -fsSL "$url" | tar xz -C "$dir"
 chmod +x "$dir/folio"
 echo "installed $dir/folio"
