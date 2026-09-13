@@ -71,7 +71,7 @@ pub fn review_dir() -> PathBuf {
 }
 
 pub fn request_path_in(dir: &Path, path: &str) -> PathBuf {
-    dir.join(format!("{}.json", crate::path_hash(path)))
+    dir.join(format!("{}.json", crate::archive::path_hash(path)))
 }
 
 /// Marker left by a "changes requested" verdict so the next on-disk
@@ -79,7 +79,7 @@ pub fn request_path_in(dir: &Path, path: &str) -> PathBuf {
 /// beside the handshake so every window (and the CLI-spawned review
 /// window) sees the same answer.
 fn changes_marker_in(dir: &Path, path: &str) -> PathBuf {
-    dir.join(format!("{}.changes", crate::path_hash(path)))
+    dir.join(format!("{}.changes", crate::archive::path_hash(path)))
 }
 
 pub fn mark_changes_requested_in(dir: &Path, path: &str, feedback: &str) {

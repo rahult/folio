@@ -9,6 +9,7 @@ use tauri::menu::{
 };
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WebviewWindow, Wry};
 
+use folio_core::archive::{self, RevisionContent, RevisionMeta, RevisionText};
 use folio_core::gate as reviewgate;
 use folio_core::skill as skillcli;
 mod lenses;
@@ -384,166 +385,11 @@ fn set_default_markdown_handler(_bundle_id: &str) -> Result<(), String> {
 
 // ——— revision history ———
 //
-// Every on-disk version of a watched/reviewed file is archived so the user
-// can diff any earlier revision against the current document. Storage:
-// <config>/history/<fnv1a(path)>/<seq>.json with {"markdown","rendered",
-// "archived_at"} — rendered text is kept alongside so history diffs map
-// exactly onto the decoration layer. Core logic takes a plain directory so
-// it is unit-testable without an AppHandle.
-
-const MAX_REVISIONS: usize = 20;
-
-fn unknown_origin() -> String {
-    "unknown".to_string()
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct RevisionContent {
-    markdown: String,
-    rendered: String,
-    archived_at: u64,
-    /// Who produced this version: "external" (rewritten on disk while
-    /// watched), "revision" (the first rewrite after a changes-requested
-    /// verdict), "folio" (saved here), or "unknown" (archives from before
-    /// origins were recorded, and the file as first opened).
-    #[serde(default = "unknown_origin")]
-    origin: String,
-    /// For a "revision": the feedback it answers.
-    #[serde(default)]
-    feedback: Option<String>,
-}
-
-#[derive(serde::Serialize)]
-struct RevisionMeta {
-    seq: u64,
-    archived_at: u64,
-    preview: String,
-    origin: String,
-}
-
-/// One link of the authorship chain: rendered text plus who wrote it, and
-/// for a revision the feedback it answers.
-#[derive(serde::Serialize)]
-struct RevisionText {
-    seq: u64,
-    archived_at: u64,
-    rendered: String,
-    origin: String,
-    feedback: Option<String>,
-}
-
-/// FNV-1a hex of the reviewed file's path — stable directory name. Lives in
-/// the core so the gate hashes paths the same way in either binary.
-pub(crate) use folio_core::path_hash;
-
-fn revision_seqs(dir: &std::path::Path) -> Vec<u64> {
-    let mut seqs: Vec<u64> = fs::read_dir(dir)
-        .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .filter_map(|e| {
-                    e.file_name()
-                        .to_str()?
-                        .strip_suffix(".json")?
-                        .parse::<u64>()
-                        .ok()
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    seqs.sort_unstable();
-    seqs
-}
-
-fn read_revision_file(dir: &std::path::Path, seq: u64) -> Result<RevisionContent, String> {
-    let raw = fs::read_to_string(dir.join(format!("{seq}.json")))
-        .map_err(|e| format!("failed to read revision {seq}: {e}"))?;
-    serde_json::from_str(&raw).map_err(|e| format!("corrupt revision {seq}: {e}"))
-}
-
-/// Archive a new revision unless it matches the latest one; prune to the
-/// newest MAX_REVISIONS. Returns the revision's seq.
-fn archive_in_dir(
-    dir: &std::path::Path,
-    markdown: &str,
-    rendered: &str,
-    now: u64,
-    origin: &str,
-) -> Result<u64, String> {
-    archive_with_feedback(dir, markdown, rendered, now, origin, None)
-}
-
-fn archive_with_feedback(
-    dir: &std::path::Path,
-    markdown: &str,
-    rendered: &str,
-    now: u64,
-    origin: &str,
-    feedback: Option<String>,
-) -> Result<u64, String> {
-    fs::create_dir_all(dir).map_err(|e| format!("failed to create history dir: {e}"))?;
-    let seqs = revision_seqs(dir);
-    if let Some(&latest) = seqs.last() {
-        if let Ok(content) = read_revision_file(dir, latest) {
-            if content.markdown == markdown {
-                return Ok(latest);
-            }
-        }
-    }
-    let seq = seqs.last().map(|s| s + 1).unwrap_or(1);
-    let content = RevisionContent {
-        markdown: markdown.to_string(),
-        rendered: rendered.to_string(),
-        archived_at: now,
-        origin: origin.to_string(),
-        feedback,
-    };
-    let json = serde_json::to_string(&content).map_err(|e| e.to_string())?;
-    fs::write(dir.join(format!("{seq}.json")), json)
-        .map_err(|e| format!("failed to write revision: {e}"))?;
-    // Prune oldest beyond the cap.
-    let seqs = revision_seqs(dir);
-    for old in seqs.iter().take(seqs.len().saturating_sub(MAX_REVISIONS)) {
-        let _ = fs::remove_file(dir.join(format!("{old}.json")));
-    }
-    Ok(seq)
-}
-
-fn list_in_dir(dir: &std::path::Path) -> Vec<RevisionMeta> {
-    let mut metas: Vec<RevisionMeta> = revision_seqs(dir)
-        .into_iter()
-        .rev()
-        .filter_map(|seq| {
-            let content = read_revision_file(dir, seq).ok()?;
-            let preview: String = content
-                .rendered
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-                .chars()
-                .take(60)
-                .collect();
-            Some(RevisionMeta {
-                seq,
-                archived_at: content.archived_at,
-                preview,
-                origin: content.origin,
-            })
-        })
-        .collect();
-    metas.sort_by(|a, b| b.seq.cmp(&a.seq));
-    metas
-}
+// The archive itself lives in folio_core::archive, which takes a plain
+// directory; only resolving that directory needs the AppHandle.
 
 fn history_dir(app: &AppHandle<Wry>, path: &str) -> Result<std::path::PathBuf, String> {
-    Ok(config_dir(app)?.join("history").join(path_hash(path)))
-}
-
-fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    Ok(config_dir(app)?.join("history").join(archive::path_hash(path)))
 }
 
 // ——— quick open ———
@@ -645,11 +491,11 @@ fn archive_revision(
         Some(feedback) => ("revision".to_string(), Some(feedback)),
         None => (origin, None),
     };
-    archive_with_feedback(
+    archive::archive_with_feedback(
         &history_dir(&app, &path)?,
         &markdown,
         &rendered,
-        now_secs(),
+        archive::now_secs(),
         &origin,
         feedback,
     )
@@ -660,10 +506,10 @@ fn archive_revision(
 #[tauri::command]
 fn list_revision_contents(app: AppHandle<Wry>, path: String) -> Result<Vec<RevisionText>, String> {
     let dir = history_dir(&app, &path)?;
-    Ok(revision_seqs(&dir)
+    Ok(archive::revision_seqs(&dir)
         .into_iter()
         .filter_map(|seq| {
-            let content = read_revision_file(&dir, seq).ok()?;
+            let content = archive::read_revision_file(&dir, seq).ok()?;
             Some(RevisionText {
                 seq,
                 archived_at: content.archived_at,
@@ -678,13 +524,13 @@ fn list_revision_contents(app: AppHandle<Wry>, path: String) -> Result<Vec<Revis
 /// List archived revisions, newest first.
 #[tauri::command]
 fn list_revisions(app: AppHandle<Wry>, path: String) -> Result<Vec<RevisionMeta>, String> {
-    Ok(list_in_dir(&history_dir(&app, &path)?))
+    Ok(archive::list_in_dir(&history_dir(&app, &path)?))
 }
 
 /// Read one archived revision (markdown + rendered text for diffing).
 #[tauri::command]
 fn read_revision(app: AppHandle<Wry>, path: String, seq: u64) -> Result<RevisionContent, String> {
-    read_revision_file(&history_dir(&app, &path)?, seq)
+    archive::read_revision_file(&history_dir(&app, &path)?, seq)
 }
 
 // ——— annotation store (embedded SQLite) ———
@@ -1723,55 +1569,6 @@ mod tests {
     }
 
     #[test]
-    fn archive_stores_and_lists_revisions_newest_first() {
-        let dir = history_test_dir("basic");
-        archive_in_dir(&dir, "# v1\n", "v1 rendered", 1000, "external").unwrap();
-        archive_in_dir(&dir, "# v2\n", "v2 rendered", 2000, "external").unwrap();
-
-        let list = list_in_dir(&dir);
-        assert_eq!(list.len(), 2);
-        assert_eq!(list[0].seq, 2);
-        assert_eq!(list[0].archived_at, 2000);
-        assert!(list[0].preview.contains("v2 rendered"));
-        assert_eq!(list[1].seq, 1);
-
-        let content = read_revision_file(&dir, 1).unwrap();
-        assert_eq!(content.markdown, "# v1\n");
-        assert_eq!(content.rendered, "v1 rendered");
-
-        fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn archive_skips_duplicates_of_the_latest_revision() {
-        let dir = history_test_dir("dedupe");
-        let first = archive_in_dir(&dir, "# same\n", "same", 1000, "external").unwrap();
-        let second = archive_in_dir(&dir, "# same\n", "same", 2000, "external").unwrap();
-
-        assert_eq!(first, second);
-        assert_eq!(list_in_dir(&dir).len(), 1);
-
-        fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn revisions_record_their_origin_and_default_to_unknown() {
-        let dir = history_test_dir("origin");
-        archive_in_dir(&dir, "# a\n", "a", 1, "external").unwrap();
-        archive_in_dir(&dir, "# b\n", "b", 2, "folio").unwrap();
-        let list = list_in_dir(&dir);
-        assert_eq!(list[0].origin, "folio");
-        assert_eq!(list[1].origin, "external");
-        // An archive written before origins existed reads as unknown.
-        fs::write(
-            dir.join("3.json"),
-            r##"{"markdown":"# c","rendered":"c","archived_at":3}"##,
-        )
-        .unwrap();
-        assert_eq!(read_revision_file(&dir, 3).unwrap().origin, "unknown");
-    }
-
-    #[test]
     fn quick_open_lists_markdown_under_the_project_root() {
         let root = history_test_dir("quick-open");
         fs::create_dir_all(root.join("docs")).unwrap();
@@ -1787,21 +1584,6 @@ mod tests {
         let mut files = Vec::new();
         walk_markdown(&root, &root, &mut files);
         assert_eq!(files, vec!["README.md", "docs/plan.markdown"]);
-    }
-
-    #[test]
-    fn archive_prunes_to_the_newest_twenty() {
-        let dir = history_test_dir("prune");
-        for i in 0..25 {
-            archive_in_dir(&dir, &format!("# v{i}\n"), "rendered", 1000 + i, "external").unwrap();
-        }
-
-        let seqs = revision_seqs(&dir);
-        assert_eq!(seqs.len(), MAX_REVISIONS);
-        assert_eq!(seqs[0], 6, "oldest five revisions are pruned");
-        assert_eq!(list_in_dir(&dir)[0].seq, 25);
-
-        fs::remove_dir_all(&dir).ok();
     }
 
     fn test_annotation(id: &str, kind: &str) -> Annotation {
