@@ -293,6 +293,11 @@ npm test              # unit tests (Vitest)
 npm run tauri build   # release build → src-tauri/target/release/bundle/
 ```
 
+Run `npm run build:cli` once before `cargo test` or `cargo build`: the app
+bundles the `folio` command as a sidecar, and tauri-build fails if the
+binary is not already in `src-tauri/binaries/`. `npm run tauri dev` and
+`npm run tauri build` run it for you.
+
 The `evaluation/` directory contains a standard suite of Markdown documents
 for checking rendering behavior (syntax coverage, unicode, edge cases,
 stress test) — see `evaluation/README.md`.

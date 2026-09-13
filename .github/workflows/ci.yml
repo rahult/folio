@@ -45,3 +45,38 @@ jobs:
 
       - name: Build product site
         run: npm run build:site
+
+  # The `#[cfg(windows)]` arms only compile on Windows, and the macOS arms
+  # only on macOS — without this they would first be built at release time,
+  # when a tag already exists. A check is enough: the app bundle itself is
+  # built by the release workflow.
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # tauri-build needs the sidecar binary in place before the app crate
+      # will compile.
+      - name: Build the command-line sidecar
+        run: npm run build:cli
+
+      - name: Check the workspace
+        run: cargo check --workspace --manifest-path src-tauri/Cargo.toml
