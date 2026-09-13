@@ -4,9 +4,9 @@
   "version": "0.13.0",
   "identifier": "com.rahult.folio",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run build:cli && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm run build:cli",
     "frontendDist": "../dist"
   },
   "app": {
@@ -44,6 +44,9 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "externalBin": [
+      "binaries/folio"
+    ],
     "fileAssociations": [
       {
         "ext": [

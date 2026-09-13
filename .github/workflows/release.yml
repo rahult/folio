@@ -101,10 +101,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Build the command-line sidecar
+        run: npm run build:cli
+
       - name: Run tests
         run: |
           npm test
-          cd src-tauri && cargo test
+          cargo test --workspace --manifest-path src-tauri/Cargo.toml
 
       - name: Import Apple signing certificate
         if: matrix.platform == 'macos-latest'
@@ -138,3 +141,43 @@ jobs:
           tagName: ${{ needs.bump.outputs.tag }}
           releaseName: "Folio ${{ needs.bump.outputs.tag }}"
           releaseDraft: false
+
+      # The command-line binary on its own, for machines without the app
+      # (a headless server, or a container). One tarball per target; the
+      # macOS and Linux runners also cross-build their other architecture,
+      # which needs no extra toolchain for a crate with no C dependencies.
+      - name: Package the command-line binary
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.bump.outputs.tag }}
+        run: |
+          set -euo pipefail
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          pack() {
+            triple="$1"; bin="$2"
+            mkdir -p "pack/$triple"
+            if [[ "$triple" == *windows* ]]; then
+              cp "$bin" "pack/$triple/folio.exe"
+              (cd "pack/$triple" && 7z a "../../folio-$triple.zip" folio.exe > /dev/null)
+              gh release upload "$TAG" "folio-$triple.zip" --clobber
+            else
+              cp "$bin" "pack/$triple/folio"
+              tar czf "folio-$triple.tar.gz" -C "pack/$triple" folio
+              gh release upload "$TAG" "folio-$triple.tar.gz" --clobber
+            fi
+          }
+          ext=""; [[ "$host" == *windows* ]] && ext=".exe"
+          pack "$host" "src-tauri/binaries/folio-$host$ext"
+          case "$host" in
+            aarch64-apple-darwin)
+              rustup target add x86_64-apple-darwin
+              cargo build --release -p folio-cli --target x86_64-apple-darwin --manifest-path src-tauri/Cargo.toml
+              pack x86_64-apple-darwin src-tauri/target/x86_64-apple-darwin/release/folio ;;
+            x86_64-unknown-linux-gnu)
+              sudo apt-get install -y gcc-aarch64-linux-gnu
+              rustup target add aarch64-unknown-linux-gnu
+              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+                cargo build --release -p folio-cli --target aarch64-unknown-linux-gnu --manifest-path src-tauri/Cargo.toml
+              pack aarch64-unknown-linux-gnu src-tauri/target/aarch64-unknown-linux-gnu/release/folio ;;
+          esac

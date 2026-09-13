@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri",
+    "build:cli": "node scripts/build-cli.mjs",
     "dev:site": "vite --config site/vite.config.ts",
     "build:site": "vite build --config site/vite.config.ts"
   },

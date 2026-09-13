@@ -37,8 +37,11 @@ jobs:
       - name: Typecheck and build frontend
         run: npm run build
 
+      - name: Build the command-line sidecar
+        run: npm run build:cli
+
       - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --workspace --manifest-path src-tauri/Cargo.toml
 
       - name: Build product site
         run: npm run build:site
