@@ -119,6 +119,9 @@ jobs:
           security create-keychain -p actions build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p actions build.keychain
+          # A new keychain locks itself after five minutes idle; codesign then
+          # waits forever for an unlock prompt that never comes on a runner.
+          security set-keychain-settings -lut 21600 build.keychain
           security import signing-cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
           rm signing-cert.p12
