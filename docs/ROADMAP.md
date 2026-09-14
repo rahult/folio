@@ -41,13 +41,13 @@ Release history is in GitHub Releases; this is the feature-level view.
   the app and shipped as tarballs with an install script; Folio → Install
   Command Line Tool. Feedback, Analysis, Revisions, the gate, and the skill
   live in `folio-core` (ADR 0001).
+- Settings: Folio → Settings… (⌘,); one `settings.json` shared with the
+  `folio` command; the Home folder with editable prompt files and
+  Overrides of built-in lenses, the lens rules, the feedback instructions,
+  and the skill text; skill and command-line install status.
 
 ## Next (in order)
 
-0. **Settings.** Folio → Settings… (⌘,): one core-owned `settings.json`
-   the app and the command share; the Home folder holding editable
-   prompt files and Overrides; skill and command-line install status.
-   Design: `docs/superpowers/specs/2026-09-14-settings-design.md`.
 1. **Interrogate through the agent.** `/folio lens <name> [path]` in the
    existing skill: the agent reads the lens via `folio lens show`, reads
    the document itself, and appends a Reading with `folio lens append`.

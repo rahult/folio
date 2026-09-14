@@ -154,6 +154,26 @@ and documents whose revisit date has passed show up at the top of the tab.
 None of it is graded or required; the mechanism is you producing the
 sentence.
 
+### Settings, in one place
+
+**Folio → Settings…** (⌘,) holds the things you would otherwise hunt for:
+the Home folder, the theme, whether the page reloads when the file changes
+on disk, usage statistics, the review defaults (float on top, the agent
+name, the gate timeout), the lens endpoint and its key, the editable prompt
+files, and the skill and command line installs. They live in one
+`settings.json` in the app's config folder
+(`~/Library/Application Support/com.rahult.folio/settings.json` on macOS)
+that the `folio` command reads too, so the app and the command never
+disagree.
+
+The **Home folder** — `~/Documents/Folio` unless you move it, and moving it
+carries its contents along — holds every file you may edit by hand: the
+decisions journal, your custom `lenses/`, the lens response rules, the
+standing feedback instructions appended to every Feedback, and the `/folio`
+skill text. **Prompts** lists them with an Edit in Folio button; editing a
+built-in lens writes an Override in the Home folder that Reset removes
+again.
+
 ### Ask your agent to open a review: the `/folio` skill
 
 `skills/folio/` is an [Agent Skill](https://agentskills.io) that teaches a
@@ -179,6 +199,10 @@ cp -r skills/folio ~/.claude/skills/
 ```
 
 [![skills.sh](https://skills.sh/b/rahult/folio)](https://skills.sh/rahult/folio)
+
+**Settings → Agents & command line** shows the same installs with their
+state per harness — missing, current, outdated, or your own edited text —
+and installs or updates each one in place.
 
 The skill expects `folio` on PATH. In the app choose **Folio → Install
 Command Line Tool…**, which links the bundled command into
