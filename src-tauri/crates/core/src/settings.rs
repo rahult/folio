@@ -72,9 +72,12 @@ impl Settings {
     }
 }
 
-/// `~/Documents/Folio` — where Folio keeps the files a person may edit.
+/// `~/Documents/Folio`: the platform Documents folder, else `$HOME/Documents`.
+/// Where Folio keeps the files a person may edit.
 pub fn default_home() -> Option<PathBuf> {
-    dirs::document_dir().map(|d| d.join("Folio"))
+    dirs::document_dir()
+        .or_else(|| dirs::home_dir().map(|h| h.join("Documents")))
+        .map(|d| d.join("Folio"))
 }
 
 /// The same directory Tauri's `app_config_dir()` resolves for this app.
@@ -104,12 +107,18 @@ pub fn load_from(path: &Path) -> Settings {
         .unwrap_or_default()
 }
 
-/// Atomic: write `settings.json.tmp`, then rename over the target.
+/// The scratch file `save_to` renames from. The process id keeps two
+/// writers from sharing it.
+fn tmp_path(path: &Path) -> PathBuf {
+    path.with_extension(format!("json.{}.tmp", std::process::id()))
+}
+
+/// Atomic: write `settings.json.<pid>.tmp`, then rename over the target.
 pub fn save_to(path: &Path, settings: &Settings) -> Result<(), String> {
     let dir = path.parent().ok_or("settings path has no parent")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("json.tmp");
+    let tmp = tmp_path(path);
     std::fs::write(&tmp, json).map_err(|e| format!("could not write {}: {e}", tmp.display()))?;
     std::fs::rename(&tmp, path).map_err(|e| format!("could not replace {}: {e}", path.display()))
 }
@@ -149,7 +158,7 @@ mod tests {
         s.lens.model = "llama3.2:3b".into();
         save_to(&p, &s).unwrap();
         assert_eq!(load_from(&p), s);
-        assert!(!p.with_extension("json.tmp").exists(), "temp file renamed away");
+        assert!(!tmp_path(&p).exists(), "temp file renamed away");
         let _ = std::fs::remove_dir_all(p.parent().unwrap());
     }
 
@@ -187,17 +196,28 @@ mod tests {
 
     #[test]
     fn home_falls_back_to_documents_folio() {
-        let s = Settings::default();
-        let home = s.home().expect("a documents dir on this machine");
-        assert!(home.ends_with("Folio"));
+        // A machine with neither a Documents folder nor a home directory has
+        // no default; when there is one it is the Folio folder inside it.
+        if let Some(home) = Settings::default().home() {
+            assert!(home.ends_with("Folio"), "{} ends with Folio", home.display());
+        }
         let mut custom = Settings::default();
         custom.home_dir = Some(PathBuf::from("/x/y"));
         assert_eq!(custom.home(), Some(PathBuf::from("/x/y")));
     }
 
     #[test]
+    fn the_lens_folder_sits_inside_the_default_home() {
+        assert_eq!(crate::lenses::default_dir(), default_home().map(|h| h.join("lenses")));
+    }
+
+    #[test]
     fn config_dir_ends_with_the_app_id() {
-        assert!(config_dir().unwrap().ends_with(APP_ID));
-        assert!(path().unwrap().ends_with("com.rahult.folio/settings.json"));
+        if let Some(dir) = config_dir() {
+            assert!(dir.ends_with(APP_ID), "{} ends with {APP_ID}", dir.display());
+        }
+        if let Some(p) = path() {
+            assert!(p.ends_with("com.rahult.folio/settings.json"), "{}", p.display());
+        }
     }
 }

@@ -11,9 +11,10 @@ pub struct LensFile {
     pub text: String,
 }
 
+/// The lens folder inside the default Home folder. One definition of that
+/// folder, in `settings::default_home()`.
 pub fn default_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join("Documents").join("Folio").join("lenses"))
+    crate::settings::default_home().map(|h| dir_for(&h))
 }
 
 /// The lens folder inside a Home folder.
