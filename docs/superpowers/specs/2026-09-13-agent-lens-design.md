@@ -62,11 +62,13 @@ The lens branch:
 It ships after the workspace split.
 
 - `folio lens list` — one line per lens: `id — name — description`.
-  Built-ins first, then custom lenses from `~/Documents/Folio/lenses`
-  (stem, name, description). A custom file whose stem matches a built-in
-  id is listed as shadowed and not selectable by that name.
+  Built-ins first, then custom lenses from the Home folder's `lenses/`
+  (stem, name, description). A file whose stem matches a built-in id is
+  an Override: it replaces the built-in everywhere and is listed once,
+  marked "edited" (amended by `2026-09-14-settings-design.md`).
 - `folio lens show <name>` — the lens prompt followed by the shared output
-  rules, exactly the system text Folio sends a Model. Lookup: built-in id,
+  rules (the Home folder's `lens-rules.md` when present), exactly the
+  system text Folio sends a Model. Lookup: Override, then built-in id,
   then custom stem. Unknown: the list on stderr, exit 1.
 - `folio lens append --lens <name> --agent <harness> [--passage <text>]
   <path>` — body on stdin. Appends a Reading with today's date, producer

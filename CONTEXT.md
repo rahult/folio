@@ -116,3 +116,23 @@ _Avoid_: shared crate, common
 A note on a word that is not ours: "sidecar" is Tauri's term for the
 Command bundled beside the app inside the app's own package. It is a build
 arrangement, never a Companion.
+
+### Settings
+
+**Settings**:
+Folio's defaults, kept in one file the app and the Command both read:
+theme, live reload, telemetry, review defaults, the lens endpoint, and
+where the Home folder is.
+_Avoid_: preferences, config, options
+
+**Home folder**:
+The folder holding every file the person may edit by hand: the Journal,
+custom lenses, Overrides, the lens rules, the standing feedback
+instructions, the skill text. Default `~/Documents/Folio`.
+_Avoid_: data folder, library, workspace
+
+**Override**:
+A file in the Home folder that replaces a built-in text by name: a
+built-in Lens, the lens response rules, or the bundled skill text.
+Deleting it restores the built-in.
+_Avoid_: customisation, patch, fork
