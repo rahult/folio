@@ -1,7 +1,8 @@
 //! Feedback: the Markdown an Agent acts on after a Review. A verdict, one
 //! numbered instruction per change request with the quoted passage and
 //! its line range in the file when it can be found, then the passages
-//! marked as good under "Keep as is". The same text is written to
+//! marked as good under "Keep as is", and last the standing Instructions
+//! from the Home folder when there are any. The same text is written to
 //! `<doc>.feedback.md` and printed by the gate; this is its only writer
 //! (ADR 0001). Ported from the app's TypeScript and held to its output by
 //! the fixtures in `tests/fixtures/feedback/`.
@@ -128,13 +129,16 @@ fn line_ref(source: Option<&str>, quote: &str) -> String {
 }
 
 /// The Feedback text for `file_name`. With no change requests the verdict
-/// is approval. `document_edited` appends the note telling the agent the
-/// reviewer changed the file directly.
+/// is approval. `instructions`, when non-blank, becomes a trailing
+/// "Instructions" section that applies to every change.
+/// `document_edited` appends the note telling the agent the reviewer
+/// changed the file directly.
 pub fn build(
     file_name: &str,
     annotations: &[Annotation],
     source: Option<&str>,
     document_edited: bool,
+    instructions: Option<&str>,
 ) -> String {
     let changes: Vec<&Annotation> = annotations
         .iter()
@@ -200,6 +204,12 @@ pub fn build(
         }
         lines.push(String::new());
     }
+    if let Some(instructions) = instructions.map(str::trim).filter(|s| !s.is_empty()) {
+        lines.push("## Instructions".to_string());
+        lines.push(String::new());
+        lines.push(instructions.to_string());
+        lines.push(String::new());
+    }
     let text = lines.join("\n");
     if !document_edited {
         return text;
@@ -229,7 +239,7 @@ mod tests {
     #[test]
     fn matches_the_typescript_output_for_an_approval() {
         assert_eq!(
-            build("plan.md", &[], None, false),
+            build("plan.md", &[], None, false, None),
             include_str!("../tests/fixtures/feedback/approved.md")
         );
     }
@@ -245,6 +255,7 @@ mod tests {
             )],
             Some(TEXT),
             false,
+            None,
         );
         assert_eq!(out, include_str!("../tests/fixtures/feedback/comment.md"));
     }
@@ -265,6 +276,7 @@ mod tests {
             ],
             Some(TEXT),
             false,
+            None,
         );
         assert_eq!(out, include_str!("../tests/fixtures/feedback/mixed.md"));
     }
@@ -276,6 +288,7 @@ mod tests {
             &[ann("comment", "Risks", "Expand.")],
             Some(TEXT),
             true,
+            None,
         );
         assert_eq!(out, include_str!("../tests/fixtures/feedback/edited.md"));
     }
@@ -333,6 +346,7 @@ mod tests {
             &[ann("comment", LONG_QUOTE, "Too long.")],
             Some(TEXT),
             false,
+            None,
         );
         assert_eq!(
             out,
@@ -349,5 +363,22 @@ mod tests {
         let cut = one_line(&"x".repeat(QUOTE_MAX + 1));
         assert_eq!(cut.chars().count(), QUOTE_MAX);
         assert!(cut.ends_with('…'));
+    }
+
+    #[test]
+    fn instructions_are_appended_after_keep_as_is_and_before_the_edit_note() {
+        let out = build(
+            "plan.md",
+            &[ann("comment", "Ship to all users at once.", "Why all at once?")],
+            Some(TEXT),
+            false,
+            Some("Keep changes minimal; never touch headings."),
+        );
+        assert_eq!(out, include_str!("../tests/fixtures/feedback/instructions.md"));
+        let edited = build("plan.md", &[], None, true, Some("Be brief."));
+        let i = edited.find("## Instructions").unwrap();
+        let note = edited.find("The reviewer edited the document").unwrap();
+        assert!(i < note);
+        assert_eq!(build("plan.md", &[], None, false, Some("  ")), build("plan.md", &[], None, false, None));
     }
 }

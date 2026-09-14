@@ -1274,7 +1274,15 @@ fn build_feedback(
     source: Option<String>,
     document_edited: bool,
 ) -> String {
-    folio_core::feedback::build(&file_name, &annotations, source.as_deref(), document_edited)
+    let home = folio_core::settings::load().home();
+    let instructions = folio_core::prompts::feedback_instructions(home.as_deref());
+    folio_core::feedback::build(
+        &file_name,
+        &annotations,
+        source.as_deref(),
+        document_edited,
+        instructions.as_deref(),
+    )
 }
 
 /// Append a Reading to `<path>.analysis.md`, creating the file with its

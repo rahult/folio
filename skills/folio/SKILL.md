@@ -53,7 +53,8 @@ to, with its line numbers in the file when known (`L12–14`): *Comment on*,
 *Delete*, or *Replace*. Apply each one to the passage it quotes; a comment
 is a question or request, not text to paste in. A trailing **Keep as is**
 section lists passages the user marked as good: leave those untouched when
-you revise.
+you revise. A trailing **Instructions** section, when present, applies to
+every change you make.
 
 Folio also writes the feedback to `<path>.feedback.md` beside the document.
 You do not need it in this loop. If it exists after the review, delete it
