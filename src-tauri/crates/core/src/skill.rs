@@ -1,7 +1,9 @@
-//! `folio skill …`: install the bundled `/folio` agent skill without npm.
+//! `folio skill …`: install the `/folio` agent skill without npm.
 //!
-//! The skill text is compiled into the binary from `skills/folio/SKILL.md`,
-//! so an installed Folio carries the skill that matches it. Targets are the
+//! The text installed is the Home folder's `skill/SKILL.md` when that file
+//! is present and non-blank, else the copy compiled into the binary from
+//! `skills/folio/SKILL.md`, so an installed Folio carries either the skill
+//! that matches it or the one you edited. Targets are the
 //! directories the harnesses read: `~/.claude/skills/<name>/` for Claude
 //! Code and `~/.agents/skills/<name>/` for Codex, Copilot CLI, Gemini CLI,
 //! and others that share that folder. `--project` installs into the current
@@ -167,7 +169,7 @@ pub fn status_in(root: &Path, text: &str, is_override: bool) -> Vec<SkillStatus>
 pub const HELP: &str = "folio skill — install the /folio agent skill
 
   folio skill install [--agent claude|codex|all] [--project]
-      Write the bundled skill to ~/.claude/skills/folio and ~/.agents/skills/folio
+      Write the skill to ~/.claude/skills/folio and ~/.agents/skills/folio
       (or ./.claude/skills and ./.agents/skills with --project).
   folio skill show      Print the skill to stdout.
   folio skill where     Print where it would be installed.

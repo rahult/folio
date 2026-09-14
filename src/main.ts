@@ -560,6 +560,9 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
 editor.onAnnotateRequest(() => openInlineEntry("comment"));
 
 function renderTitle(): void {
+  // The Settings page owns the title strip while it is open; `closeSettings`
+  // calls this again to put the document's name back.
+  if (settingsOpen) return;
   titleEl.textContent = doc.fileName;
   document.body.classList.toggle("is-dirty", doc.dirty);
   document.title = doc.displayTitle;
@@ -2977,6 +2980,9 @@ quickOpenInput.addEventListener("keydown", (e) => {
     void chooseQuickOpen(quickOpenIndex);
   } else if (e.key === "Escape") {
     e.preventDefault();
+    // One Escape closes one thing: without this the document handler would
+    // close the Settings page underneath as the same key travels up.
+    e.stopPropagation();
     closeQuickOpen();
   }
 });

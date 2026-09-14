@@ -158,14 +158,21 @@ pub struct PromptStatus {
     pub lens_overrides: Vec<String>,
 }
 
+/// The rule every reader in `prompts` applies: a file that is missing,
+/// unreadable, or blank is no override. An empty file — what "Edit in
+/// Folio" leaves behind if nothing is typed — must not read as set.
+fn is_set(path: &Path) -> bool {
+    fs::read_to_string(path).map(|t| !t.trim().is_empty()).unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn prompt_status(builtin_ids: Vec<String>) -> Result<PromptStatus, String> {
     let h = home()?;
     Ok(PromptStatus {
-        lens_rules: h.join(prompts::LENS_RULES_FILE).is_file(),
-        feedback_instructions: h.join(prompts::FEEDBACK_INSTRUCTIONS_FILE).is_file(),
-        skill: h.join(prompts::SKILL_OVERRIDE_FILE).is_file(),
-        lens_overrides: builtin_ids.into_iter().filter(|id| prompts::override_path(&h, id).is_file()).collect(),
+        lens_rules: is_set(&h.join(prompts::LENS_RULES_FILE)),
+        feedback_instructions: is_set(&h.join(prompts::FEEDBACK_INSTRUCTIONS_FILE)),
+        skill: is_set(&h.join(prompts::SKILL_OVERRIDE_FILE)),
+        lens_overrides: builtin_ids.into_iter().filter(|id| is_set(&prompts::override_path(&h, id))).collect(),
     })
 }
 
@@ -226,13 +233,14 @@ pub fn skill_text() -> String {
 
 #[tauri::command]
 pub fn skill_status() -> Result<Vec<skill::SkillStatus>, String> {
-    let h = home()?;
+    // A machine with no Documents folder has no Home folder either, and
+    // that must not stop the installs from being shown: without one there
+    // is simply no Override, and the bundled text is what installs.
+    let h = settings::load().home();
     // The same rule `prompts::skill_text_for` applies: a blank Override is
     // no Override, so an empty SKILL.md never reads as Custom.
-    let is_override = fs::read_to_string(h.join(prompts::SKILL_OVERRIDE_FILE))
-        .map(|t| !t.trim().is_empty())
-        .unwrap_or(false);
-    let text = prompts::skill_text_for(Some(&h));
+    let is_override = h.as_ref().map(|h| is_set(&h.join(prompts::SKILL_OVERRIDE_FILE))).unwrap_or(false);
+    let text = prompts::skill_text_for(h.as_deref());
     Ok(skill::status_in(&user_root()?, &text, is_override))
 }
 
@@ -244,7 +252,7 @@ pub fn install_skill(target: String) -> Result<String, String> {
         other => return Err(format!("unknown skill target: {other}")),
     };
     let cmd = skill::SkillCommand { action: skill::SkillAction::Install, targets: vec![t], project: false };
-    let text = prompts::skill_text_for(Some(&home()?));
+    let text = prompts::skill_text_for(settings::load().home().as_deref());
     let written = skill::install_in_with_text(&cmd, &user_root()?, &text)?;
     Ok(written[0].to_string_lossy().into_owned())
 }
@@ -265,7 +273,13 @@ pub fn cli_status_in(candidates: &[PathBuf], sidecar: &Path) -> CliStatus {
             Ok(m) => m,
             Err(_) => continue,
         };
-        let target = if meta.file_type().is_symlink() { fs::read_link(link).unwrap_or_else(|_| link.clone()) } else { link.clone() };
+        // Something that is not a symlink is not a link to anywhere: it is
+        // a file sitting where ours would go, and an install would have to
+        // move it first. Say so with a link but no target.
+        if !meta.file_type().is_symlink() {
+            return CliStatus { link: Some(link.to_string_lossy().into_owned()), target: None, ours: false };
+        }
+        let target = fs::read_link(link).unwrap_or_else(|_| link.clone());
         return CliStatus {
             link: Some(link.to_string_lossy().into_owned()),
             ours: target == sidecar,
@@ -401,10 +415,12 @@ mod tests {
         let s = cli_status_in(&[a.clone(), b.clone()], &sidecar);
         assert_eq!(s.link.as_deref(), Some(b.to_str().unwrap()));
         assert!(s.ours);
+        // A real file where the link would go: something is in the way, and
+        // it points nowhere.
         fs::write(&a, "#!/bin/sh\n").unwrap();
         let s = cli_status_in(&[a.clone(), b], &sidecar);
         assert_eq!(s.link.as_deref(), Some(a.to_str().unwrap()));
-        assert_eq!(s.target.as_deref(), Some(a.to_str().unwrap()));
+        assert_eq!(s.target, None);
         assert!(!s.ours);
     }
 }

@@ -305,6 +305,17 @@ mod tests {
     }
 
     #[test]
+    fn the_app_id_matches_the_bundle_identifier() {
+        let conf = include_str!("../../../tauri.conf.json");
+        let line = conf
+            .lines()
+            .find(|l| l.trim_start().starts_with("\"identifier\""))
+            .expect("tauri.conf.json has an identifier");
+        let identifier = line.split(':').nth(1).unwrap().trim().trim_end_matches(',').trim_matches('"');
+        assert_eq!(identifier, APP_ID, "APP_ID must match tauri.conf.json");
+    }
+
+    #[test]
     fn config_dir_ends_with_the_app_id() {
         if let Some(dir) = config_dir() {
             assert!(dir.ends_with(APP_ID), "{} ends with {APP_ID}", dir.display());

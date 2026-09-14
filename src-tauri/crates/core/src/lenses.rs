@@ -1,6 +1,7 @@
-//! The person's own lenses: every `.md` file under
-//! `~/Documents/Folio/lenses`. Reading and running a lens against a Model
-//! stays in the app; this is only the folder.
+//! The person's own lenses: every `.md` file in the `lenses` folder inside
+//! the Home folder — `~/Documents/Folio/lenses` unless the Home folder has
+//! been moved. Reading and running a lens against a Model stays in the app;
+//! this is only the folder.
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};

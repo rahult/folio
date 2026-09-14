@@ -170,9 +170,9 @@ The **Home folder** — `~/Documents/Folio` unless you move it, and moving it
 carries its contents along — holds every file you may edit by hand: the
 decisions journal, your custom `lenses/`, the lens response rules, the
 standing feedback instructions appended to every Feedback, and the `/folio`
-skill text. **Prompts** lists them with an Edit in Folio button; editing a
-built-in lens writes an Override in the Home folder that Reset removes
-again.
+skill text. **Prompts** lists the three prompt files and the built-in
+lenses with an Edit in Folio button; editing a built-in lens writes an
+Override in the Home folder that Reset removes again.
 
 ### Ask your agent to open a review: the `/folio` skill
 
@@ -189,7 +189,7 @@ Install it whichever way suits you:
 npx skills add rahult/folio            # add -g for your user directory
 npx skills add rahult/folio -a pi     # Pi: invoked as /skill:folio
 
-# With Folio itself — writes the skill bundled in the app
+# With Folio itself — writes your edited skill text, or the bundled one
 folio skill install                    # ~/.claude/skills and ~/.agents/skills
 folio skill install --agent claude     # one harness only
 folio skill install --project          # into ./.claude/skills and ./.agents/skills

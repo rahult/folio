@@ -98,7 +98,8 @@ and prompt state.
 like a built-in id is shadowed and not selectable by that name. It now
 overrides the built-in everywhere: the Lenses tab and `folio lens list`
 show one entry for that id, marked "edited", and `folio lens show` prints
-the file. Reset deletes the file.
+the file (the `folio lens list`/`show` subcommands themselves ship with the
+agent-lens design, not with Settings). Reset deletes the file.
 
 ## The page
 

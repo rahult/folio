@@ -101,6 +101,8 @@ describe("settingsView", () => {
     expect(v.controls.find((c) => c.id === "cli")).toMatchObject({ status: "folio → /Users/me/.local/bin/folio → /Applications/Folio.app/Contents/MacOS/folio", actions: [{ id: "cli.install", label: "Install" }] });
     const elsewhere = settingsView(model({ section: "agents", cli: { link: "/usr/local/bin/folio", target: "/opt/other/folio", ours: false } }));
     expect(elsewhere.controls.find((c) => c.id === "cli")).toMatchObject({ status: "linked elsewhere: /opt/other/folio" });
+    const blocked = settingsView(model({ section: "agents", cli: { link: "/usr/local/bin/folio", target: null, ours: false } }));
+    expect(blocked.controls.find((c) => c.id === "cli")).toMatchObject({ status: "a file is in the way at /usr/local/bin/folio" });
     const none = settingsView(model({ section: "agents" }));
     expect(none.controls.find((c) => c.id === "cli")).toMatchObject({ status: "not installed" });
   });

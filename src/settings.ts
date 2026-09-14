@@ -177,7 +177,17 @@ function agents(m: SettingsModel): Control[] {
     const label = s.state === "missing" ? "Install" : s.state === "current" ? "Reinstall" : "Update";
     return { kind: "row", id: `skill.${s.target}`, label: s.label, status, note: s.path, actions: [{ id: `skill.${s.target}.install`, label }] };
   });
-  const cliStatus = m.cli.link === null ? "not installed" : m.cli.ours ? `folio → ${m.cli.link} → ${m.cli.target}` : `linked elsewhere: ${m.cli.target}`;
+  // A candidate that exists but is no symlink has a link and no target:
+  // something is sitting where ours would go, and an install must not be
+  // described as "linked elsewhere".
+  const cliStatus =
+    m.cli.link === null
+      ? "not installed"
+      : m.cli.target === null
+        ? `a file is in the way at ${m.cli.link}`
+        : m.cli.ours
+          ? `folio → ${m.cli.link} → ${m.cli.target}`
+          : `linked elsewhere: ${m.cli.target}`;
   return [
     ...skillRows,
     { kind: "command", id: "skill.pi", label: "Pi", command: SKILLS_SH_PI, note: "Invoked there as /skill:folio." },
