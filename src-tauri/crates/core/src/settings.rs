@@ -103,9 +103,24 @@ impl Settings {
 /// `~/Documents/Folio`: the platform Documents folder, else `$HOME/Documents`.
 /// Where Folio keeps the files a person may edit.
 pub fn default_home() -> Option<PathBuf> {
-    dirs::document_dir()
-        .or_else(|| dirs::home_dir().map(|h| h.join("Documents")))
-        .map(|d| d.join("Folio"))
+    let resolved = dirs::document_dir().map(|d| d.join("Folio"));
+    let legacy = dirs::home_dir().map(|h| h.join("Documents").join("Folio"));
+    pick_home(resolved, legacy, |p| p.exists())
+}
+
+/// Choose between the platform-resolved `…/Documents/Folio` and the plain
+/// `$HOME/Documents/Folio` an earlier build always used. They differ on a
+/// Windows box whose Documents is redirected into OneDrive and on a
+/// localized Linux desktop, and there the old folder still holds the
+/// person's lenses: prefer the resolved one, but fall back to the legacy
+/// one when it exists and the resolved one does not. Pure over the two
+/// candidates so it can be tested without touching the real home.
+pub fn pick_home(resolved: Option<PathBuf>, legacy: Option<PathBuf>, exists: impl Fn(&Path) -> bool) -> Option<PathBuf> {
+    match (resolved, legacy) {
+        (Some(r), Some(l)) if r != l && !exists(&r) && exists(&l) => Some(l),
+        (Some(r), _) => Some(r),
+        (None, l) => l,
+    }
 }
 
 /// The same directory Tauri's `app_config_dir()` resolves for this app.
@@ -268,6 +283,25 @@ mod tests {
             assert_eq!(n.theme, theme);
             assert_eq!(n.review.timeout_secs, 300);
         }
+    }
+
+    #[test]
+    fn the_legacy_documents_folio_wins_only_when_the_resolved_one_is_absent() {
+        let resolved = PathBuf::from("/Users/me/OneDrive/Documents/Folio");
+        let legacy = PathBuf::from("/Users/me/Documents/Folio");
+        // Neither exists yet, or only the resolved one: the resolved one.
+        assert_eq!(pick_home(Some(resolved.clone()), Some(legacy.clone()), |_| false), Some(resolved.clone()));
+        assert_eq!(pick_home(Some(resolved.clone()), Some(legacy.clone()), |p| p == resolved), Some(resolved.clone()));
+        // Only the old folder exists: the person's lenses are in it.
+        assert_eq!(pick_home(Some(resolved.clone()), Some(legacy.clone()), |p| p == legacy), Some(legacy.clone()));
+        // Both exist: the resolved one still wins.
+        assert_eq!(pick_home(Some(resolved.clone()), Some(legacy.clone()), |_| true), Some(resolved.clone()));
+        // The usual case, where the two are the same folder.
+        assert_eq!(pick_home(Some(legacy.clone()), Some(legacy.clone()), |_| false), Some(legacy.clone()));
+        // Missing candidates.
+        assert_eq!(pick_home(None, Some(legacy.clone()), |_| true), Some(legacy));
+        assert_eq!(pick_home(Some(resolved.clone()), None, |_| false), Some(resolved));
+        assert_eq!(pick_home(None, None, |_| true), None);
     }
 
     #[test]
