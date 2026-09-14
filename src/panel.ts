@@ -1,8 +1,10 @@
 /**
- * The reading panel: the right-hand column with an Outline tab (takeaway,
- * reading stats, headings) and an Annotations tab. This module owns the
- * panel's DOM and open/tab state; main.ts supplies the data and handles
- * navigation and saving through the callbacks.
+ * The reading panel: the right-hand column with a rail of icon tabs on its
+ * outer edge and one view at a time — Outline (reading stats, headings),
+ * Annotations, History, Lenses, and Decide (which starts with the
+ * takeaway). This module owns the panel's DOM and open/tab state; main.ts
+ * supplies the data and handles navigation and saving through the
+ * callbacks.
  */
 
 import type { OutlineEntry } from "./outline";
@@ -155,9 +157,10 @@ function scrollCurrentIntoView(): void {
 }
 
 export function renderStats(words: number, minutes: number): void {
-  const parts = [`${words.toLocaleString()} ${words === 1 ? "word" : "words"}`];
-  if (minutes > 0) parts.push(`${minutes} min`);
-  statsEl.textContent = parts.join(" · ");
+  const parts: string[] = [];
+  if (minutes > 0) parts.push(`${minutes} min read`);
+  parts.push(`${words.toLocaleString()} ${words === 1 ? "word" : "words"}`);
+  statsEl.textContent = parts.join(", ");
 }
 
 export function setTakeaway(text: string): void {

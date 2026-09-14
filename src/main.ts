@@ -1,3 +1,4 @@
+import { PANEL_DEFAULT_WIDTH, PANEL_WIDTH_KEY, clampPanelWidth, storedPanelWidth } from "./panelwidth";
 import "@fontsource-variable/instrument-sans";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
@@ -1021,6 +1022,42 @@ function scheduleAnalysisRefresh(): void {
   if (analysisTimer !== null) clearTimeout(analysisTimer);
   analysisTimer = setTimeout(() => void refreshAnalysis(), 250);
 }
+
+// ——— reading panel: width ———
+//
+// The panel sits on the right, so dragging its inner edge leftwards widens
+// it. The width is per-window UI state, not a Setting.
+
+const panelEl = document.querySelector<HTMLElement>("#panel")!;
+const panelHandle = document.querySelector<HTMLDivElement>("#panel-handle")!;
+
+function applyPanelWidth(width: number): void {
+  panelEl.style.width = `${clampPanelWidth(width)}px`;
+}
+
+applyPanelWidth(storedPanelWidth(localStorage.getItem(PANEL_WIDTH_KEY)));
+
+panelHandle.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const startX = e.clientX;
+  const startWidth = panelEl.getBoundingClientRect().width;
+  const move = (ev: MouseEvent) => applyPanelWidth(startWidth + (startX - ev.clientX));
+  const up = () => {
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+    document.body.classList.remove("panel-resizing");
+    localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(panelEl.getBoundingClientRect().width)));
+  };
+  document.body.classList.add("panel-resizing");
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+});
+
+panelHandle.addEventListener("dblclick", () => {
+  applyPanelWidth(PANEL_DEFAULT_WIDTH);
+  localStorage.removeItem(PANEL_WIDTH_KEY);
+});
 
 // ——— reading panel: outline, stats, takeaway ———
 

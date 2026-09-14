@@ -129,43 +129,59 @@
     <div id="main-row">
       <main id="editor"></main>
       <aside id="panel" hidden aria-label="Reading panel">
-        <header id="panel-header">
-          <div id="panel-tabs" role="tablist" aria-label="Panel">
-            <button id="panel-tab-outline" type="button" role="tab" aria-selected="true" aria-controls="panel-outline">Outline</button>
-            <button id="panel-tab-annotations" type="button" role="tab" aria-selected="false" aria-controls="panel-annotations">Annotations</button>
-            <button id="panel-tab-history" type="button" role="tab" aria-selected="false" aria-controls="panel-history">History</button>
-            <button id="panel-tab-analysis" type="button" role="tab" aria-selected="false" aria-controls="panel-analysis">Lenses</button>
-            <button id="panel-tab-decide" type="button" role="tab" aria-selected="false" aria-controls="panel-decide">Decide</button>
-          </div>
+        <div id="panel-handle" title="Drag to resize. Double-click to reset." aria-hidden="true"></div>
+        <div id="panel-views">
+          <section id="panel-outline" role="tabpanel" aria-labelledby="panel-tab-outline">
+            <h2 class="panel-title">Outline</h2>
+            <div id="reading-stats" aria-live="polite"></div>
+            <ol id="outline-list" tabindex="0" aria-label="Document outline"></ol>
+          </section>
+          <section id="panel-annotations" role="tabpanel" aria-labelledby="panel-tab-annotations" hidden>
+            <h2 class="panel-title">Annotations</h2>
+            <div id="annot-list"></div>
+          </section>
+          <section id="panel-history" role="tabpanel" aria-labelledby="panel-tab-history" hidden>
+            <h2 class="panel-title">History</h2>
+            <ol id="history-list" aria-label="Revision history"></ol>
+          </section>
+          <section id="panel-analysis" role="tabpanel" aria-labelledby="panel-tab-analysis" hidden>
+            <h2 class="panel-title">Lenses</h2>
+            <div id="analysis-root"></div>
+          </section>
+          <section id="panel-decide" role="tabpanel" aria-labelledby="panel-tab-decide" hidden>
+            <h2 class="panel-title">Decide</h2>
+            <textarea
+              id="takeaway"
+              rows="3"
+              spellcheck="true"
+              placeholder="What I took from it, in my own words"
+              aria-label="What I took from it"
+            ></textarea>
+            <div id="decide-root"></div>
+          </section>
+        </div>
+        <nav id="panel-rail" role="tablist" aria-label="Panel" aria-orientation="vertical">
+        <button id="panel-tab-outline" type="button" role="tab" aria-selected="true" aria-controls="panel-outline" title="Outline" aria-label="Outline">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></svg>
+        </button>
+        <button id="panel-tab-annotations" type="button" role="tab" aria-selected="false" aria-controls="panel-annotations" title="Annotations" aria-label="Annotations">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H8l-4 3v-6.5A8 8 0 1 1 21 12z" /></svg>
+        </button>
+        <button id="panel-tab-history" type="button" role="tab" aria-selected="false" aria-controls="panel-history" title="History" aria-label="History">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+        </button>
+        <button id="panel-tab-analysis" type="button" role="tab" aria-selected="false" aria-controls="panel-analysis" title="Lenses" aria-label="Lenses">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+        </button>
+        <button id="panel-tab-decide" type="button" role="tab" aria-selected="false" aria-controls="panel-decide" title="Decide" aria-label="Decide">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m15 9-2 6-4 2 2-6z" /></svg>
+        </button>
           <button id="panel-close" type="button" title="Hide panel" aria-label="Hide panel">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
-        </header>
-        <section id="panel-outline" role="tabpanel" aria-labelledby="panel-tab-outline">
-          <textarea
-            id="takeaway"
-            rows="3"
-            spellcheck="true"
-            placeholder="What I took from it, in my own words"
-            aria-label="What I took from it"
-          ></textarea>
-          <div id="reading-stats" aria-live="polite"></div>
-          <ol id="outline-list" tabindex="0" aria-label="Document outline"></ol>
-        </section>
-        <section id="panel-annotations" role="tabpanel" aria-labelledby="panel-tab-annotations" hidden>
-          <div id="annot-list"></div>
-        </section>
-        <section id="panel-history" role="tabpanel" aria-labelledby="panel-tab-history" hidden>
-          <ol id="history-list" aria-label="Revision history"></ol>
-        </section>
-        <section id="panel-analysis" role="tabpanel" aria-labelledby="panel-tab-analysis" hidden>
-          <div id="analysis-root"></div>
-        </section>
-        <section id="panel-decide" role="tabpanel" aria-labelledby="panel-tab-decide" hidden>
-          <div id="decide-root"></div>
-        </section>
+        </nav>
       </aside>
     </div>
     <div id="settings-root" hidden></div>
