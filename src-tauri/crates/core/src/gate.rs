@@ -87,6 +87,12 @@ pub fn mark_changes_requested_in(dir: &Path, path: &str, feedback: &str) {
     let _ = std::fs::write(changes_marker_in(dir, path), feedback.as_bytes());
 }
 
+/// The feedback of a pending changes-requested verdict for `path`, left
+/// in place — for showing what is waiting, not for consuming it.
+pub fn peek_changes_requested_in(dir: &Path, path: &str) -> Option<String> {
+    std::fs::read_to_string(changes_marker_in(dir, path)).ok()
+}
+
 /// The feedback of a pending changes-requested verdict for `path`,
 /// consumed so only the first rewrite counts as the revision.
 pub fn take_changes_requested_in(dir: &Path, path: &str) -> Option<String> {
@@ -265,6 +271,17 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn peeking_at_the_marker_leaves_it_for_the_revision() {
+        let dir = temp_dir("peek");
+        assert_eq!(peek_changes_requested_in(&dir, "/p.md"), None);
+        mark_changes_requested_in(&dir, "/p.md", "# fb\n");
+        assert_eq!(peek_changes_requested_in(&dir, "/p.md").as_deref(), Some("# fb\n"));
+        assert_eq!(peek_changes_requested_in(&dir, "/p.md").as_deref(), Some("# fb\n"));
+        assert_eq!(take_changes_requested_in(&dir, "/p.md").as_deref(), Some("# fb\n"));
+        assert_eq!(peek_changes_requested_in(&dir, "/p.md"), None);
     }
 
     #[test]

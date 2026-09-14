@@ -1371,6 +1371,18 @@ body.panel-resizing {
   padding: 6px 0 8px;
 }
 
+.history-entry.pending .history-when {
+  color: var(--accent);
+}
+
+.history-entry.pending .history-head {
+  cursor: default;
+}
+
+.history-requests li.waiting .history-mark {
+  color: var(--accent);
+}
+
 .history-head {
   display: flex;
   flex-direction: column;
@@ -1628,19 +1640,80 @@ body.panel-resizing {
   color: var(--ink);
 }
 
-.lens-card {
-  margin: 10px 0 14px;
-  padding: 10px 12px 8px;
+/* readings — one folded row per lens result; the newest starts open */
+.lens-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+
+.lens-chip {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  padding: 3px 9px;
   border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--paper-raised);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.lens-chip:hover {
+  background: var(--paper-sunken);
+}
+
+.lens-chip.active {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: var(--accent-wash);
+}
+
+.lens-card {
+  margin: 0 0 8px;
+  border-bottom: 1px solid var(--hairline);
+  padding: 0 0 6px;
+}
+
+.lens-card:last-of-type {
+  border-bottom: none;
 }
 
 .lens-head {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 6px;
+  padding: 8px 0 6px 16px;
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+}
+
+.lens-head::-webkit-details-marker {
+  display: none;
+}
+
+.lens-head::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 14px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--ink-faint);
+  border-bottom: 1.5px solid var(--ink-faint);
+  transform: rotate(-45deg);
+  transition: transform 120ms ease-out;
+}
+
+.lens-card[open] > .lens-head::before {
+  transform: rotate(45deg);
+  top: 12px;
+}
+
+.lens-card > .lens-body,
+.lens-card > .lens-actions {
+  padding-left: 16px;
 }
 
 .lens-title {

@@ -55,6 +55,7 @@ import {
 import { renderMarkdownSafe } from "./exportrender";
 import { join } from "@tauri-apps/api/path";
 import {
+  type HistoryEntry,
   activeTab,
   isPanelOpen,
   markTakeawaySaveFailed,
@@ -1132,10 +1133,17 @@ function goToHeading(entry: OutlineEntry): void {
 }
 
 onOutlinePick(goToHeading);
+/** History repaints whenever something it shows may have changed while
+ *  it is showing: a revision, an annotation, a verdict, a Reading. */
+function historyChanged(): void {
+  if (isPanelOpen() && activeTab() === "history") void refreshHistoryTab();
+}
+
 onPanelChange(() => {
   syncMenuState();
   // Custom lenses are plain files; pick up new ones whenever the tab shows.
   if (isPanelOpen() && activeTab() === "analysis") void loadCustomLenses().then(() => void refreshAnalysis());
+  historyChanged();
 });
 sourceEditor.addEventListener("selectionchange", trackCurrentSection);
 document.addEventListener("selectionchange", () => {
@@ -1372,6 +1380,7 @@ async function runSelectedLens(): Promise<void> {
         body: result.text.trim() || "(the model returned nothing)",
       },
     });
+    historyChanged();
     const tokens = result.usage.prompt_tokens + result.usage.completion_tokens;
     lensStatus = tokens > 0 ? `Done · ${tokens.toLocaleString()} tokens` : "Done.";
   } catch (err) {
@@ -2052,6 +2061,7 @@ function jumpToAnnotation(annotation: Annotation): void {
 async function deleteAnnotation(annotation: Annotation): Promise<void> {
   annotations = annotations.filter((a) => a.id !== annotation.id);
   await invoke("delete_annotation", { id: annotation.id });
+  historyChanged();
   renderAnnotationsNow();
 }
 
@@ -2101,12 +2111,14 @@ function addAnnotation(kind: AnnotationKind, quote: string, body: string): void 
   void invoke("add_annotation", { path: doc.filePath, annotation });
   openPanel("annotations"); // a fresh annotation re-shows the panel
   renderAnnotationsNow();
+  historyChanged();
 }
 
 function clearReviewAnnotations(): void {
   if (!doc.filePath) return;
   annotations = [];
   void invoke("clear_annotations", { path: doc.filePath });
+  historyChanged();
   renderAnnotationsNow();
 }
 
@@ -2335,6 +2347,7 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
       feedback,
       documentEdited: documentEditedDuringReview,
     });
+    historyChanged();
   } catch {
     if (!settleVerdict(path)) return;
     // The agent is blocked on `folio review --wait` with no other way to
@@ -2472,13 +2485,17 @@ async function refreshHistoryTab(): Promise<void> {
     return;
   }
   let chain: RevisionText[];
+  let pending: string | null = null;
   try {
-    chain = await invoke<RevisionText[]>("list_revision_contents", { path });
+    [chain, pending] = await Promise.all([
+      invoke<RevisionText[]>("list_revision_contents", { path }),
+      invoke<string | null>("pending_feedback", { path }).catch(() => null),
+    ]);
   } catch {
     return;
   }
   if (doc.filePath !== path) return;
-  const entries = chain
+  const entries: HistoryEntry[] = chain
     .map((r) => ({
       seq: r.seq ?? 0,
       archivedAt: r.archived_at ?? 0,
@@ -2486,6 +2503,17 @@ async function refreshHistoryTab(): Promise<void> {
       outcomes: r.feedback ? requestOutcomes(parseFeedback(r.feedback), r.rendered) : null,
     }))
     .reverse();
+  // A verdict sent and not yet answered sits on top, so sending it is
+  // visible here at once rather than only after the agent's rewrite.
+  if (pending) {
+    entries.unshift({
+      seq: -1,
+      archivedAt: 0,
+      label: "Feedback sent",
+      outcomes: requestOutcomes(parseFeedback(pending), ""),
+      pending: true,
+    });
+  }
   renderHistory(entries, (seq) => void openRevision(seq));
 }
 

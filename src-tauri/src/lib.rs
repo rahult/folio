@@ -1219,6 +1219,13 @@ fn review_request_state(path: String) -> Option<reviewgate::ReviewRequest> {
     reviewgate::read_request_in(&reviewgate::review_dir(), &path)
 }
 
+/// Feedback sent as "changes requested" that no rewrite has answered yet,
+/// so History can show what is waiting.
+#[tauri::command]
+fn pending_feedback(path: String) -> Option<String> {
+    reviewgate::peek_changes_requested_in(&reviewgate::review_dir(), &path)
+}
+
 /// Record the user's verdict, unblocking a waiting `folio review --wait`.
 #[tauri::command]
 fn resolve_review(
@@ -1501,6 +1508,7 @@ pub fn run() {
             register_default_markdown_handler,
             review_request_state,
             resolve_review,
+            pending_feedback,
             build_feedback,
             append_reading,
             install_cli_tool,

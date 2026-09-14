@@ -208,11 +208,14 @@ outlineList.addEventListener("keydown", (e) => {
 
 export interface HistoryEntry {
   seq: number;
-  /** Unix seconds. */
+  /** Unix seconds; 0 for a pending entry. */
   archivedAt: number;
   label: string;
   /** For a revision: each change request and whether its passage changed. */
   outcomes: { kind: string; quote: string; changed: boolean }[] | null;
+  /** Feedback sent but not yet answered by a rewrite: shown at the top,
+   *  not clickable, its requests marked as waiting. */
+  pending?: boolean;
 }
 
 /** Repaint the History tab; `onPick` shows a revision's diff. */
@@ -227,39 +230,45 @@ export function renderHistory(entries: HistoryEntry[], onPick: (seq: number) => 
   historyList.replaceChildren(
     ...entries.map((entry) => {
       const li = document.createElement("li");
-      li.className = "history-entry";
-      const head = document.createElement("button");
-      head.type = "button";
+      li.className = entry.pending ? "history-entry pending" : "history-entry";
+      const head = document.createElement(entry.pending ? "div" : "button");
+      if (head instanceof HTMLButtonElement) {
+        head.type = "button";
+        head.title = "Show what changed between this version and now";
+        head.addEventListener("click", () => onPick(entry.seq));
+      }
       head.className = "history-head";
-      head.title = "Show what changed between this version and now";
       const when = document.createElement("span");
       when.className = "history-when";
-      when.textContent = new Date(entry.archivedAt * 1000).toLocaleString([], {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      when.textContent = entry.pending
+        ? "Waiting for the revision"
+        : new Date(entry.archivedAt * 1000).toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
       const label = document.createElement("span");
       label.className = "history-label";
       label.textContent = entry.label;
       head.append(when, label);
-      head.addEventListener("click", () => onPick(entry.seq));
       li.append(head);
       if (entry.outcomes) {
         const changed = entry.outcomes.filter((o) => o.changed).length;
         const summary = document.createElement("div");
         summary.className = "history-summary";
-        summary.textContent = `${changed} of ${entry.outcomes.length} requested passages changed`;
+        summary.textContent = entry.pending
+          ? `${entry.outcomes.length} ${entry.outcomes.length === 1 ? "request" : "requests"} sent`
+          : `${changed} of ${entry.outcomes.length} requested passages changed`;
         li.append(summary);
         const list = document.createElement("ul");
         list.className = "history-requests";
         for (const outcome of entry.outcomes) {
           const row = document.createElement("li");
-          row.className = outcome.changed ? "changed" : "unchanged";
+          row.className = entry.pending ? "waiting" : outcome.changed ? "changed" : "unchanged";
           const mark = document.createElement("span");
           mark.className = "history-mark";
-          mark.textContent = outcome.changed ? "✓" : "–";
+          mark.textContent = entry.pending ? "…" : outcome.changed ? "✓" : "–";
           const kind = document.createElement("span");
           kind.className = "history-kind";
           kind.textContent = outcome.kind;
@@ -568,7 +577,32 @@ export interface AnalysisHandlers {
   onAnnotate(result: { lens: string; scope: string }): void;
 }
 
+/** Which lens the Readings list is narrowed to, or null for all. */
+let lensFilter: string | null = null;
+/** Open/closed per Reading, as the reader left it; unset = newest open. */
+const readingOpen = new Map<string, boolean>();
+let lastAnalysis: { model: AnalysisModel; on: AnalysisHandlers } | null = null;
+
+function readingKey(r: AnalysisModel["results"][number]): string {
+  return `${r.lens}\u0000${r.date}\u0000${r.model}\u0000${r.scope}`;
+}
+
+function chip(text: string, active: boolean, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = active ? "lens-chip active" : "lens-chip";
+  b.textContent = text;
+  b.setAttribute("aria-pressed", String(active));
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function rerenderAnalysis(): void {
+  if (lastAnalysis) renderAnalysis(lastAnalysis.model, lastAnalysis.on);
+}
+
 export function renderAnalysis(model: AnalysisModel, on: AnalysisHandlers): void {
+  lastAnalysis = { model, on };
   const root = analysisRoot;
   root.replaceChildren();
   if (!model.enabled) {
@@ -619,33 +653,62 @@ export function renderAnalysis(model: AnalysisModel, on: AnalysisHandlers): void
   if (model.status) root.append(note(model.status));
 
   // Results
-  if (model.results.length > 0) root.append(h("Results"));
-  for (const r of model.results) {
-    const card = document.createElement("article");
-    card.className = "lens-card";
-    const head = document.createElement("div");
-    head.className = "lens-head";
-    const title = document.createElement("span");
-    title.className = "lens-title";
-    title.textContent = r.lens;
-    const meta = document.createElement("span");
-    meta.className = "lens-meta";
-    meta.textContent = `${r.date} · ${r.model}${r.scope === "document" ? "" : " · on a passage"}`;
-    head.append(title, meta);
-    const body = document.createElement("div");
-    body.className = "lens-body";
-    body.innerHTML = r.html;
-    const actions = document.createElement("div");
-    actions.className = "lens-actions";
-    const annotate = document.createElement("button");
-    annotate.type = "button";
-    annotate.className = "decide-button";
-    annotate.textContent = "Turn into a comment";
-    annotate.title = "Open a comment on the passage (or the document) quoting this lens";
-    annotate.addEventListener("click", () => on.onAnnotate({ lens: r.lens, scope: r.scope }));
-    actions.append(annotate);
-    card.append(head, body, actions);
-    root.append(card);
+  if (model.results.length > 0) {
+    root.append(h("Readings"));
+    // One chip per lens that has a Reading; the filter narrows the list.
+    const counts = new Map<string, number>();
+    for (const r of model.results) counts.set(r.lens, (counts.get(r.lens) ?? 0) + 1);
+    if (lensFilter !== null && !counts.has(lensFilter)) lensFilter = null;
+    if (counts.size > 1) {
+      const chips = document.createElement("div");
+      chips.className = "lens-chips";
+      const all = chip(`All ${model.results.length}`, lensFilter === null, () => {
+        lensFilter = null;
+        rerenderAnalysis();
+      });
+      chips.append(all);
+      for (const [name, n] of counts) {
+        chips.append(
+          chip(`${name} ${n}`, lensFilter === name, () => {
+            lensFilter = lensFilter === name ? null : name;
+            rerenderAnalysis();
+          }),
+        );
+      }
+      root.append(chips);
+    }
+    const shown = model.results.filter((r) => lensFilter === null || r.lens === lensFilter);
+    shown.forEach((r, i) => {
+      const key = readingKey(r);
+      const card = document.createElement("details");
+      card.className = "lens-card";
+      // The newest reading starts open; every other one folded until asked.
+      card.open = readingOpen.get(key) ?? i === 0;
+      card.addEventListener("toggle", () => readingOpen.set(key, card.open));
+      const head = document.createElement("summary");
+      head.className = "lens-head";
+      const title = document.createElement("span");
+      title.className = "lens-title";
+      title.textContent = r.lens;
+      const meta = document.createElement("span");
+      meta.className = "lens-meta";
+      meta.textContent = `${r.date}, ${r.model}${r.scope === "document" ? "" : ", on a passage"}`;
+      head.append(title, meta);
+      const body = document.createElement("div");
+      body.className = "lens-body";
+      body.innerHTML = r.html;
+      const actions = document.createElement("div");
+      actions.className = "lens-actions";
+      const annotate = document.createElement("button");
+      annotate.type = "button";
+      annotate.className = "decide-button";
+      annotate.textContent = "Turn into a comment";
+      annotate.title = "Open a comment on the passage (or the document) quoting this lens";
+      annotate.addEventListener("click", () => on.onAnnotate({ lens: r.lens, scope: r.scope }));
+      actions.append(annotate);
+      card.append(head, body, actions);
+      root.append(card);
+    });
   }
 
   // Settings

@@ -24,6 +24,9 @@ interface ReviewState {
   /** Index of the current top-level block. */
   current: number;
   entry: EntrySpec | null;
+  /** Where the entry field sits: right after the selected text when the
+   *  selection lies in the current block, else after the block. */
+  entryAt: number | null;
 }
 
 export const reviewKey = new PluginKey<ReviewState>("FOLIO_REVIEW");
@@ -78,7 +81,7 @@ export const reviewViewPlugin = $prose(
     new Plugin<ReviewState>({
       key: reviewKey,
       state: {
-        init: () => ({ on: false, current: 0, entry: null }),
+        init: () => ({ on: false, current: 0, entry: null, entryAt: null }),
         apply(tr, prev) {
           const meta = tr.getMeta(reviewKey) as Partial<ReviewState> | undefined;
           const next = meta ? { ...prev, ...meta } : prev;
@@ -98,10 +101,11 @@ export const reviewViewPlugin = $prose(
           }
           if (s.entry) {
             const entry = s.entry;
+            const at = Math.min(s.entryAt ?? to + 1, state.doc.content.size);
             decorations.push(
-              Decoration.widget(to + 1, () => entryWidget(entry), {
+              Decoration.widget(at, () => entryWidget(entry), {
                 side: 1,
-                key: `review-entry-${entry.kind}`,
+                key: `review-entry-${entry.kind}-${at}`,
               }),
             );
           }
@@ -138,7 +142,7 @@ function scrollBlockIntoView(view: EditorView, index: number): void {
 export function setReviewMode(view: EditorView, on: boolean): void {
   const { $from } = view.state.selection;
   const current = on && $from.depth > 0 ? $from.index(0) : currentIndex(view);
-  view.dispatch(view.state.tr.setMeta(reviewKey, { on, current, entry: null }));
+  view.dispatch(view.state.tr.setMeta(reviewKey, { on, current, entry: null, entryAt: null }));
   if (on) scrollBlockIntoView(view, current);
 }
 
@@ -149,7 +153,7 @@ export function isReviewMode(view: EditorView): boolean {
 export function moveCurrent(view: EditorView, delta: 1 | -1): void {
   const last = Math.max(0, view.state.doc.childCount - 1);
   const current = Math.min(last, Math.max(0, currentIndex(view) + delta));
-  view.dispatch(view.state.tr.setMeta(reviewKey, { current, entry: null }));
+  view.dispatch(view.state.tr.setMeta(reviewKey, { current, entry: null, entryAt: null }));
   scrollBlockIntoView(view, current);
 }
 
@@ -173,12 +177,20 @@ export function targetQuote(view: EditorView): string {
   return doc.textBetween(from, to, "\n", " ");
 }
 
+/** Show the entry field beside the selected text when the selection sits
+ *  in the current block, otherwise under the block. */
 export function openEntry(view: EditorView, spec: EntrySpec): void {
-  view.dispatch(view.state.tr.setMeta(reviewKey, { entry: spec }));
+  const { doc, selection } = view.state;
+  let entryAt: number | null = null;
+  if (doc.childCount > 0) {
+    const { from, to } = blockRange(doc, currentIndex(view));
+    if (!selection.empty && selection.from >= from && selection.to <= to) entryAt = selection.to;
+  }
+  view.dispatch(view.state.tr.setMeta(reviewKey, { entry: spec, entryAt }));
 }
 
 export function closeEntry(view: EditorView): void {
-  if (state(view)?.entry) view.dispatch(view.state.tr.setMeta(reviewKey, { entry: null }));
+  if (state(view)?.entry) view.dispatch(view.state.tr.setMeta(reviewKey, { entry: null, entryAt: null }));
 }
 
 export function isEntryOpen(view: EditorView): boolean {
