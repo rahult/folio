@@ -9,5 +9,6 @@ pub mod cliargs;
 pub mod feedback;
 pub mod gate;
 pub mod lenses;
+pub mod prompts;
 pub mod settings;
 pub mod skill;

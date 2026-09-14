@@ -16,6 +16,11 @@ pub fn default_dir() -> Option<PathBuf> {
     Some(PathBuf::from(home).join("Documents").join("Folio").join("lenses"))
 }
 
+/// The lens folder inside a Home folder.
+pub fn dir_for(home: &Path) -> PathBuf {
+    home.join("lenses")
+}
+
 /// Custom lenses in `dir`, sorted by file stem. Missing folder: none.
 pub fn list_custom_in(dir: &Path) -> Vec<LensFile> {
     let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };

@@ -14,10 +14,12 @@ export interface Lens {
   builtin: boolean;
 }
 
-const OUTPUT_RULES = `Write in plain Markdown with short headings and bullet points. Be concrete: quote or
-name the specific parts of the document you are reacting to. Say so plainly when the document
-does not give you enough to judge. Never invent facts about the author's situation. Do not
-restate the document. Keep it under 500 words.`;
+import rulesText from "../lenses/rules.md?raw";
+
+/** The built-in response rules appended to every lens prompt. One file,
+ *  `lenses/rules.md`, shared with the Rust core; a `lens-rules.md` in the
+ *  Home folder replaces it. */
+export const BUILTIN_LENS_RULES: string = rulesText.trim();
 
 export const BUILTIN_LENSES: Lens[] = [
   {
@@ -138,8 +140,9 @@ export function buildLensMessages(
   docName: string,
   docText: string,
   selection: string | null,
+  rules: string = BUILTIN_LENS_RULES,
 ): LensMessages {
-  const system = `${lens.prompt.trim()}\n\n${OUTPUT_RULES}`;
+  const system = `${lens.prompt.trim()}\n\n${rules.trim()}`;
   const focus = selection?.trim();
   const user = focus
     ? `The passage under review, from "${docName}":\n\n${focus}\n\n---\n\nThe whole document, for context only:\n\n${docText}`
