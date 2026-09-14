@@ -50,10 +50,33 @@ pub fn home_dir() -> Result<String, String> {
 /// The entries the Home folder is known to hold; moved together.
 const KNOWN: [&str; 5] = ["decisions.md", "lenses", "lens-rules.md", "feedback-instructions.md", "skill"];
 
-/// Move the known entries from `from` to `to`. Refuses when any of them
-/// already exists in `to`; otherwise renames, or copies and deletes across
-/// volumes. Pure over paths so it is testable.
+/// A destination inside the current Home folder would have the move copy a
+/// directory into itself, so it is refused before anything is touched.
+/// Pure over paths so it is testable without settings.
+pub fn check_destination(from: &Path, to: &Path) -> Result<(), String> {
+    if to != from && to.starts_with(from) {
+        return Err("choose a folder outside the current Home folder".to_string());
+    }
+    Ok(())
+}
+
+/// A failure part-way through the move: say what had already been moved, so
+/// the message never implies the two folders are untouched.
+fn partial(e: impl std::fmt::Display, moved: &[String]) -> String {
+    if moved.is_empty() {
+        format!("{e}; nothing was moved")
+    } else {
+        format!("{e}; already moved: {}", moved.join(", "))
+    }
+}
+
+/// Move the known entries from `from` to `to`. Refuses a destination inside
+/// `from`, and refuses when any of the entries already exists in `to`;
+/// otherwise renames, or copies and deletes across volumes. A failure
+/// part-way through names what had already moved. Pure over paths so it is
+/// testable.
 pub fn move_home(from: &Path, to: &Path) -> Result<Vec<String>, String> {
+    check_destination(from, to)?;
     fs::create_dir_all(to).map_err(|e| format!("could not create {}: {e}", to.display()))?;
     let conflicts: Vec<&str> = KNOWN.iter().copied().filter(|n| to.join(n).exists() && from.join(n).exists()).collect();
     if !conflicts.is_empty() {
@@ -63,7 +86,7 @@ pub fn move_home(from: &Path, to: &Path) -> Result<Vec<String>, String> {
             conflicts.join(", ")
         ));
     }
-    let mut moved = Vec::new();
+    let mut moved: Vec<String> = Vec::new();
     for name in KNOWN {
         let src = from.join(name);
         if !src.exists() {
@@ -71,11 +94,11 @@ pub fn move_home(from: &Path, to: &Path) -> Result<Vec<String>, String> {
         }
         let dst = to.join(name);
         if fs::rename(&src, &dst).is_err() {
-            copy_recursive(&src, &dst)?;
+            copy_recursive(&src, &dst).map_err(|e| partial(e, &moved))?;
             if src.is_dir() {
-                fs::remove_dir_all(&src).map_err(|e| e.to_string())?;
+                fs::remove_dir_all(&src).map_err(|e| partial(e, &moved))?;
             } else {
-                fs::remove_file(&src).map_err(|e| e.to_string())?;
+                fs::remove_file(&src).map_err(|e| partial(e, &moved))?;
             }
         }
         moved.push(name.to_string());
@@ -102,12 +125,13 @@ pub fn change_home_dir(dir: String) -> Result<Settings, String> {
     if !to.is_absolute() {
         return Err("choose a full path".to_string());
     }
+    let current = settings::load();
+    let from = current.home().ok_or("no current home folder")?;
+    check_destination(&from, &to)?;
     fs::create_dir_all(&to).map_err(|e| format!("cannot use {}: {e}", to.display()))?;
     let probe = to.join(".folio-write-test");
     fs::write(&probe, b"").map_err(|e| format!("{} is not writable: {e}", to.display()))?;
     let _ = fs::remove_file(&probe);
-    let current = settings::load();
-    let from = current.home().ok_or("no current home folder")?;
     if from != to {
         move_home(&from, &to)?;
     }
@@ -186,7 +210,11 @@ pub fn skill_text() -> String {
 #[tauri::command]
 pub fn skill_status() -> Result<Vec<skill::SkillStatus>, String> {
     let h = home()?;
-    let is_override = h.join(prompts::SKILL_OVERRIDE_FILE).is_file();
+    // The same rule `prompts::skill_text_for` applies: a blank Override is
+    // no Override, so an empty SKILL.md never reads as Custom.
+    let is_override = fs::read_to_string(h.join(prompts::SKILL_OVERRIDE_FILE))
+        .map(|t| !t.trim().is_empty())
+        .unwrap_or(false);
     let text = prompts::skill_text_for(Some(&h));
     Ok(skill::status_in(&user_root()?, &text, is_override))
 }
@@ -292,9 +320,52 @@ mod tests {
         s.theme = "night".into();
         s.review.timeout_secs = 10;
         assert!(validate(s.clone()).is_err());
+        // The gate timeout is inclusive at both ends.
+        for secs in [60, 540] {
+            s.review.timeout_secs = secs;
+            assert!(validate(s.clone()).is_ok(), "{secs} seconds should be allowed");
+        }
+        for secs in [59, 541] {
+            s.review.timeout_secs = secs;
+            assert!(validate(s.clone()).is_err(), "{secs} seconds should be refused");
+        }
         s.review.timeout_secs = 300;
         s.review.agent = "   ".into();
         assert_eq!(validate(s).unwrap().review.agent, "agent");
+    }
+
+    #[test]
+    fn move_home_refuses_a_destination_inside_the_current_home() {
+        let root = scratch("nested");
+        let from = root.join("old");
+        let to = from.join("lenses");
+        fs::create_dir_all(&to).unwrap();
+        fs::write(from.join("decisions.md"), "j").unwrap();
+        let err = move_home(&from, &to).unwrap_err();
+        assert!(err.contains("outside the current Home folder"), "{err}");
+        assert_eq!(fs::read_to_string(from.join("decisions.md")).unwrap(), "j");
+        assert!(!to.join("decisions.md").exists());
+        assert!(check_destination(&from, &from).is_ok());
+        assert!(check_destination(&from, &root.join("new")).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn move_home_names_what_it_already_moved_when_an_entry_fails() {
+        let root = scratch("partial");
+        let from = root.join("old");
+        let to = root.join("new");
+        fs::create_dir_all(from.join("lenses")).unwrap();
+        fs::create_dir_all(&to).unwrap();
+        fs::write(from.join("decisions.md"), "j").unwrap();
+        fs::write(from.join("lenses").join("mine.md"), "l").unwrap();
+        // A dangling symlink does not `exists()`, so the conflict check lets
+        // the move start; neither the rename nor the copy can write over it.
+        std::os::unix::fs::symlink(root.join("nowhere"), to.join("lenses")).unwrap();
+        let err = move_home(&from, &to).unwrap_err();
+        assert!(err.contains("already moved: decisions.md"), "{err}");
+        assert_eq!(fs::read_to_string(to.join("decisions.md")).unwrap(), "j");
+        assert_eq!(fs::read_to_string(from.join("lenses").join("mine.md")).unwrap(), "l");
     }
 
     #[cfg(unix)]
