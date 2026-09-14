@@ -8,14 +8,16 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const THEMES: [&str; 5] = ["paper", "manuscript", "newsprint", "night", "slate"];
-
 fn validate(mut s: Settings) -> Result<Settings, String> {
-    if !THEMES.contains(&s.theme.as_str()) {
+    if !settings::THEMES.contains(&s.theme.as_str()) {
         return Err(format!("unknown theme: {}", s.theme));
     }
-    if !(60..=540).contains(&s.review.timeout_secs) {
-        return Err("the gate timeout must be between 60 and 540 seconds".to_string());
+    if !settings::TIMEOUT_SECS.contains(&s.review.timeout_secs) {
+        return Err(format!(
+            "the gate timeout must be between {} and {} seconds",
+            settings::TIMEOUT_SECS.start(),
+            settings::TIMEOUT_SECS.end()
+        ));
     }
     s.review.agent = s.review.agent.trim().to_string();
     if s.review.agent.is_empty() {
@@ -26,25 +28,11 @@ fn validate(mut s: Settings) -> Result<Settings, String> {
     Ok(s)
 }
 
-/// A file edited by hand can hold values `validate` refuses, and then every
-/// save from the page would fail on a value the user never typed. Loading
-/// bends those back into range instead; `validate` still refuses them on the
-/// way in, so an error only ever names something the user just typed.
-fn normalize(mut s: Settings) -> Settings {
-    if !THEMES.contains(&s.theme.as_str()) {
-        s.theme = "paper".to_string();
-    }
-    s.review.timeout_secs = s.review.timeout_secs.clamp(60, 540);
-    s.review.agent = s.review.agent.trim().to_string();
-    if s.review.agent.is_empty() {
-        s.review.agent = "agent".to_string();
-    }
-    s
-}
-
+/// `settings::load()` already bends a hand-edited file back into range, so
+/// every reader — the page, the gate, the skill — sees the same values.
 #[tauri::command]
 pub fn get_settings() -> Settings {
-    normalize(settings::load())
+    settings::load()
 }
 
 #[tauri::command]
@@ -348,21 +336,6 @@ mod tests {
         s.review.timeout_secs = 300;
         s.review.agent = "   ".into();
         assert_eq!(validate(s).unwrap().review.agent, "agent");
-    }
-
-    #[test]
-    fn get_settings_normalises_a_corrupt_file_shape() {
-        let mut s = Settings::default();
-        s.theme = "neon".into();
-        s.review.timeout_secs = 9999;
-        s.review.agent = "  ".into();
-        let n = normalize(s.clone());
-        assert_eq!(n.theme, "paper");
-        assert_eq!(n.review.timeout_secs, 540);
-        assert_eq!(n.review.agent, "agent");
-        // The same values typed into the page are still refused, so the
-        // error names what the user did, not what the file held.
-        assert!(validate(s).is_err());
     }
 
     #[test]

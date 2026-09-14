@@ -5,10 +5,19 @@
 //! history (zoom, focus, panel state, recent files) are not here.
 
 use serde::{Deserialize, Serialize};
+use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 
 pub const APP_ID: &str = "com.rahult.folio";
 const FILE_NAME: &str = "settings.json";
+
+/// The gate timeout the page offers and the file may hold, inclusive at
+/// both ends. One definition, so the app's validation and the command
+/// line's clamp cannot drift apart.
+pub const TIMEOUT_SECS: RangeInclusive<u64> = 60..=540;
+
+/// Every theme the app knows; anything else normalises back to "paper".
+pub const THEMES: [&str; 5] = ["paper", "manuscript", "newsprint", "night", "slate"];
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
@@ -70,6 +79,25 @@ impl Settings {
     pub fn home(&self) -> Option<PathBuf> {
         self.home_dir.clone().or_else(default_home)
     }
+
+    /// A file edited by hand can hold values the page would refuse, and a
+    /// corrupt timeout or theme must not reach the gate, the skill, or the
+    /// window. Every reader gets the bent-back values; the page's own
+    /// validation still refuses them on the way in, so an error only ever
+    /// names something the user just typed.
+    pub fn normalized(mut self) -> Settings {
+        if !THEMES.contains(&self.theme.as_str()) {
+            self.theme = "paper".to_string();
+        }
+        self.review.timeout_secs = self.review.timeout_secs.clamp(*TIMEOUT_SECS.start(), *TIMEOUT_SECS.end());
+        self.review.agent = self.review.agent.trim().to_string();
+        if self.review.agent.is_empty() {
+            self.review.agent = "agent".to_string();
+        }
+        self.lens.base_url = self.lens.base_url.trim().to_string();
+        self.lens.model = self.lens.model.trim().to_string();
+        self
+    }
 }
 
 /// `~/Documents/Folio`: the platform Documents folder, else `$HOME/Documents`.
@@ -89,8 +117,10 @@ pub fn path() -> Option<PathBuf> {
     config_dir().map(|d| d.join(FILE_NAME))
 }
 
+/// Every reader's entry point: the file, bent back into range. `load_from`
+/// stays raw so "a corrupt file is the defaults" keeps its own meaning.
 pub fn load() -> Settings {
-    path().map(|p| load_from(&p)).unwrap_or_default()
+    path().map(|p| load_from(&p)).unwrap_or_default().normalized()
 }
 
 pub fn save(settings: &Settings) -> Result<(), String> {
@@ -209,6 +239,35 @@ mod tests {
     #[test]
     fn the_lens_folder_sits_inside_the_default_home() {
         assert_eq!(crate::lenses::default_dir(), default_home().map(|h| h.join("lenses")));
+    }
+
+    #[test]
+    fn normalized_bends_a_hand_edited_file_back_into_range() {
+        let mut s = Settings::default();
+        s.theme = "neon".into();
+        s.review.timeout_secs = 9999;
+        s.review.agent = "  ".into();
+        s.lens.base_url = "  http://localhost:11434/v1  ".into();
+        s.lens.model = " llama3.2:3b ".into();
+        let n = s.normalized();
+        assert_eq!(n.theme, "paper");
+        assert_eq!(n.review.timeout_secs, 540);
+        assert_eq!(n.review.agent, "agent");
+        assert_eq!(n.lens.base_url, "http://localhost:11434/v1");
+        assert_eq!(n.lens.model, "llama3.2:3b");
+
+        let mut low = Settings::default();
+        low.review.timeout_secs = 1;
+        assert_eq!(low.normalized().review.timeout_secs, 60);
+        // A theme the app knows, and a timeout already in range, are left be.
+        for theme in THEMES {
+            let mut s = Settings::default();
+            s.theme = theme.to_string();
+            s.review.timeout_secs = 300;
+            let n = s.normalized();
+            assert_eq!(n.theme, theme);
+            assert_eq!(n.review.timeout_secs, 300);
+        }
     }
 
     #[test]
