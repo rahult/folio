@@ -128,6 +128,22 @@ export function parseLensFile(fileStem: string, text: string): Lens {
   return { id: `custom:${fileStem}`, name, description, prompt: body.trim(), builtin: false };
 }
 
+/** The built-ins with the custom files folded in: a custom lens whose file
+ *  stem matches a built-in id (what Settings → Prompts → Edit in Folio
+ *  writes) replaces that built-in where it stands, keeping the id so a
+ *  stored selection still resolves; the rest are appended. Without the
+ *  swap an edited built-in would appear twice. */
+export function mergeLenses(builtins: Lens[], custom: Lens[]): Lens[] {
+  const overrides = new Map<string, Lens>();
+  const extras: Lens[] = [];
+  for (const lens of custom) {
+    const stem = lens.id.startsWith("custom:") ? lens.id.slice("custom:".length) : lens.id;
+    if (builtins.some((b) => b.id === stem)) overrides.set(stem, { ...lens, id: stem, builtin: false, name: `${lens.name} (edited)` });
+    else extras.push(lens);
+  }
+  return [...builtins.map((b) => overrides.get(b.id) ?? b), ...extras];
+}
+
 export interface LensMessages {
   system: string;
   user: string;

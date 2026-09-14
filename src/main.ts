@@ -46,6 +46,7 @@ import {
   BUILTIN_LENSES,
   BUILTIN_LENS_RULES,
   buildLensMessages,
+  mergeLenses,
   parseAnalysis,
   parseLensFile,
   type Lens,
@@ -101,10 +102,12 @@ import {
 import { isDarkTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import {
   INSTALL_SH,
+  MIGRATED_KEY,
   SKILLS_SH_PI,
   migrateLocalSettings,
   renderSettings,
   settingsView,
+  shouldMigrate,
   type Settings,
   type SettingsModel,
   type SettingsSection,
@@ -181,12 +184,21 @@ let settings: Settings = defaultSettings();
  *  touches theme, watching, telemetry or the float flag. */
 async function initSettings(): Promise<void> {
   settings = await invoke<Settings>("get_settings").catch(() => defaultSettings());
-  // Preferences an older build kept in localStorage: migrated once, when
-  // there is no settings file yet (everything still at its default).
+  // Preferences an older build kept in localStorage: carried over exactly
+  // once, and only onto a settings file that says nothing yet.
   const legacy = migrateLocalSettings(localStorage);
-  const fresh = JSON.stringify(settings) === JSON.stringify(defaultSettings());
-  if (legacy && fresh) {
-    settings = await invoke<Settings>("set_settings", { settings: { ...settings, ...legacy } }).catch(() => settings);
+  const isDefault = JSON.stringify(settings) === JSON.stringify(defaultSettings());
+  if (legacy && shouldMigrate(localStorage, isDefault)) {
+    const migrated = await invoke<Settings>("set_settings", { settings: { ...settings, ...legacy } }).catch(() => null);
+    // Only once the file actually holds them: a failed write leaves the old
+    // keys in place so the next launch can try again. `folio-theme` stays
+    // either way — `applyTheme` keeps it current as the pre-paint hint
+    // index.html reads.
+    if (migrated) {
+      settings = migrated;
+      for (const key of ["folio-watch", "folio-telemetry", "folio-lens-settings"]) localStorage.removeItem(key);
+      localStorage.setItem(MIGRATED_KEY, "1");
+    }
   }
   // The lens panel opens its own form when there is no endpoint yet.
   lensSettingsOpen = !settings.lens.baseUrl;
@@ -270,7 +282,63 @@ async function loadSettingsExtra(): Promise<void> {
   lensHasKey = hasKey;
 }
 
+/** Where the caret was before a repaint: the row, which control in it, and
+ *  the text selection. `renderSettings` rebuilds the page from scratch, so
+ *  without this a field that saved on blur would pull focus off whatever
+ *  the user moved to. */
+interface SettingsFocus {
+  rowId: string;
+  tag: string;
+  index: number;
+  start: number | null;
+  end: number | null;
+}
+
+function captureSettingsFocus(): SettingsFocus | null {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !settingsRoot.contains(active)) return null;
+  const row = active.closest<HTMLElement>("[data-id]");
+  const rowId = row?.dataset.id;
+  if (!row || rowId === undefined) return null;
+  const index = settingsControls(row).indexOf(active);
+  if (index < 0) return null;
+  let start: number | null = null;
+  let end: number | null = null;
+  try {
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+      start = active.selectionStart;
+      end = active.selectionEnd;
+    }
+  } catch {
+    // checkboxes and radios have no selection to read
+  }
+  return { rowId, tag: active.tagName, index, start, end };
+}
+
+function settingsControls(row: HTMLElement): HTMLElement[] {
+  return Array.from(row.querySelectorAll<HTMLElement>("input, textarea, button"));
+}
+
+function restoreSettingsFocus(saved: SettingsFocus | null): void {
+  if (!saved) return;
+  // A field that has just appeared claims the caret for itself; leave it.
+  if (settingsRoot.contains(document.activeElement)) return;
+  const row = Array.from(settingsRoot.querySelectorAll<HTMLElement>("[data-id]")).find((el) => el.dataset.id === saved.rowId);
+  if (!row) return;
+  const controls = settingsControls(row);
+  const target = controls[saved.index]?.tagName === saved.tag ? controls[saved.index] : controls.find((el) => el.tagName === saved.tag);
+  if (!target) return;
+  target.focus();
+  if (saved.start === null) return;
+  try {
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) target.setSelectionRange(saved.start, saved.end ?? saved.start);
+  } catch {
+    // an input type that does not carry a selection
+  }
+}
+
 function refreshSettingsView(): void {
+  const focus = captureSettingsFocus();
   const model: SettingsModel = {
     settings,
     section: settingsSection,
@@ -280,6 +348,7 @@ function refreshSettingsView(): void {
     builtinLenses: BUILTIN_LENSES.map(({ id, name, description }) => ({ id, name, description })),
   };
   renderSettings(settingsRoot, settingsView(model), settingsHandlers);
+  restoreSettingsFocus(focus);
 }
 
 async function openSettings(): Promise<void> {
@@ -322,7 +391,9 @@ async function settingsAction(id: string): Promise<void> {
     else if (id === "lens.key.set") keyEntryOpen = true;
     else if (id === "lens.key.clear") {
       keyEntryOpen = false;
-      await invoke("set_llm_key", { key: "" });
+      if (await confirm("Remove the API key from the keychain?", { title: "Clear API key", kind: "warning" })) {
+        await invoke("set_llm_key", { key: "" });
+      }
     } else if (id.startsWith("prompt.")) await promptAction(id);
     else if (id === "skill.claude.install" || id === "skill.agents.install") await invoke<string>("install_skill", { target: id.split(".")[1] });
     else if (id === "cli.install") await installCliTool();
@@ -335,8 +406,12 @@ async function settingsAction(id: string): Promise<void> {
   } catch (err) {
     settingsError = typeof err === "string" ? err : String(err);
   }
-  // "Edit in Folio" left the page for a tab; nothing to repaint.
-  if (!settingsOpen) return;
+  // "Edit in Folio" left the page for a tab: nothing to repaint, and an
+  // error there has no inline place to go.
+  if (!settingsOpen) {
+    if (settingsError) reportSettingsError(settingsError);
+    return;
+  }
   await loadSettingsExtra();
   refreshSettingsView();
 }
@@ -437,7 +512,8 @@ const settingsHandlers = {
 };
 
 document.addEventListener("keydown", (e) => {
-  if (settingsOpen && e.key === "Escape") {
+  // Quick Open sits on top of the page and answers Escape itself.
+  if (settingsOpen && e.key === "Escape" && quickOpen.hidden) {
     e.preventDefault();
     closeSettings();
   }
@@ -1111,19 +1187,8 @@ async function loadCustomLenses(): Promise<void> {
   }
 }
 
-/** The built-ins, with any `<home>/lenses/<built-in id>.md` standing in for
- *  the one it overrides, then the rest of the custom files. Settings →
- *  Prompts writes exactly such a file, so without the swap a built-in lens
- *  would appear twice the moment it was edited. */
 function allLenses(): Lens[] {
-  const overrides = new Map<string, Lens>();
-  const extras: Lens[] = [];
-  for (const lens of customLenses) {
-    const stem = lens.id.startsWith("custom:") ? lens.id.slice("custom:".length) : lens.id;
-    if (BUILTIN_LENSES.some((b) => b.id === stem)) overrides.set(stem, { ...lens, id: stem, builtin: false, name: `${lens.name} (edited)` });
-    else extras.push(lens);
-  }
-  return [...BUILTIN_LENSES.map((b) => overrides.get(b.id) ?? b), ...extras];
+  return mergeLenses(BUILTIN_LENSES, customLenses);
 }
 
 /** The passage a lens would focus on: the selection, or the current block

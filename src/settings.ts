@@ -42,7 +42,7 @@ export type Action = { id: string; label: string; danger?: boolean };
 export type Control =
   | { kind: "toggle"; id: string; label: string; note?: string; value: boolean }
   | { kind: "radio"; id: string; label: string; value: string; options: { value: string; label: string }[] }
-  | { kind: "text"; id: string; label: string; value: string; note?: string; placeholder?: string }
+  | { kind: "text"; id: string; label: string; value: string; note?: string; placeholder?: string; secret?: boolean }
   | { kind: "number"; id: string; label: string; value: number; min: number; max: number; note?: string }
   | { kind: "path"; id: string; label: string; value: string; note?: string; actions: Action[] }
   | { kind: "row"; id: string; label: string; status: string; note?: string; actions: Action[] }
@@ -126,7 +126,7 @@ function lenses(m: SettingsModel): Control[] {
       ]
     : [{ id: "lens.key.set", label: "Set…" }];
   const entry: Control[] = m.keyEntry
-    ? [{ kind: "text", id: "lens.key.value", label: "New API key", value: "", placeholder: "sk-…", note: "Press Return to store it in the keychain." }]
+    ? [{ kind: "text", id: "lens.key.value", label: "New API key", value: "", placeholder: "sk-…", note: "Press Return to store it in the keychain.", secret: true }]
     : [];
   return [
     { kind: "text", id: "lens.baseUrl", label: "Endpoint URL", value: m.settings.lens.baseUrl, placeholder: "http://localhost:11434/v1", note: "Any OpenAI-compatible chat endpoint." },
@@ -278,7 +278,9 @@ function control(c: Control, on: SettingsHandlers): HTMLElement {
     }
     case "text": {
       const input = el("input");
-      input.type = "text";
+      // A secret is typed, never shown; the browser's own reveal control is
+      // the only way to read it back.
+      input.type = c.secret ? "password" : "text";
       input.value = c.value;
       if (c.placeholder) input.placeholder = c.placeholder;
       input.addEventListener("change", () => on.change(c.id, input.value));
@@ -323,6 +325,10 @@ function control(c: Control, on: SettingsHandlers): HTMLElement {
 /** Paint the page into `root`: the section list, the current section's
  *  controls, and the error line. Rebuilt on every call. */
 export function renderSettings(root: HTMLElement, view: SettingsView, on: SettingsHandlers): void {
+  // The DOM is the only memory this function needs: a secret field that was
+  // not there a moment ago has just been revealed, so it takes the caret.
+  // On every later repaint it is already present and focus is left alone.
+  const hadSecret = root.querySelector("input[type='password']") !== null;
   root.replaceChildren();
   const nav = el("nav", "settings-nav");
   for (const s of view.sections) {
@@ -340,6 +346,19 @@ export function renderSettings(root: HTMLElement, view: SettingsView, on: Settin
   for (const c of view.controls) main.append(control(c, on));
   if (view.error) main.append(el("p", "settings-error", view.error));
   root.append(nav, main);
+  if (!hadSecret) root.querySelector<HTMLInputElement>("input[type='password']")?.focus();
+}
+
+/** Set once the legacy localStorage preferences have been carried over. */
+export const MIGRATED_KEY = "folio-settings-migrated";
+
+/** Whether the legacy localStorage preferences should be carried over now:
+ *  only when they have never been carried over before, and only onto a
+ *  settings file that says nothing yet (`isDefault`). Either way it happens
+ *  at most once, so a later edit of the file cannot be undone by stale keys
+ *  a browser profile is still holding. */
+export function shouldMigrate(storage: Pick<Storage, "getItem">, isDefault: boolean): boolean {
+  return storage.getItem(MIGRATED_KEY) === null && isDefault;
 }
 
 /** Preferences an older build kept in localStorage, mapped onto Settings.

@@ -2,9 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   BUILTIN_LENSES,
+  mergeLenses,
   parseLensFile,
   buildLensMessages,
   parseAnalysis,
+  type Lens,
 } from "../src/lenses";
 
 describe("built-in lenses", () => {
@@ -121,5 +123,29 @@ describe("analysis file", () => {
     expect(entries[0].body).toBe("### Top\n\nb");
     expect(entries[1].scope).toBe("document");
     expect(entries[1].body).toBe("- one\n- two");
+  });
+});
+
+describe("mergeLenses", () => {
+  const lens = (id: string, name: string, builtin: boolean): Lens => ({ id, name, description: `${name} desc`, prompt: `${name} prompt`, builtin });
+  const builtins = [lens("council", "Council", true), lens("premortem", "Premortem", true)];
+
+  it("replaces a built-in in place when a custom file carries its id", () => {
+    const merged = mergeLenses(builtins, [parseLensFile("premortem", "---\nname: Premortem\n---\n\nMine.")]);
+    expect(merged.map((l) => l.id)).toEqual(["council", "premortem"]);
+    expect(merged[1]).toMatchObject({ id: "premortem", name: "Premortem (edited)", prompt: "Mine.", builtin: false });
+    expect(merged[0]).toBe(builtins[0]);
+  });
+
+  it("appends custom lenses that override nothing, keeping their prefixed ids", () => {
+    const custom = [parseLensFile("my-lens", "Body."), parseLensFile("council", "Ours.")];
+    const merged = mergeLenses(builtins, custom);
+    expect(merged.map((l) => l.id)).toEqual(["council", "premortem", "custom:my-lens"]);
+    expect(merged[0]).toMatchObject({ id: "council", name: "council (edited)", builtin: false });
+    expect(merged[2]).toMatchObject({ id: "custom:my-lens", builtin: false });
+  });
+
+  it("returns the built-ins untouched when there are no custom files", () => {
+    expect(mergeLenses(builtins, [])).toEqual(builtins);
   });
 });

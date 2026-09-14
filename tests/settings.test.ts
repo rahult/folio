@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrateLocalSettings, settingsView, type SettingsModel } from "../src/settings";
+import { MIGRATED_KEY, migrateLocalSettings, settingsView, shouldMigrate, type SettingsModel } from "../src/settings";
 
 function model(overrides: Partial<SettingsModel> = {}): SettingsModel {
   return {
@@ -137,5 +137,22 @@ describe("migrateLocalSettings", () => {
 
   it("ignores unknown themes and corrupt lens json", () => {
     expect(migrateLocalSettings(storage({ "folio-theme": "neon", "folio-lens-settings": "{nope" }))).toBeNull();
+  });
+});
+
+describe("shouldMigrate", () => {
+  const storage = (data: Record<string, string>) => ({ getItem: (k: string) => data[k] ?? null });
+
+  it("carries the legacy keys over once, onto a settings file that says nothing", () => {
+    expect(shouldMigrate(storage({}), true)).toBe(true);
+  });
+
+  it("never runs again once the marker is set", () => {
+    expect(shouldMigrate(storage({ [MIGRATED_KEY]: "1" }), true)).toBe(false);
+    expect(shouldMigrate(storage({ [MIGRATED_KEY]: "1" }), false)).toBe(false);
+  });
+
+  it("leaves a settings file that already says something alone", () => {
+    expect(shouldMigrate(storage({}), false)).toBe(false);
   });
 });
