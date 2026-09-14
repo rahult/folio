@@ -166,6 +166,7 @@ fn open_window(app: &AppHandle<Wry>, request: CliOptions) -> tauri::Result<Webvi
         .title("Folio")
         .inner_size(800.0, 600.0)
         .position(80.0 + offset, 80.0 + offset)
+        .accept_first_mouse(true)
         .build()
 }
 
