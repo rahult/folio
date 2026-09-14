@@ -147,19 +147,22 @@ pub async fn run_lens(
     })
 }
 
-/// The user's own lenses: every `.md` under ~/Documents/Folio/lenses.
+/// The lenses folder inside the configured Home folder.
+fn lenses_dir() -> Result<std::path::PathBuf, String> {
+    let home = folio_core::settings::load().home().ok_or("no documents folder on this machine")?;
+    Ok(folio_core::lenses::dir_for(&home))
+}
+
+/// The user's own lenses: every `.md` under the Home folder's `lenses`.
 #[tauri::command]
 pub fn list_custom_lenses() -> Vec<folio_core::lenses::LensFile> {
-    match folio_core::lenses::default_dir() {
-        Some(dir) => folio_core::lenses::list_custom_in(&dir),
-        None => Vec::new(),
-    }
+    lenses_dir().map(|d| folio_core::lenses::list_custom_in(&d)).unwrap_or_default()
 }
 
 /// Where custom lenses live, creating the folder so the user can find it.
 #[tauri::command]
 pub fn lenses_folder() -> Result<String, String> {
-    let dir = folio_core::lenses::default_dir().ok_or("no home directory")?;
+    let dir = lenses_dir()?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.to_string_lossy().to_string())
 }

@@ -14,6 +14,7 @@ use folio_core::feedback::Annotation;
 use folio_core::gate as reviewgate;
 use folio_core::skill as skillcli;
 mod lenses;
+mod settingscmd;
 
 use folio_core::cliargs::{self, CliOptions};
 
@@ -861,6 +862,8 @@ fn check_item<R: Runtime, M: Manager<R>>(
 fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
 
     let app_menu = SubmenuBuilder::new(app, "Folio")
+        .item(&menu_item(app, "app.settings", "Settings…", Some("CmdOrCtrl+,"))?)
+        .separator()
         .item(&menu_item(
             app,
             "app.check-updates",
@@ -1522,7 +1525,18 @@ pub fn run() {
             resolve_review,
             build_feedback,
             append_reading,
-            install_cli_tool
+            install_cli_tool,
+            settingscmd::get_settings,
+            settingscmd::set_settings,
+            settingscmd::home_dir,
+            settingscmd::change_home_dir,
+            settingscmd::prompt_status,
+            settingscmd::ensure_prompt_file,
+            settingscmd::delete_prompt_file,
+            settingscmd::skill_status,
+            settingscmd::skill_text,
+            settingscmd::install_skill,
+            settingscmd::cli_status
         ])
         .setup(move |app| {
             // Reaching setup proves we are the primary instance, so our own
