@@ -38,6 +38,11 @@ impl Default for GateOptions {
 pub struct CliOptions {
     pub paths: Vec<String>,
     pub float: bool,
+    /// True only when `--float`/`-f` was typed. `review` asks for float as
+    /// a default the Settings switch may turn off; an explicit flag is the
+    /// user asking for this window, and the switch must not veto it.
+    #[serde(default)]
+    pub float_explicit: bool,
     #[serde(skip)]
     pub gate: GateOptions,
 }
@@ -80,6 +85,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> CliOptions {
 /// does this); flags still override them.
 pub fn parse_with(args: impl IntoIterator<Item = String>, defaults: GateOptions) -> CliOptions {
     let mut float = false;
+    let mut float_explicit = false;
     let mut paths = Vec::new();
     let mut gate = defaults;
     // `--timeout 60` / `--agent claude` consume the next argument; this
@@ -98,7 +104,10 @@ pub fn parse_with(args: impl IntoIterator<Item = String>, defaults: GateOptions)
             continue;
         }
         match arg.as_str() {
-            "--float" | "-f" => float = true,
+            "--float" | "-f" => {
+                float = true;
+                float_explicit = true;
+            }
             "review" => float = true,
             "--wait" => gate.wait = true,
             "--collect" => gate.collect = true,
@@ -123,7 +132,7 @@ pub fn parse_with(args: impl IntoIterator<Item = String>, defaults: GateOptions)
             }
         }
     }
-    CliOptions { paths, float, gate }
+    CliOptions { paths, float, float_explicit, gate }
 }
 
 #[cfg(test)]
@@ -194,6 +203,7 @@ mod tests {
                 .into_iter(),
             );
             assert!(cli.float, "{flag} should request float mode");
+            assert!(cli.float_explicit, "{flag} is the user asking for it outright");
             assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
         }
 
@@ -215,9 +225,41 @@ mod tests {
         );
 
         assert!(cli.float);
+        // `review` asks for float as a default, not outright: the Settings
+        // switch may still turn the floating window off.
+        assert!(!cli.float_explicit);
         assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
 
         fs::remove_file(&md).ok();
+    }
+
+    #[test]
+    fn the_float_flag_is_explicit_but_the_review_subcommand_is_not() {
+        for flag in ["--float", "-f"] {
+            let cli = parse(argv(&format!("folio {flag}")));
+            assert!(cli.float, "{flag} floats");
+            assert!(cli.float_explicit, "{flag} is explicit");
+        }
+        let cli = parse(argv("folio review"));
+        assert!(cli.float);
+        assert!(!cli.float_explicit);
+        // Nothing asked for at all.
+        let cli = parse(argv("folio"));
+        assert!(!cli.float);
+        assert!(!cli.float_explicit);
+    }
+
+    #[test]
+    fn float_explicit_survives_the_spool_round_trip_and_an_older_entry() {
+        let cli = parse(argv("folio --float"));
+        let json = serde_json::to_string(&cli).unwrap();
+        assert!(json.contains("\"floatExplicit\":true"), "{json}");
+        let back: CliOptions = serde_json::from_str(&json).unwrap();
+        assert!(back.float && back.float_explicit);
+        // An entry written by an older build has no such field.
+        let old: CliOptions = serde_json::from_str(r#"{"paths":[],"float":true}"#).unwrap();
+        assert!(old.float);
+        assert!(!old.float_explicit);
     }
 
     #[test]

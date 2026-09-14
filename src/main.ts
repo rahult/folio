@@ -132,6 +132,8 @@ const isPrimaryWindow = getCurrentWindow().label === "main";
 interface StartupRequest {
   paths: string[];
   float: boolean;
+  /** `--float`/`-f` was typed, rather than implied by `folio review`. */
+  floatExplicit: boolean;
 }
 
 const titleEl = document.querySelector<HTMLSpanElement>("#doc-title")!;
@@ -215,16 +217,28 @@ function reportSettingsError(err: unknown): void {
   void message(typeof err === "string" ? err : String(err), { title: "Settings", kind: "error" });
 }
 
+/** Merge a patch onto the file, not onto this window's copy: a second
+ *  window may have saved since, and spreading our stale copy would write
+ *  its change straight back out. */
 async function updateSettings(patch: Partial<Settings>): Promise<void> {
+  const current = await invoke<Settings>("get_settings");
   const next = {
-    ...settings,
+    ...current,
     ...patch,
-    review: { ...settings.review, ...(patch.review ?? {}) },
-    lens: { ...settings.lens, ...(patch.lens ?? {}) },
+    review: { ...current.review, ...(patch.review ?? {}) },
+    lens: { ...current.lens, ...(patch.lens ?? {}) },
   };
   settings = await invoke<Settings>("set_settings", { settings: next });
   applySettings();
 }
+
+// Another window (or this one) just saved: take the values as given and
+// paint them. Never a write from here — `set_settings` emits this event, so
+// saving in response would loop between the windows forever.
+void listen<Settings>("settings-changed", ({ payload }) => {
+  settings = payload;
+  applySettings();
+});
 
 /** Push the settings into the live state: theme, watcher, telemetry, menu. */
 function applySettings(): void {
@@ -1293,10 +1307,9 @@ async function runSelectedLens(): Promise<void> {
   }
   const selection = lensSelection();
   // `<home>/lens-rules.md` replaces the built-in response rules when it
-  // holds anything; read fresh so an edit takes effect without a restart.
-  const lensRules = await invoke<string>("read_text_file", { path: await join(await invoke<string>("home_dir"), "lens-rules.md") })
-    .then((t) => t.trim() || BUILTIN_LENS_RULES)
-    .catch(() => BUILTIN_LENS_RULES);
+  // holds anything; Rust resolves it (the one rule the `folio` command uses
+  // too) and reads fresh, so an edit takes effect without a restart.
+  const lensRules = await invoke<string>("lens_rules").catch(() => BUILTIN_LENS_RULES);
   const { system, user } = buildLensMessages(lens, doc.fileName, currentMarkdown(), selection, lensRules);
   lensRunning = true;
   lensStatus = `Asking ${lensSettings.model}…`;
@@ -3062,7 +3075,9 @@ void editor.create("").then(async () => {
   // `folio --float [file.md]` — enter floating review mode on launch, unless
   // the user turned floating review windows off. The file still opens and is
   // still watched either way.
-  if (startup.float && settings.review.float) setFloatMode(true);
+  // An explicit `--float` is the user asking for this window; only the
+  // float `review` implies is subject to the Settings switch.
+  if (startup.float && (startup.floatExplicit || settings.review.float)) setFloatMode(true);
   syncMenuState();
   // Ask for telemetry consent on first launch; otherwise honor the choice.
   initTelemetryFlow();

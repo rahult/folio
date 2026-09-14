@@ -1531,6 +1531,7 @@ pub fn run() {
             settingscmd::home_dir,
             settingscmd::change_home_dir,
             settingscmd::prompt_status,
+            settingscmd::lens_rules,
             settingscmd::ensure_prompt_file,
             settingscmd::delete_prompt_file,
             settingscmd::skill_status,

@@ -7,6 +7,7 @@ use folio_core::{prompts, skill};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter, Wry};
 
 fn validate(mut s: Settings) -> Result<Settings, String> {
     if !settings::THEMES.contains(&s.theme.as_str()) {
@@ -35,10 +36,13 @@ pub fn get_settings() -> Settings {
     settings::load()
 }
 
+/// Saves, then tells every window: a second window must not keep painting
+/// (or writing back) the values this one just replaced.
 #[tauri::command]
-pub fn set_settings(settings: Settings) -> Result<Settings, String> {
+pub fn set_settings(app: AppHandle<Wry>, settings: Settings) -> Result<Settings, String> {
     let s = validate(settings)?;
     settings::save(&s)?;
+    let _ = app.emit("settings-changed", &s);
     Ok(s)
 }
 
@@ -163,6 +167,15 @@ pub fn prompt_status(builtin_ids: Vec<String>) -> Result<PromptStatus, String> {
         skill: h.join(prompts::SKILL_OVERRIDE_FILE).is_file(),
         lens_overrides: builtin_ids.into_iter().filter(|id| prompts::override_path(&h, id).is_file()).collect(),
     })
+}
+
+/// The response rules the Lens panel sends, resolved the one way
+/// `prompts::lens_rules` resolves them — the frontend no longer reads
+/// `<home>/lens-rules.md` itself, so the app and the `folio` command
+/// cannot disagree about which text is in force.
+#[tauri::command]
+pub fn lens_rules() -> String {
+    prompts::lens_rules(settings::load().home().as_deref())
 }
 
 fn prompt_path(home: &Path, kind: &str, id: Option<&str>) -> Result<PathBuf, String> {
