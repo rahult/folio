@@ -137,6 +137,7 @@ describe("actionForMenuId", () => {
 
   it("maps the command line tool item", () => {
     expect(actionForMenuId("app.install-cli")).toEqual({ kind: "install-cli" });
+    expect(actionForMenuId("app.settings")).toEqual({ kind: "settings" });
   });
 
   it("maps revision menu ids to their sequence number", () => {

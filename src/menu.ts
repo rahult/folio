@@ -42,6 +42,7 @@ export type MenuAction =
   | { kind: "make-default-app" }
   | { kind: "check-updates" }
   | { kind: "install-cli" }
+  | { kind: "settings" }
   | { kind: "editor-command"; command: EditorCommand };
 
 const EDITOR_COMMAND_IDS: Record<string, EditorCommand> = {
@@ -145,6 +146,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "check-updates" };
     case "app.install-cli":
       return { kind: "install-cli" };
+    case "app.settings":
+      return { kind: "settings" };
     case "file.make-default":
       return { kind: "make-default-app" };
     case "view.source-mode":
