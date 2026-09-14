@@ -73,9 +73,15 @@ pub fn stdin_to_temp() -> Option<std::path::PathBuf> {
 /// argv[1]; macOS may inject `-psn_…`, which the extension filter drops
 /// naturally.
 pub fn parse(args: impl IntoIterator<Item = String>) -> CliOptions {
+    parse_with(args, GateOptions::default())
+}
+
+/// `parse` with the gate's defaults taken from Settings (the command line
+/// does this); flags still override them.
+pub fn parse_with(args: impl IntoIterator<Item = String>, defaults: GateOptions) -> CliOptions {
     let mut float = false;
     let mut paths = Vec::new();
-    let mut gate = GateOptions::default();
+    let mut gate = defaults;
     // `--timeout 60` / `--agent claude` consume the next argument; this
     // remembers which one is owed so the value is never read as a path.
     let mut pending: Option<&'static str> = None;
@@ -129,6 +135,11 @@ mod tests {
     /// case-insensitive, so differing only in extension case collides).
     fn temp_file(stem: &str, ext: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("folio-test-{stem}-{}.{ext}", std::process::id()))
+    }
+
+    /// A command line split on spaces, for cases with no file argument.
+    fn argv(s: &str) -> Vec<String> {
+        s.split_whitespace().map(String::from).collect()
     }
 
     #[test]
@@ -303,5 +314,16 @@ mod tests {
             .into_iter(),
         );
         assert_eq!(cli.gate.timeout_secs, crate::gate::DEFAULT_TIMEOUT_SECS);
+    }
+
+    #[test]
+    fn parse_with_takes_defaults_from_settings_but_flags_win() {
+        let defaults = GateOptions { wait: false, collect: false, timeout_secs: 120, agent: "codex".into() };
+        let cli = parse_with(argv("folio review --wait"), defaults.clone());
+        assert_eq!(cli.gate.agent, "codex");
+        assert_eq!(cli.gate.timeout_secs, 120);
+        let cli = parse_with(argv("folio review --wait --agent claude --timeout 30"), defaults);
+        assert_eq!(cli.gate.agent, "claude");
+        assert_eq!(cli.gate.timeout_secs, 30);
     }
 }

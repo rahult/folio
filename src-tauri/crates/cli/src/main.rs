@@ -50,7 +50,15 @@ fn main() {
         }
         _ => {}
     }
-    let cli = cliargs::parse(argv);
+    let settings = folio_core::settings::load();
+    let cli = cliargs::parse_with(
+        argv,
+        cliargs::GateOptions {
+            agent: settings.review.agent.clone(),
+            timeout_secs: settings.review.timeout_secs,
+            ..cliargs::GateOptions::default()
+        },
+    );
     if cli.gate.wait || cli.gate.collect {
         if let Some(code) = missing_app_code(cli.gate.wait, app::locate().is_some()) {
             eprintln!("folio: {}", app::NOT_FOUND);
