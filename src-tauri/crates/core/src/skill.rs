@@ -7,6 +7,7 @@
 //! and others that share that folder. `--project` installs into the current
 //! directory's `.claude/skills` and `.agents/skills` instead.
 
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 pub const SKILL_NAME: &str = "folio";
@@ -18,7 +19,8 @@ pub fn skill_text() -> String {
     SKILL_MD_RAW.replace("\r\n", "\n")
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Serialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
 pub enum Target {
     Claude,
     Agents,
@@ -32,7 +34,7 @@ impl Target {
         }
     }
 
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Target::Claude => "Claude Code",
             Target::Agents => "Codex, Copilot CLI, Gemini CLI, and others (~/.agents)",
@@ -104,16 +106,62 @@ pub fn install_paths(cmd: &SkillCommand, root: &Path) -> Vec<(Target, PathBuf)> 
         .collect()
 }
 
-/// Write the bundled skill to every target. Returns the paths written.
-pub fn install_in(cmd: &SkillCommand, root: &Path) -> Result<Vec<PathBuf>, String> {
+/// Write `text` to every target. Returns the paths written.
+pub fn install_in_with_text(cmd: &SkillCommand, root: &Path, text: &str) -> Result<Vec<PathBuf>, String> {
     let mut written = Vec::new();
     for (_, path) in install_paths(cmd, root) {
         let dir = path.parent().ok_or_else(|| "bad skill path".to_string())?;
         std::fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
-        std::fs::write(&path, skill_text()).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+        std::fs::write(&path, text).map_err(|e| format!("could not write {}: {e}", path.display()))?;
         written.push(path);
     }
     Ok(written)
+}
+
+/// Write the bundled skill to every target. Returns the paths written.
+pub fn install_in(cmd: &SkillCommand, root: &Path) -> Result<Vec<PathBuf>, String> {
+    install_in_with_text(cmd, root, &skill_text())
+}
+
+#[derive(Serialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum SkillState {
+    /// No file at the target path.
+    Missing,
+    /// The installed text is what an install would write now.
+    Current,
+    /// The installed text differs from the bundled text.
+    Outdated,
+    /// An Override exists and the installed text differs from it.
+    Custom,
+}
+
+#[derive(Serialize, Debug, PartialEq, Eq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillStatus {
+    pub target: Target,
+    pub label: String,
+    pub path: PathBuf,
+    pub state: SkillState,
+}
+
+/// Each target's install state under `root`, judged against `text` (what
+/// an install would write now; `is_override` says it came from the Home
+/// folder rather than the bundle).
+pub fn status_in(root: &Path, text: &str, is_override: bool) -> Vec<SkillStatus> {
+    [Target::Claude, Target::Agents]
+        .into_iter()
+        .map(|target| {
+            let path = target.dir_under(root).join(SKILL_NAME).join("SKILL.md");
+            let state = match std::fs::read_to_string(&path) {
+                Err(_) => SkillState::Missing,
+                Ok(installed) if installed.replace("\r\n", "\n") == text => SkillState::Current,
+                Ok(_) if is_override => SkillState::Custom,
+                Ok(_) => SkillState::Outdated,
+            };
+            SkillStatus { target, label: target.label().to_string(), path, state }
+        })
+        .collect()
 }
 
 pub const HELP: &str = "folio skill — install the /folio agent skill
@@ -144,7 +192,7 @@ pub fn run(cmd: &SkillCommand) -> i32 {
             0
         }
         SkillAction::Show => {
-            print!("{}", skill_text());
+            print!("{}", crate::prompts::skill_text_for(crate::settings::load().home().as_deref()));
             0
         }
         SkillAction::Where => {
@@ -153,7 +201,11 @@ pub fn run(cmd: &SkillCommand) -> i32 {
             }
             0
         }
-        SkillAction::Install => match install_in(cmd, &root) {
+        SkillAction::Install => match install_in_with_text(
+            cmd,
+            &root,
+            &crate::prompts::skill_text_for(crate::settings::load().home().as_deref()),
+        ) {
             Ok(paths) => {
                 for (path, (target, _)) in paths.iter().zip(install_paths(cmd, &root)) {
                     println!("installed {} ({})", path.display(), target.label());
@@ -210,6 +262,39 @@ mod tests {
         let text = std::fs::read_to_string(&written[0]).unwrap();
         assert!(text.starts_with("---\nname: folio"));
         assert!(text.contains("disable-model-invocation: true"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn status_reports_missing_current_outdated_and_custom() {
+        let root = std::env::temp_dir().join(format!("folio-skill-status-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let text = "---\nname: folio\n---\nbody\n";
+        // Nothing installed yet.
+        let s = status_in(&root, text, false);
+        assert_eq!(s.len(), 2);
+        assert!(s.iter().all(|x| x.state == SkillState::Missing));
+        assert_eq!(s[0].target, Target::Claude);
+        assert!(s[0].path.ends_with(".claude/skills/folio/SKILL.md"));
+        // Install the given text → current.
+        let cmd = SkillCommand { action: SkillAction::Install, targets: vec![Target::Claude, Target::Agents], project: false };
+        install_in_with_text(&cmd, &root, text).unwrap();
+        assert!(status_in(&root, text, false).iter().all(|x| x.state == SkillState::Current));
+        // A different bundled text → outdated; the same difference with an override → custom.
+        assert!(status_in(&root, "newer", false).iter().all(|x| x.state == SkillState::Outdated));
+        assert!(status_in(&root, "newer", true).iter().all(|x| x.state == SkillState::Custom));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn install_in_writes_the_bundled_text_and_install_in_with_text_writes_its_argument() {
+        let root = std::env::temp_dir().join(format!("folio-skill-text-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let cmd = SkillCommand { action: SkillAction::Install, targets: vec![Target::Claude], project: false };
+        let written = install_in_with_text(&cmd, &root, "custom\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&written[0]).unwrap(), "custom\n");
+        install_in(&cmd, &root).unwrap();
+        assert_eq!(std::fs::read_to_string(&written[0]).unwrap(), skill_text());
         let _ = std::fs::remove_dir_all(&root);
     }
 }
