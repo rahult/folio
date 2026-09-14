@@ -4,10 +4,11 @@ import "@fontsource-variable/jetbrains-mono";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
 import { confirm, message, ask, open, save } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { openUrl, openPath } from "@tauri-apps/plugin-opener";
+import { openUrl, openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { DocumentState } from "./document";
 import { MarkdownEditor } from "./editor";
 import { buildHtmlDocument, exportTarget, htmlExportTarget } from "./export";
@@ -43,13 +44,14 @@ import {
 import { JOURNAL_HEADER, dueRevisits, journalEntryLine, parseJournal, type JournalEntry } from "./journal";
 import {
   BUILTIN_LENSES,
+  BUILTIN_LENS_RULES,
   buildLensMessages,
   parseAnalysis,
   parseLensFile,
   type Lens,
 } from "./lenses";
 import { renderMarkdownSafe } from "./exportrender";
-import { documentDir, join } from "@tauri-apps/api/path";
+import { join } from "@tauri-apps/api/path";
 import {
   activeTab,
   isPanelOpen,
@@ -96,17 +98,21 @@ import {
   setReviewMode,
   targetQuote,
 } from "./reviewview";
-import { isDarkTheme, storedTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
+import { isDarkTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
+import {
+  INSTALL_SH,
+  SKILLS_SH_PI,
+  migrateLocalSettings,
+  renderSettings,
+  settingsView,
+  type Settings,
+  type SettingsModel,
+  type SettingsSection,
+} from "./settings";
 import { nextZoom, type ZoomDirection } from "./zoom";
 import { TextSelection, type Selection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
-import {
-  initTelemetry,
-  setTelemetryConsent,
-  telemetryConsent,
-  telemetryEnabled,
-  trackEvent,
-} from "./telemetry";
+import { initTelemetry, setTelemetryConsent, trackEvent } from "./telemetry";
 
 const doc = new DocumentState();
 
@@ -147,6 +153,295 @@ const editorRoot = document.querySelector<HTMLElement>("#editor")!;
 const tabStrip = document.querySelector<HTMLElement>("#tabs")!;
 const sourceEditor = document.querySelector<HTMLTextAreaElement>("#source-editor")!;
 const liveBadge = document.querySelector<HTMLSpanElement>("#live-badge")!;
+
+// ——— settings (one file the app and the `folio` command share) ———
+//
+// `settings.json` is the source of truth for the preferences an older
+// build kept in localStorage. It is read once at startup (`initSettings`);
+// every change goes through `updateSettings`, which writes the file and
+// pushes the new values into the live state.
+
+function defaultSettings(): Settings {
+  return {
+    homeDir: null,
+    theme: "paper",
+    liveReload: true,
+    telemetry: null,
+    checkUpdates: true,
+    review: { float: true, agent: "agent", timeoutSecs: 540 },
+    lens: { baseUrl: "", model: "" },
+  };
+}
+
+let settings: Settings = defaultSettings();
+
+/** Read the settings file, carry the old localStorage preferences over the
+ *  first time, then push everything into the live state. The webview build
+ *  target has no top-level await, so the startup block calls this before it
+ *  touches theme, watching, telemetry or the float flag. */
+async function initSettings(): Promise<void> {
+  settings = await invoke<Settings>("get_settings").catch(() => defaultSettings());
+  // Preferences an older build kept in localStorage: migrated once, when
+  // there is no settings file yet (everything still at its default).
+  const legacy = migrateLocalSettings(localStorage);
+  const fresh = JSON.stringify(settings) === JSON.stringify(defaultSettings());
+  if (legacy && fresh) {
+    settings = await invoke<Settings>("set_settings", { settings: { ...settings, ...legacy } }).catch(() => settings);
+  }
+  // The lens panel opens its own form when there is no endpoint yet.
+  lensSettingsOpen = !settings.lens.baseUrl;
+  // Unconditionally, not via applySettings: the pre-paint script in
+  // index.html reads the old localStorage copy, and the native window theme
+  // has never been set at this point.
+  applyTheme(settings.theme);
+  applySettings();
+}
+
+/** A settings write started from a menu, toolbar or overlay has nowhere to
+ *  put a failure; say so rather than let it vanish. */
+function reportSettingsError(err: unknown): void {
+  void message(typeof err === "string" ? err : String(err), { title: "Settings", kind: "error" });
+}
+
+async function updateSettings(patch: Partial<Settings>): Promise<void> {
+  const next = {
+    ...settings,
+    ...patch,
+    review: { ...settings.review, ...(patch.review ?? {}) },
+    lens: { ...settings.lens, ...(patch.lens ?? {}) },
+  };
+  settings = await invoke<Settings>("set_settings", { settings: next });
+  applySettings();
+}
+
+/** Push the settings into the live state: theme, watcher, telemetry, menu. */
+function applySettings(): void {
+  if (appliedTheme !== settings.theme) applyTheme(settings.theme);
+  watchEnabled = settings.liveReload;
+  syncWatch();
+  telemetryOn = settings.telemetry === true;
+  // gtag gates on the stored consent, so the localStorage mirror follows
+  // the file. A null (never asked) is left alone, or the consent overlay
+  // would never get its turn.
+  if (settings.telemetry !== null) setTelemetryConsent(settings.telemetry);
+  if (telemetryOn) initTelemetry();
+  lensSettings = { ...settings.lens };
+  syncMenuState();
+  if (isPanelOpen() && activeTab() === "analysis") void refreshAnalysis();
+  if (settingsOpen) refreshSettingsView();
+}
+
+// ——— the Settings page ———
+//
+// A full-window page rather than a dialog: it replaces the editor row while
+// it is open, and Done (or Escape) puts the document back.
+
+const settingsRoot = document.querySelector<HTMLDivElement>("#settings-root")!;
+let settingsOpen = false;
+let settingsSection: SettingsSection = "general";
+let settingsError: string | null = null;
+/** The inline API-key field: the webview has no `window.prompt`. */
+let keyEntryOpen = false;
+let settingsExtra: Pick<SettingsModel, "homePath" | "hasKey" | "version" | "lensesFolder" | "prompts" | "skills" | "cli"> = {
+  homePath: "",
+  hasKey: false,
+  version: "",
+  lensesFolder: "",
+  prompts: { lensRules: false, feedbackInstructions: false, skill: false, lensOverrides: [] },
+  skills: [],
+  cli: { link: null, target: null, ours: false },
+};
+
+/** Everything the page shows that is not in `settings`: paths, install
+ *  status, the app version. Re-read after every action. */
+async function loadSettingsExtra(): Promise<void> {
+  const ids = BUILTIN_LENSES.map((l) => l.id);
+  const [homePath, hasKey, version, lensesFolder, prompts, skills, cli] = await Promise.all([
+    invoke<string>("home_dir").catch(() => ""),
+    invoke<boolean>("has_llm_key").catch(() => false),
+    getVersion().catch(() => ""),
+    invoke<string>("lenses_folder").catch(() => ""),
+    invoke<SettingsModel["prompts"]>("prompt_status", { builtinIds: ids }).catch(() => settingsExtra.prompts),
+    invoke<SettingsModel["skills"]>("skill_status").catch(() => []),
+    invoke<SettingsModel["cli"]>("cli_status").catch(() => settingsExtra.cli),
+  ]);
+  settingsExtra = { homePath, hasKey, version, lensesFolder, prompts, skills, cli };
+  // The Lenses panel shows the same fact; keep the two from drifting.
+  lensHasKey = hasKey;
+}
+
+function refreshSettingsView(): void {
+  const model: SettingsModel = {
+    settings,
+    section: settingsSection,
+    error: settingsError,
+    keyEntry: keyEntryOpen,
+    ...settingsExtra,
+    builtinLenses: BUILTIN_LENSES.map(({ id, name, description }) => ({ id, name, description })),
+  };
+  renderSettings(settingsRoot, settingsView(model), settingsHandlers);
+}
+
+async function openSettings(): Promise<void> {
+  if (settingsOpen) return;
+  if (sourceMode) await exitSourceMode();
+  exitReviewMode(false);
+  settingsOpen = true;
+  settingsError = null;
+  keyEntryOpen = false;
+  document.body.classList.add("settings-open");
+  settingsRoot.hidden = false;
+  titleEl.textContent = "Settings";
+  trackEvent("settings_open");
+  await loadSettingsExtra();
+  refreshSettingsView();
+}
+
+function closeSettings(): void {
+  if (!settingsOpen) return;
+  settingsOpen = false;
+  keyEntryOpen = false;
+  document.body.classList.remove("settings-open");
+  settingsRoot.hidden = true;
+  renderTitle();
+  editor.withView((view) => view.focus());
+}
+
+async function settingsAction(id: string): Promise<void> {
+  settingsError = null;
+  try {
+    if (id === "home.choose") {
+      const picked = await open({ directory: true, multiple: false, defaultPath: settingsExtra.homePath });
+      if (typeof picked === "string") {
+        settings = await invoke<Settings>("change_home_dir", { dir: picked });
+        await onHomeChanged();
+      }
+    } else if (id === "home.reveal") await revealItemInDir(settingsExtra.homePath);
+    else if (id === "lensesFolder.reveal") await revealItemInDir(settingsExtra.lensesFolder);
+    else if (id === "about.updates.check") await checkForUpdates(true);
+    else if (id === "lens.key.set") keyEntryOpen = true;
+    else if (id === "lens.key.clear") {
+      keyEntryOpen = false;
+      await invoke("set_llm_key", { key: "" });
+    } else if (id.startsWith("prompt.")) await promptAction(id);
+    else if (id === "skill.claude.install" || id === "skill.agents.install") await invoke<string>("install_skill", { target: id.split(".")[1] });
+    else if (id === "cli.install") await installCliTool();
+    else if (id === "defaultApp.set") await makeDefaultApp();
+    else if (id === "skill.pi.copy") await copyText(SKILLS_SH_PI);
+    else if (id === "cli.script.copy") await copyText(INSTALL_SH);
+    else if (id === "about.site") await openUrl("https://folio.rahultrikha.com");
+    else if (id === "about.github") await openUrl("https://github.com/rahult/folio");
+    else if (id === "about.roadmap") await openUrl("https://github.com/rahult/folio/blob/main/docs/ROADMAP.md");
+  } catch (err) {
+    settingsError = typeof err === "string" ? err : String(err);
+  }
+  // "Edit in Folio" left the page for a tab; nothing to repaint.
+  if (!settingsOpen) return;
+  await loadSettingsExtra();
+  refreshSettingsView();
+}
+
+/** Edit/Reset for the four prompt kinds. `prompt.lens.<id>.edit` and
+ *  `prompt.<kind>.edit` create the file from the built-in text and open it
+ *  in a tab; reset/clear delete it after a confirm. */
+async function promptAction(id: string): Promise<void> {
+  const parts = id.split(".");
+  const verb = parts[parts.length - 1];
+  const isLens = parts[1] === "lens";
+  const kind = isLens ? "lens" : { lensRules: "lens-rules", feedbackInstructions: "feedback-instructions", skill: "skill" }[parts[1]];
+  const lensId = isLens ? parts.slice(2, -1).join(".") : undefined;
+  if (!kind) return;
+  if (verb === "reset") {
+    const ok = await confirm(
+      isLens ? "Delete your edited copy and go back to the built-in lens?" : "Delete this file and go back to the built-in text?",
+      { title: "Reset", kind: "warning" },
+    );
+    if (ok) await invoke("delete_prompt_file", { kind, id: lensId ?? null });
+    if (kind === "lens-rules" || kind === "lens") await loadCustomLenses();
+    return;
+  }
+  const initial = isLens
+    ? builtinLensFile(lensId!)
+    : kind === "lens-rules"
+      ? BUILTIN_LENS_RULES + "\n"
+      : kind === "skill"
+        ? await invoke<string>("skill_text").catch(() => "")
+        : "";
+  const path = await invoke<string>("ensure_prompt_file", { kind, id: lensId ?? null, initial });
+  closeSettings();
+  // `loadFromPath` opens the tab itself.
+  await loadFromPath(path);
+}
+
+/** A built-in lens as the custom-lens file format, for Edit in Folio. */
+function builtinLensFile(id: string): string {
+  const lens = BUILTIN_LENSES.find((l) => l.id === id);
+  if (!lens) return "";
+  return `---\nname: ${lens.name}\ndescription: ${lens.description}\n---\n\n${lens.prompt.trim()}\n`;
+}
+
+/** The journal and the lenses folder both hang off the Home folder. */
+async function onHomeChanged(): Promise<void> {
+  journalPath = "";
+  await resolveJournalPath();
+  await loadCustomLenses();
+  lensesFolderPath = await invoke<string>("lenses_folder").catch(() => lensesFolderPath);
+  applySettings();
+}
+
+const settingsHandlers = {
+  pick(section: SettingsSection) {
+    settingsSection = section;
+    settingsError = null;
+    keyEntryOpen = false;
+    refreshSettingsView();
+  },
+  change(id: string, value: string | number | boolean) {
+    settingsError = null;
+    if (id === "lens.key.value") {
+      const key = String(value).trim();
+      keyEntryOpen = false;
+      void (async () => {
+        try {
+          if (key) await invoke("set_llm_key", { key });
+        } catch (err) {
+          settingsError = typeof err === "string" ? err : String(err);
+        }
+        await loadSettingsExtra();
+        refreshSettingsView();
+      })();
+      return;
+    }
+    const patch: Partial<Settings> =
+      id === "theme" ? { theme: value as Theme }
+      : id === "liveReload" ? { liveReload: value as boolean }
+      : id === "telemetry" ? { telemetry: value as boolean }
+      : id === "checkUpdates" ? { checkUpdates: value as boolean }
+      : id === "review.float" ? { review: { ...settings.review, float: value as boolean } }
+      : id === "review.agent" ? { review: { ...settings.review, agent: String(value) } }
+      : id === "review.timeoutSecs" ? { review: { ...settings.review, timeoutSecs: Number(value) } }
+      : id === "lens.baseUrl" ? { lens: { ...settings.lens, baseUrl: String(value) } }
+      : id === "lens.model" ? { lens: { ...settings.lens, model: String(value) } }
+      : {};
+    void updateSettings(patch).catch((err) => {
+      settingsError = typeof err === "string" ? err : String(err);
+      refreshSettingsView();
+    });
+  },
+  act(id: string) {
+    void settingsAction(id);
+  },
+  done() {
+    closeSettings();
+  },
+};
+
+document.addEventListener("keydown", (e) => {
+  if (settingsOpen && e.key === "Escape") {
+    e.preventDefault();
+    closeSettings();
+  }
+});
 
 function displayPath(path: string | null): string {
   if (!path) return "";
@@ -223,6 +518,8 @@ async function loadContent(
 /** Read a file from disk and load it into the editor. Every load is a
  *  navigation visit unless the caller is itself history navigation. */
 async function loadFromPath(path: string, options?: { visit?: boolean }): Promise<void> {
+  // Opening a document leaves the Settings page.
+  closeSettings();
   const raw = await invoke<string>("read_text_file", { path });
   const content = normalizeMarkdown(raw);
   // The document lands in its tab: an existing one for the path, the clean
@@ -540,37 +837,31 @@ function syncMenuState(): void {
 
 // ——— opt-in telemetry (GA4; nothing loads before consent) ———
 
-let telemetryOn = telemetryEnabled();
+let telemetryOn = settings.telemetry === true;
 
 function toggleTelemetry(): void {
-  telemetryOn = !telemetryOn;
-  setTelemetryConsent(telemetryOn);
-  syncMenuState();
-  if (telemetryOn) {
-    initTelemetry();
-    trackEvent("telemetry_opt_in");
-  }
+  void updateSettings({ telemetry: !telemetryOn })
+    .then(() => {
+      if (telemetryOn) trackEvent("telemetry_opt_in");
+    })
+    .catch(reportSettingsError);
 }
 
 telemetryAcceptBtn.addEventListener("click", () => {
-  telemetryOn = true;
-  setTelemetryConsent(true);
   telemetryOverlay.hidden = true;
-  initTelemetry();
-  trackEvent("telemetry_opt_in");
-  syncMenuState();
+  void updateSettings({ telemetry: true })
+    .then(() => trackEvent("telemetry_opt_in"))
+    .catch(reportSettingsError);
 });
 
 telemetryDeclineBtn.addEventListener("click", () => {
-  telemetryOn = false;
-  setTelemetryConsent(false);
   telemetryOverlay.hidden = true;
-  syncMenuState();
+  void updateSettings({ telemetry: false }).catch(reportSettingsError);
 });
 
 /** First launch: ask once. Subsequent launches respect the stored choice. */
 function initTelemetryFlow(): void {
-  if (telemetryConsent() === null) {
+  if (settings.telemetry === null) {
     telemetryOverlay.hidden = false;
     return;
   }
@@ -773,7 +1064,6 @@ async function writeDecisionFile(next: string): Promise<boolean> {
 // user's own model endpoint. Results go to <doc>.analysis.md; the key
 // stays in the keychain and the request is made from Rust.
 
-const LENS_SETTINGS_KEY = "folio-lens-settings";
 const LENS_SELECTED_KEY = "folio-lens-selected";
 
 interface LensSettings {
@@ -781,20 +1071,8 @@ interface LensSettings {
   model: string;
 }
 
-function loadLensSettings(): LensSettings {
-  try {
-    const raw = localStorage.getItem(LENS_SETTINGS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<LensSettings>;
-      return { baseUrl: parsed.baseUrl ?? "", model: parsed.model ?? "" };
-    }
-  } catch {
-    // fall through
-  }
-  return { baseUrl: "", model: "" };
-}
-
-let lensSettings = loadLensSettings();
+/** A derived copy of `settings.lens`, refreshed by `applySettings()`. */
+let lensSettings: LensSettings = { ...settings.lens };
 let lensHasKey = false;
 let lensSettingsOpen = !lensSettings.baseUrl;
 let selectedLens = localStorage.getItem(LENS_SELECTED_KEY) ?? BUILTIN_LENSES[0].id;
@@ -833,8 +1111,19 @@ async function loadCustomLenses(): Promise<void> {
   }
 }
 
+/** The built-ins, with any `<home>/lenses/<built-in id>.md` standing in for
+ *  the one it overrides, then the rest of the custom files. Settings →
+ *  Prompts writes exactly such a file, so without the swap a built-in lens
+ *  would appear twice the moment it was edited. */
 function allLenses(): Lens[] {
-  return [...BUILTIN_LENSES, ...customLenses];
+  const overrides = new Map<string, Lens>();
+  const extras: Lens[] = [];
+  for (const lens of customLenses) {
+    const stem = lens.id.startsWith("custom:") ? lens.id.slice("custom:".length) : lens.id;
+    if (BUILTIN_LENSES.some((b) => b.id === stem)) overrides.set(stem, { ...lens, id: stem, builtin: false, name: `${lens.name} (edited)` });
+    else extras.push(lens);
+  }
+  return [...BUILTIN_LENSES.map((b) => overrides.get(b.id) ?? b), ...extras];
 }
 
 /** The passage a lens would focus on: the selection, or the current block
@@ -881,17 +1170,18 @@ async function refreshAnalysis(): Promise<void> {
         lensSettingsOpen = !lensSettingsOpen;
         void refreshAnalysis();
       },
-      onSaveSettings: (settings) => {
+      onSaveSettings: (entered) => {
         void (async () => {
-          lensSettings = { baseUrl: settings.baseUrl, model: settings.model };
-          localStorage.setItem(LENS_SETTINGS_KEY, JSON.stringify(lensSettings));
-          if (settings.key !== null) {
+          await updateSettings({ lens: { baseUrl: entered.baseUrl, model: entered.model } }).catch((err) => {
+            lensStatus = `Could not save: ${String(err)}`;
+          });
+          if (entered.key !== null) {
             try {
-              await invoke("set_llm_key", { key: settings.key });
+              await invoke("set_llm_key", { key: entered.key });
             } catch (err) {
               lensStatus = `Could not store the key: ${String(err)}`;
             }
-            lensHasKey = settings.key !== "" && (await invoke<boolean>("has_llm_key").catch(() => false));
+            lensHasKey = entered.key !== "" && (await invoke<boolean>("has_llm_key").catch(() => false));
           }
           lensSettingsOpen = false;
           if (!lensStatus) lensStatus = "Saved.";
@@ -937,7 +1227,12 @@ async function runSelectedLens(): Promise<void> {
     return;
   }
   const selection = lensSelection();
-  const { system, user } = buildLensMessages(lens, doc.fileName, currentMarkdown(), selection);
+  // `<home>/lens-rules.md` replaces the built-in response rules when it
+  // holds anything; read fresh so an edit takes effect without a restart.
+  const lensRules = await invoke<string>("read_text_file", { path: await join(await invoke<string>("home_dir"), "lens-rules.md") })
+    .then((t) => t.trim() || BUILTIN_LENS_RULES)
+    .catch(() => BUILTIN_LENS_RULES);
+  const { system, user } = buildLensMessages(lens, doc.fileName, currentMarkdown(), selection, lensRules);
   lensRunning = true;
   lensStatus = `Asking ${lensSettings.model}…`;
   trackEvent("lens_run", { lens: lens.id });
@@ -981,7 +1276,7 @@ let dueEntries: JournalEntry[] = [];
 async function resolveJournalPath(): Promise<string> {
   if (journalPath) return journalPath;
   try {
-    journalPath = await join(await documentDir(), "Folio", "decisions.md");
+    journalPath = await join(await invoke<string>("home_dir"), "decisions.md");
   } catch {
     journalPath = "";
   }
@@ -1137,15 +1432,11 @@ editorRoot.addEventListener("scroll", scheduleSessionSave);
 
 let floatMode = false;
 
-const WATCH_STORAGE_KEY = "folio-watch";
-/** Auto-reload in normal windows; persisted, on unless explicitly disabled. */
-let watchEnabled = localStorage.getItem(WATCH_STORAGE_KEY) !== "off";
+/** Auto-reload in normal windows; from settings.json, on unless turned off. */
+let watchEnabled = settings.liveReload;
 
 function toggleWatch(): void {
-  watchEnabled = !watchEnabled;
-  localStorage.setItem(WATCH_STORAGE_KEY, watchEnabled ? "on" : "off");
-  syncMenuState();
-  syncWatch();
+  void updateSettings({ liveReload: !settings.liveReload }).catch(reportSettingsError);
 }
 
 function setFloatMode(on: boolean): void {
@@ -2089,20 +2380,26 @@ async function openRevision(seq: number): Promise<void> {
 
 // ——— themes ———
 
-let appliedTheme: Theme = storedTheme(localStorage.getItem(THEME_STORAGE_KEY));
+let appliedTheme: Theme = settings.theme;
 
-function applyTheme(theme: Theme, persist = true): void {
+function applyTheme(theme: Theme): void {
   appliedTheme = theme;
   document.documentElement.dataset.theme = theme;
-  if (persist) localStorage.setItem(THEME_STORAGE_KEY, theme);
+  // Not persistence — settings.json owns the theme. This is the hint the
+  // pre-paint script in index.html reads, so a dark theme does not flash
+  // white while the settings file is still being read.
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // private mode or a full quota: the hint is optional
+  }
   // The window has no native title bar; its buttons and overlay follow the
   // app's own light/dark choice rather than the system's.
   void getCurrentWindow().setTheme(isDarkTheme(theme) ? "dark" : "light");
 }
 
 function requestTheme(theme: Theme): void {
-  applyTheme(theme);
-  syncMenuState();
+  void updateSettings({ theme }).catch(reportSettingsError);
 }
 
 // ——— review mode ———
@@ -2315,6 +2612,8 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return checkForUpdates(true);
     case "install-cli":
       return installCliTool();
+    case "settings":
+      return openSettings();
     case "editor-command":
       // Formatting commands operate on the WYSIWYG document only.
       if (!sourceMode) editor.runCommand(action.command);
@@ -2678,6 +2977,10 @@ async function claimNativeMenu(): Promise<void> {
 
 void editor.create("").then(async () => {
   renderTitle();
+  // The preferences file first: theme, watching, telemetry and the float
+  // default all come out of it, and the webview build target rules out a
+  // top-level await.
+  await initSettings();
   // Mirror the persisted recent-files list into the native File menu.
   void invoke("set_recent_files", { paths: recentFiles });
   // Rust queued this window's job before the webview existed: a Finder
@@ -2691,9 +2994,15 @@ void editor.create("").then(async () => {
   } else if (isPrimaryWindow) {
     await restoreSession();
   }
-  // `folio --float [file.md]` — enter floating review mode on launch.
-  if (startup.float) setFloatMode(true);
+  // `folio --float [file.md]` — enter floating review mode on launch, unless
+  // the user turned floating review windows off. The file still opens and is
+  // still watched either way.
+  if (startup.float && settings.review.float) setFloatMode(true);
   syncMenuState();
+  // Ask for telemetry consent on first launch; otherwise honor the choice.
+  initTelemetryFlow();
+  // Silent update check on launch; failures (offline, no release) are ignored.
+  if (settings.checkUpdates) void checkForUpdates(false);
 });
 
 void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
@@ -2711,8 +3020,4 @@ void (async () => {
   void refreshAnalysis();
 })();
 syncMenuState();
-// Ask for telemetry consent on first launch; otherwise honor the choice.
-initTelemetryFlow();
-// Silent update check on launch; failures (offline, no release) are ignored.
-void checkForUpdates(false);
 

@@ -31,6 +31,9 @@ export interface SettingsModel {
   builtinLenses: { id: string; name: string; description: string }[];
   skills: { target: "claude" | "agents"; label: string; path: string; state: "missing" | "current" | "outdated" | "custom" }[];
   cli: { link: string | null; target: string | null; ours: boolean };
+  /** The inline "type a key" field is showing (there is no window.prompt
+   *  in the webview, so Set…/Replace… reveals a field instead). */
+  keyEntry: boolean;
   error: string | null;
 }
 
@@ -122,10 +125,14 @@ function lenses(m: SettingsModel): Control[] {
         { id: "lens.key.clear", label: "Clear", danger: true },
       ]
     : [{ id: "lens.key.set", label: "Set…" }];
+  const entry: Control[] = m.keyEntry
+    ? [{ kind: "text", id: "lens.key.value", label: "New API key", value: "", placeholder: "sk-…", note: "Press Return to store it in the keychain." }]
+    : [];
   return [
     { kind: "text", id: "lens.baseUrl", label: "Endpoint URL", value: m.settings.lens.baseUrl, placeholder: "http://localhost:11434/v1", note: "Any OpenAI-compatible chat endpoint." },
     { kind: "text", id: "lens.model", label: "Model", value: m.settings.lens.model, placeholder: "llama3.2:3b" },
     { kind: "row", id: "lens.key", label: "API key", status: m.hasKey ? "set" : "not set", note: "Kept in the system keychain, never shown.", actions: keyActions },
+    ...entry,
     { kind: "path", id: "lensesFolder", label: "Custom lenses folder", value: m.lensesFolder, actions: [{ id: "lensesFolder.reveal", label: "Reveal" }] },
   ];
 }

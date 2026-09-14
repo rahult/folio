@@ -27,6 +27,7 @@ function model(overrides: Partial<SettingsModel> = {}): SettingsModel {
       { target: "agents", label: "Codex and others", path: "/Users/me/.agents/skills/folio/SKILL.md", state: "outdated" },
     ],
     cli: { link: null, target: null, ours: false },
+    keyEntry: false,
     error: null,
     ...overrides,
   };
@@ -74,6 +75,13 @@ describe("settingsView", () => {
     expect(unset).toMatchObject({ kind: "row", status: "not set", actions: [{ id: "lens.key.set", label: "Set…" }] });
     const set = settingsView(model({ section: "lenses", hasKey: true })).controls.find((c) => c.id === "lens.key");
     expect(set).toMatchObject({ status: "set", actions: [{ id: "lens.key.set", label: "Replace…" }, { id: "lens.key.clear", label: "Clear", danger: true }] });
+  });
+
+  it("reveals the inline key field only while one is being typed", () => {
+    expect(ids(model({ section: "lenses" }))).toEqual(["lens.baseUrl", "lens.model", "lens.key", "lensesFolder"]);
+    const v = settingsView(model({ section: "lenses", keyEntry: true }));
+    expect(ids(model({ section: "lenses", keyEntry: true }))).toEqual(["lens.baseUrl", "lens.model", "lens.key", "lens.key.value", "lensesFolder"]);
+    expect(v.controls.find((c) => c.id === "lens.key.value")).toMatchObject({ kind: "text", value: "" });
   });
 
   it("marks prompts built-in or edited and lists every built-in lens", () => {
