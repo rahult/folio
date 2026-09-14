@@ -475,15 +475,23 @@ section + section {
 
 /* themes */
 
+/* Five swatches: three across, the last two centered beneath them. */
 .visual-themes {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 0.75rem;
 }
 
-.visual-themes .swatch:nth-child(4),
+.visual-themes .swatch {
+  grid-column: span 2;
+}
+
+.visual-themes .swatch:nth-child(4) {
+  grid-column: 2 / 4;
+}
+
 .visual-themes .swatch:nth-child(5) {
-  grid-column: span 1;
+  grid-column: 4 / 6;
 }
 
 .swatch {
@@ -686,11 +694,6 @@ section + section {
   height: 1px;
   margin: 0.3rem 0.5rem;
   background: var(--hairline);
-}
-
-.menu li:nth-child(6) {
-  background: var(--accent);
-  color: var(--paper);
 }
 
 .menu kbd {
@@ -1134,6 +1137,12 @@ kbd {
     grid-template-columns: 1fr;
   }
 
+  .visual-themes .swatch,
+  .visual-themes .swatch:nth-child(4),
+  .visual-themes .swatch:nth-child(5) {
+    grid-column: auto;
+  }
+
   .more-list {
     columns: 1;
   }
@@ -1178,14 +1187,13 @@ kbd {
 
 #ga-consent {
   position: fixed;
-  left: 50%;
+  left: 1.25rem;
   bottom: 1.25rem;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 12px;
   width: max-content;
-  max-width: calc(100vw - 2rem);
+  max-width: min(26rem, calc(100vw - 2.5rem));
   padding: 10px 14px;
   background: var(--paper-raised);
   border: 1px solid var(--hairline);
@@ -1243,14 +1251,14 @@ kbd {
   background: var(--paper-raised);
   padding: 0.9rem 1rem 1rem;
   font-family: var(--font-ui);
-  font-size: 0.8rem;
-  min-height: 15.5rem;
+  font-size: 0.86rem;
+  min-height: 16.5rem;
 }
 
 .mini-tabs {
   display: flex;
   gap: 0.9rem;
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1276,7 +1284,7 @@ kbd {
 }
 
 .mini-stats {
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   color: var(--ink-faint);
   padding: 0.4rem 0 0.5rem;
   border-bottom: 1px solid var(--hairline);
@@ -1312,7 +1320,7 @@ kbd {
 
 .mini-outline i {
   font-style: normal;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   color: var(--ink-faint);
 }
 
@@ -1337,7 +1345,7 @@ kbd {
 .mini-ledger {
   border-top: 1px solid var(--hairline);
   padding-top: 0.6rem;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   color: var(--ink-soft);
   display: grid;
   gap: 0.25rem;
@@ -1364,7 +1372,7 @@ kbd {
 }
 
 .mini-label {
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1381,12 +1389,12 @@ kbd {
   padding: 0.4rem 0.55rem;
   color: var(--ink);
   background: var(--paper);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
 }
 
 .mini-check {
   color: var(--ink-soft);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   padding: 0.1rem 0;
 }
 
@@ -1401,7 +1409,7 @@ kbd {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.15rem 0.6rem;
-  font-size: 0.76rem;
+  font-size: 0.8rem;
 }
 
 .mini-record dt {

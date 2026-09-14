@@ -116,7 +116,16 @@ const gaChoice = localStorage.getItem(GA_KEY);
 if (gaChoice === "on") {
   loadSiteAnalytics();
 } else if (gaChoice === null) {
-  gaConsent.hidden = false;
+  // Ask only once the visitor has engaged: first scroll, or 20 seconds
+  // if they never scroll. Nothing tracks before the choice either way.
+  const ask = () => {
+    gaConsent.hidden = false;
+    window.removeEventListener("scroll", onScroll, { capture: true });
+    clearTimeout(fallback);
+  };
+  const onScroll = () => ask();
+  const fallback = setTimeout(ask, 20_000);
+  window.addEventListener("scroll", onScroll, { passive: true, capture: true });
 }
 
 gaAccept.addEventListener("click", () => {

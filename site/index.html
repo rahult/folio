@@ -7,6 +7,25 @@
       name="description"
       content="Folio is a calm Markdown editor for macOS, Windows, and Linux that renders as you write, and a review window for the plans and docs your coding agent writes."
     />
+    <link rel="canonical" href="https://folio.rahultrikha.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Folio" />
+    <meta property="og:title" content="Folio — a calm Markdown editor" />
+    <meta
+      property="og:description"
+      content="Markdown, rendered as you write it. A small native editor for macOS, Windows, and Linux — and a review window for the plans your coding agent writes."
+    />
+    <meta property="og:url" content="https://folio.rahultrikha.com/" />
+    <meta property="og:image" content="https://folio.rahultrikha.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Folio — a calm Markdown editor" />
+    <meta
+      name="twitter:description"
+      content="Markdown, rendered as you write it. A small native editor for macOS, Windows, and Linux — and a review window for the plans your coding agent writes."
+    />
+    <meta name="twitter:image" content="https://folio.rahultrikha.com/og.png" />
     <link rel="icon" type="image/svg+xml" href="./folio-icon.svg" />
     <link rel="stylesheet" href="./site.css" />
     <title>Folio — a calm Markdown editor</title>
@@ -47,7 +66,7 @@
               href="https://github.com/rahult/folio/releases/latest"
               >Download for macOS</a
             >
-            <a class="btn" href="#download">Windows and Linux</a>
+            <a class="btn" href="#download">Other platforms</a>
           </div>
           <p class="hero-note">
             About 5&nbsp;MB, built on the system webview. Try the real editor
@@ -529,7 +548,9 @@ folio skill install              # or from Folio's own command line</code></pre>
       <p>
         Folio is open source under the
         <a href="https://github.com/rahult/folio/blob/main/LICENSE">MIT license</a>.
-        Built with Tauri and Milkdown.
+        Built with Tauri and Milkdown. Follow new releases on
+        <a href="https://github.com/rahult/folio/releases">GitHub</a>
+        (<a href="https://github.com/rahult/folio/releases.atom">RSS</a>).
       </p>
     </footer>
 
@@ -544,11 +565,27 @@ folio skill install              # or from Folio's own command line</code></pre>
 
     <script>
       // Point every download link at the asset of the latest published
-      // release, so buttons start the file download directly. Falls back
-      // to the releases page if the API is unreachable or rate-limited.
+      // release, so buttons start the file download directly. The hero
+      // button tracks the visitor's platform; macOS stays the default when
+      // the platform is unknown. Falls back to the releases page if the
+      // API is unreachable or rate-limited.
       (async () => {
+        const ua = navigator.userAgent;
+        const platform = /Windows/i.test(ua)
+          ? "win"
+          : /Linux|X11/i.test(ua)
+            ? "linux"
+            : "mac";
+        const platformName = { mac: "macOS", win: "Windows", linux: "Linux" }[
+          platform
+        ];
+        const hero = document.getElementById("dl-hero");
+        if (hero) hero.textContent = `Download for ${platformName}`;
         const targets = {
-          "dl-hero": /aarch64\.dmg$/,
+          "dl-hero":
+            { mac: /aarch64\.dmg$/, win: /x64-setup\.exe$/, linux: /\.AppImage$/ }[
+              platform
+            ],
           "dl-macos": /aarch64\.dmg$/,
           "dl-win-msi": /\.msi$/,
           "dl-win-exe": /x64-setup\.exe$/,
@@ -570,8 +607,8 @@ folio skill install              # or from Folio's own command line</code></pre>
             if (el && asset) el.href = asset.browser_download_url;
           }
           if (data.tag_name) {
-            const hero = document.getElementById("dl-hero");
-            if (hero) hero.textContent = `Download for macOS ${data.tag_name}`;
+            if (hero)
+              hero.textContent = `Download for ${platformName} ${data.tag_name}`;
             const ver = document.getElementById("latest-version");
             if (ver) ver.textContent = data.tag_name;
           }
