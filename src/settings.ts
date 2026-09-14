@@ -32,7 +32,6 @@ export interface SettingsModel {
   skills: { target: "claude" | "agents"; label: string; path: string; state: "missing" | "current" | "outdated" | "custom" }[];
   cli: { link: string | null; target: string | null; ours: boolean };
   error: string | null;
-  busy: string | null;
 }
 
 export type Action = { id: string; label: string; danger?: boolean };
@@ -69,6 +68,12 @@ const SECTIONS: { id: SettingsSection; label: string }[] = [
 
 const THEME_LABELS: Record<Theme, string> = { paper: "Paper", manuscript: "Manuscript", newsprint: "Newsprint", night: "Night", slate: "Slate" };
 
+/** Keep a number inside a control's range; `min` wins over `max` if they cross. */
+const clamp = (n: number, min: number, max: number): number => Math.min(Math.max(n, min), max);
+
+const TIMEOUT_MIN = 60;
+const TIMEOUT_MAX = 540;
+
 const edit = (id: string): Action => ({ id: `${id}.edit`, label: "Edit in Folio" });
 const reset = (id: string, label = "Reset"): Action => ({ id: `${id}.reset`, label, danger: true });
 
@@ -102,9 +107,9 @@ function review(m: SettingsModel): Control[] {
       kind: "number",
       id: "review.timeoutSecs",
       label: "Gate timeout (seconds)",
-      value: r.timeoutSecs,
-      min: 60,
-      max: 540,
+      value: clamp(r.timeoutSecs, TIMEOUT_MIN, TIMEOUT_MAX),
+      min: TIMEOUT_MIN,
+      max: TIMEOUT_MAX,
       note: "Coding agents cap a shell call at ten minutes; 540 leaves room to return an exit code.",
     },
   ];
@@ -279,7 +284,14 @@ function control(c: Control, on: SettingsHandlers): HTMLElement {
       input.min = String(c.min);
       input.max = String(c.max);
       input.value = String(c.value);
-      input.addEventListener("change", () => on.change(c.id, Number(input.value)));
+      input.addEventListener("change", () => {
+        // Empty or unparseable input reads as NaN; leave the stored value alone.
+        const n = Number(input.value);
+        if (!Number.isFinite(n)) return;
+        const next = clamp(n, c.min, c.max);
+        input.value = String(next);
+        on.change(c.id, next);
+      });
       body.append(input);
       break;
     }
@@ -331,11 +343,8 @@ export function migrateLocalSettings(storage: Pick<Storage, "getItem">): Partial
   if (rawTheme !== null && (THEMES as readonly string[]).includes(rawTheme)) out.theme = storedTheme(rawTheme);
   const watch = storage.getItem("folio-watch");
   if (watch === "on" || watch === "off") out.liveReload = watch === "on";
-  // "on"/"off" is what the app wrote; "true"/"false" is the older spelling.
-  const consent = telemetryConsent(storage as Storage);
-  const rawTelemetry = storage.getItem("folio-telemetry");
+  const consent = telemetryConsent(storage);
   if (consent !== null) out.telemetry = consent;
-  else if (rawTelemetry === "true" || rawTelemetry === "false") out.telemetry = rawTelemetry === "true";
   const lens = storage.getItem("folio-lens-settings");
   if (lens) {
     try {

@@ -28,7 +28,6 @@ function model(overrides: Partial<SettingsModel> = {}): SettingsModel {
     ],
     cli: { link: null, target: null, ours: false },
     error: null,
-    busy: null,
     ...overrides,
   };
 }
@@ -59,8 +58,14 @@ describe("settingsView", () => {
   });
 
   it("clamps the review timeout control to the allowed range", () => {
-    const v = settingsView(model({ section: "review" }));
-    expect(v.controls.find((c) => c.id === "review.timeoutSecs")).toMatchObject({ kind: "number", value: 540, min: 60, max: 540 });
+    const withTimeout = (timeoutSecs: number) =>
+      settingsView(model({ section: "review", settings: { ...model().settings, review: { ...model().settings.review, timeoutSecs } } })).controls.find(
+        (c) => c.id === "review.timeoutSecs",
+      );
+    expect(withTimeout(540)).toMatchObject({ kind: "number", value: 540, min: 60, max: 540 });
+    expect(withTimeout(300)).toMatchObject({ value: 300 });
+    expect(withTimeout(10)).toMatchObject({ value: 60 });
+    expect(withTimeout(9999)).toMatchObject({ value: 540 });
     expect(ids(model({ section: "review" }))).toEqual(["review.float", "review.agent", "review.timeoutSecs"]);
   });
 
@@ -110,11 +115,16 @@ describe("migrateLocalSettings", () => {
       storage({
         "folio-theme": "slate",
         "folio-watch": "off",
-        "folio-telemetry": "true",
+        "folio-telemetry": "on",
         "folio-lens-settings": JSON.stringify({ baseUrl: "http://localhost:11434/v1", model: "llama3.2:3b" }),
       }),
     );
     expect(out).toEqual({ theme: "slate", liveReload: false, telemetry: true, lens: { baseUrl: "http://localhost:11434/v1", model: "llama3.2:3b" } });
+  });
+
+  it("carries a declined telemetry choice across", () => {
+    expect(migrateLocalSettings(storage({ "folio-telemetry": "off" }))).toEqual({ telemetry: false });
+    expect(migrateLocalSettings(storage({ "folio-telemetry": "garbage" }))).toBeNull();
   });
 
   it("ignores unknown themes and corrupt lens json", () => {

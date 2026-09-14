@@ -11,7 +11,7 @@ export const GA_MEASUREMENT_ID: string = "G-RB09V42B9N";
 const STORAGE_KEY = "folio-telemetry";
 
 /** Tri-state consent: null = never asked, true/false = user's choice. */
-export function telemetryConsent(storage: Storage = localStorage): boolean | null {
+export function telemetryConsent(storage: Pick<Storage, "getItem"> = localStorage): boolean | null {
   const raw = storage.getItem(STORAGE_KEY);
   if (raw === "on") return true;
   if (raw === "off") return false;
