@@ -1147,6 +1147,7 @@ dependencies = [
 name = "folio-core"
 version = "0.13.0"
 dependencies = [
+ "dirs",
  "serde",
  "serde_json",
 ]
