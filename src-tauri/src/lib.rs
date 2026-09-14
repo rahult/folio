@@ -233,31 +233,8 @@ fn set_window_floating(window: WebviewWindow<Wry>, floating: bool) -> Result<(),
     // A running tiling WM owns window frames and snaps programmatic resizes
     // back — ask it to float/retile us first so the size below sticks.
     aerospace_layout(floating);
-    if floating {
-        // A zoomed window ignores programmatic resizes on macOS — leave the
-        // zoomed state first (best effort: macOS window *tiling* owns the
-        // frame outright and even this is ignored; the user can un-tile by
-        // dragging the window once).
-        if window.is_maximized().unwrap_or(false) {
-            let _ = window.unmaximize();
-        }
-        // Position before sizing: position-then-size survives window states
-        // where a bare set_size is ignored.
-        if let Ok(Some(monitor)) = window.current_monitor() {
-            let scale = monitor.scale_factor();
-            let margin = (20.0 * scale) as i32;
-            let width = (420.0 * scale) as i32;
-            // Monitor positions are global, so the origin has to be added
-            // back in — without it a window on a second display is parked
-            // relative to the primary one, which can put it off-screen.
-            let x = monitor.position().x + monitor.size().width as i32 - width - margin;
-            let y = monitor.position().y + (44.0 * scale) as i32;
-            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
-        }
-        window
-            .set_size(tauri::LogicalSize::new(420.0, 640.0))
-            .map_err(|e| e.to_string())?;
-    }
+    // The window keeps whatever size and place it had: a review floats on
+    // top of the person's other windows, it does not move or shrink.
     Ok(())
 }
 

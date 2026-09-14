@@ -81,6 +81,19 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> CliOptions {
     parse_with(args, GateOptions::default())
 }
 
+/// A path as the app must see it: absolute, so a request handed to an
+/// already-running app (whose working directory is `/` when Finder started
+/// it) still names the same file, and the gate request matches the path the
+/// review bar polls with. Canonical when the file exists; otherwise joined
+/// onto the current directory.
+pub fn absolute(path: &std::path::Path) -> std::path::PathBuf {
+    path.canonicalize().unwrap_or_else(|_| {
+        std::env::current_dir()
+            .map(|d| d.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    })
+}
+
 /// `parse` with the gate's defaults taken from Settings (the command line
 /// does this); flags still override them.
 pub fn parse_with(args: impl IntoIterator<Item = String>, defaults: GateOptions) -> CliOptions {
@@ -127,7 +140,7 @@ pub fn parse_with(args: impl IntoIterator<Item = String>, defaults: GateOptions)
                         .map(|ext| MARKDOWN_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
                         .unwrap_or(false);
                 if is_markdown {
-                    paths.push(arg);
+                    paths.push(absolute(path).to_string_lossy().into_owned());
                 }
             }
         }
@@ -169,7 +182,7 @@ mod tests {
             .into_iter(),
         );
 
-        assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
+        assert_eq!(cli.paths, vec![md.canonicalize().unwrap().to_string_lossy().into_owned()]);
         assert!(!cli.float);
 
         fs::remove_file(&md).ok();
@@ -183,7 +196,7 @@ mod tests {
 
         let cli = parse(["folio".to_string(), upper.to_string_lossy().into_owned()].into_iter());
 
-        assert_eq!(cli.paths, vec![upper.to_string_lossy().into_owned()]);
+        assert_eq!(cli.paths, vec![upper.canonicalize().unwrap().to_string_lossy().into_owned()]);
 
         fs::remove_file(&upper).ok();
     }
@@ -204,7 +217,7 @@ mod tests {
             );
             assert!(cli.float, "{flag} should request float mode");
             assert!(cli.float_explicit, "{flag} is the user asking for it outright");
-            assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
+            assert_eq!(cli.paths, vec![md.canonicalize().unwrap().to_string_lossy().into_owned()]);
         }
 
         fs::remove_file(&md).ok();
@@ -228,7 +241,7 @@ mod tests {
         // `review` asks for float as a default, not outright: the Settings
         // switch may still turn the floating window off.
         assert!(!cli.float_explicit);
-        assert_eq!(cli.paths, vec![md.to_string_lossy().into_owned()]);
+        assert_eq!(cli.paths, vec![md.canonicalize().unwrap().to_string_lossy().into_owned()]);
 
         fs::remove_file(&md).ok();
     }
@@ -367,5 +380,19 @@ mod tests {
         let cli = parse_with(argv("folio review --wait --agent claude --timeout 30"), defaults);
         assert_eq!(cli.gate.agent, "claude");
         assert_eq!(cli.gate.timeout_secs, 30);
+    }
+
+    #[test]
+    fn markdown_paths_become_absolute() {
+        let file = temp_file("relative", "md");
+        std::fs::write(&file, "# x\n").unwrap();
+        let canonical = file.canonicalize().unwrap();
+        let cli = parse(argv(&format!("folio review {}", file.display())));
+        assert_eq!(cli.paths, vec![canonical.to_string_lossy().into_owned()]);
+        assert!(std::path::Path::new(&cli.paths[0]).is_absolute());
+        let rel = absolute(std::path::Path::new("docs/nonexistent.md"));
+        assert!(rel.is_absolute());
+        assert!(rel.ends_with("docs/nonexistent.md"));
+        let _ = std::fs::remove_file(&file);
     }
 }

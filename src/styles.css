@@ -1209,7 +1209,11 @@ body.review-mode #editor .milkdown .ProseMirror {
 
 #panel-tabs {
   display: flex;
-  gap: 14px;
+  /* Five tabs at this width do not fit on one line in a narrow window;
+     they flow onto a second line rather than being cut off. */
+  flex-wrap: wrap;
+  gap: 0 14px;
+  min-width: 0;
 }
 
 #panel-tabs button {
@@ -1222,8 +1226,9 @@ body.review-mode #editor .milkdown .ProseMirror {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: 6px 0 8px;
+  padding: 6px 0 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 #panel-tabs button:hover {
