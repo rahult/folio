@@ -1118,7 +1118,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "folio-app"
-version = "0.14.1"
+version = "0.14.2"
 dependencies = [
  "core-foundation 0.10.1",
  "folio-core",
@@ -1138,14 +1138,14 @@ dependencies = [
 
 [[package]]
 name = "folio-cli"
-version = "0.14.1"
+version = "0.14.2"
 dependencies = [
  "folio-core",
 ]
 
 [[package]]
 name = "folio-core"
-version = "0.14.1"
+version = "0.14.2"
 dependencies = [
  "dirs",
  "serde",
