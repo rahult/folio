@@ -33,6 +33,9 @@
    form controls follow. */
 :root {
   color-scheme: light;
+  /* Native checkboxes, radios, and sliders take the theme's accent
+     instead of the system blue or grey. */
+  accent-color: var(--accent);
 }
 
 /* Manuscript — deeper cream and brown ink for long reading; the page
@@ -276,7 +279,7 @@ body.is-dirty #doc-title::before {
 
 .toolbar-actions button {
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   padding: 5px 10px;
   border: none;
@@ -360,7 +363,7 @@ body.is-dirty #doc-title::before {
   padding: 5px 8px 6px 12px;
   border: 1px solid transparent;
   border-bottom: none;
-  border-radius: 7px 7px 0 0;
+  border-radius: 6px 6px 0 0;
   font-family: var(--font-ui);
   font-size: 12px;
   color: var(--ink-faint);
@@ -461,33 +464,33 @@ body.source-mode #main-row {
 }
 
 /* editorial placeholder */
-.milkdown .crepe-placeholder::before {
+#editor .milkdown .crepe-placeholder::before {
   font-style: italic;
   color: var(--ink-faint);
 }
 
 /* headings — fluid editorial scale (zoom multiplies the rem terms) */
-.milkdown .ProseMirror h1 {
+#editor .milkdown .ProseMirror h1 {
   font-size: clamp(
-    calc(1.9rem * var(--zoom)),
-    calc((1.6rem + 1vw) * var(--zoom)),
-    calc(2.4rem * var(--zoom))
+    calc(2.1rem * var(--zoom)),
+    calc((1.8rem + 1vw) * var(--zoom)),
+    calc(2.6rem * var(--zoom))
   );
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.12;
   letter-spacing: -0.02em;
-  margin: 2.6em 0 0.55em;
+  margin: 2.2em 0 0.6em;
 }
 
-.milkdown .ProseMirror h2 {
-  font-size: calc(1.55rem * var(--zoom));
-  font-weight: 600;
+#editor .milkdown .ProseMirror h2 {
+  font-size: calc(1.6rem * var(--zoom));
+  font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.012em;
   margin: 2.2em 0 0.5em;
 }
 
-.milkdown .ProseMirror h3 {
+#editor .milkdown .ProseMirror h3 {
   font-size: calc(1.25rem * var(--zoom));
   font-weight: 500;
   font-style: italic;
@@ -495,18 +498,28 @@ body.source-mode #main-row {
   margin: 1.9em 0 0.45em;
 }
 
-.milkdown .ProseMirror h1:first-child,
-.milkdown .ProseMirror h2:first-child,
-.milkdown .ProseMirror h3:first-child {
+#editor .milkdown .ProseMirror h1,
+#editor .milkdown .ProseMirror h2,
+#editor .milkdown .ProseMirror h3 {
+  padding: 0;
+  color: var(--ink);
+}
+
+#editor .milkdown .ProseMirror h1:first-child,
+#editor .milkdown .ProseMirror h2:first-child,
+#editor .milkdown .ProseMirror h3:first-child {
   margin-top: 0;
 }
 
-.milkdown .ProseMirror p {
+#editor .milkdown .ProseMirror p {
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
   margin: 0 0 1.1em;
 }
 
 /* links — the single accent, used with restraint */
-.milkdown .ProseMirror a {
+#editor .milkdown .ProseMirror a {
   color: var(--accent);
   text-decoration: underline;
   text-decoration-color: color-mix(in oklch, var(--accent) 40%, transparent);
@@ -515,12 +528,12 @@ body.source-mode #main-row {
   transition: text-decoration-color 140ms ease-out;
 }
 
-.milkdown .ProseMirror a:hover {
+#editor .milkdown .ProseMirror a:hover {
   text-decoration-color: var(--accent);
 }
 
 /* blockquote */
-.milkdown .ProseMirror blockquote {
+#editor .milkdown .ProseMirror blockquote {
   margin: 1.6em 0;
   padding: 0.1em 0 0.1em 1.25em;
   border-left: 2px solid var(--accent);
@@ -542,7 +555,7 @@ body.source-mode #main-row {
 }
 
 /* horizontal rule — a short editorial rule, centered */
-.milkdown .ProseMirror hr {
+#editor .milkdown .ProseMirror hr {
   border: none;
   width: 4rem;
   border-top: 1px solid var(--ink-faint);
@@ -550,37 +563,85 @@ body.source-mode #main-row {
 }
 
 /* lists */
-.milkdown .ProseMirror ul,
-.milkdown .ProseMirror ol {
+#editor .milkdown .ProseMirror ul,
+#editor .milkdown .ProseMirror ol {
   margin: 0 0 1.1em;
   padding-left: 1.4em;
 }
 
-.milkdown .ProseMirror li::marker {
+#editor .milkdown .ProseMirror li::marker {
   color: var(--ink-faint);
 }
 
+/* Crepe draws list labels in its outline token (our hairline), which made
+   numbers nearly invisible, and sizes each label box at 32px, which spaced
+   short items far apart. Labels take the faint ink and the prose line. */
+#editor .milkdown .milkdown-list-item-block li {
+  gap: 0.5em;
+  margin: 0 0 0.35em;
+}
+
+#editor .milkdown .milkdown-list-item-block li .label-wrapper,
+#editor .milkdown .milkdown-list-item-block li .label-wrapper .label {
+  height: 1.7em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+#editor .milkdown .milkdown-list-item-block li .label-wrapper svg {
+  fill: var(--ink-faint);
+}
+
+#editor .milkdown .milkdown-list-item-block li p {
+  margin: 0;
+}
+
 /* tables — chrome in quiet sans, editorial header */
-.milkdown .ProseMirror table {
+#editor .milkdown .ProseMirror table {
   font-family: var(--font-ui);
   font-size: 0.78em;
   margin: 1.6em 0;
 }
 
-.milkdown .ProseMirror th {
-  font-size: 0.72rem;
+#editor .milkdown .ProseMirror th {
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-soft);
+  text-align: left;
+}
+
+#editor .milkdown .ProseMirror th,
+#editor .milkdown .ProseMirror td {
+  padding: 0.5em 0.8em;
+  border-color: var(--hairline);
+}
+
+#editor .milkdown .ProseMirror th p,
+#editor .milkdown .ProseMirror td p {
+  margin: 0;
 }
 
 /* code blocks — sunken paper, quiet gutter */
 #editor .milkdown .milkdown-code-block {
   background: var(--paper-sunken);
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 6px;
   margin: 1.6em 0;
+  padding: 10px 14px;
+}
+
+#editor .milkdown .milkdown-code-block .tools {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  right: 10px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+
+#editor .milkdown .milkdown-code-block:hover .tools,
+#editor .milkdown .milkdown-code-block:focus-within .tools {
+  opacity: 1;
 }
 
 #editor .milkdown .milkdown-code-block .cm-editor,
@@ -591,7 +652,8 @@ body.source-mode #main-row {
 
 #editor .milkdown .milkdown-code-block .cm-gutters {
   color: var(--ink-faint);
-  border-right: 1px solid var(--hairline);
+  border-right: 0;
+  opacity: 0.6;
 }
 
 #editor .milkdown .milkdown-code-block .cm-content {
@@ -608,13 +670,9 @@ body.source-mode #main-row {
 
 /* the embedded CodeMirror runs in dark mode; re-ground its active-line
    gutter and selection to the paper palette */
-#editor .milkdown .milkdown-code-block .cm-activeLineGutter {
-  background: var(--hairline);
-  color: var(--ink-soft);
-}
-
+#editor .milkdown .milkdown-code-block .cm-activeLineGutter,
 #editor .milkdown .milkdown-code-block .cm-activeLine {
-  background: color-mix(in oklch, var(--hairline) 45%, transparent);
+  background: transparent;
 }
 
 /* lines wrap (pre-wrap), so the horizontal scroller is pure noise */
@@ -628,18 +686,18 @@ body.source-mode #main-row {
   --default-cell-min-width: 3em;
 }
 
-.milkdown .ProseMirror .tableWrapper {
+#editor .milkdown .ProseMirror .tableWrapper {
   overflow-x: auto;
   max-width: 100%;
 }
 
-.milkdown .ProseMirror table {
+#editor .milkdown .ProseMirror table {
   width: 100%;
 }
 
 /* table column resizing — the stock handle is a bright blue sliver;
    re-tone it to the accent so it reads as Folio chrome */
-.milkdown .ProseMirror .column-resize-handle {
+#editor .milkdown .ProseMirror .column-resize-handle {
   background-color: var(--accent);
 }
 
@@ -680,9 +738,7 @@ body.source-mode #main-row {
   flex: 0 0 auto;
   color: var(--accent);
   font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* display:inline-flex above would defeat the hidden attribute */
@@ -771,7 +827,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   flex-wrap: wrap;
   align-items: center;
   color: var(--ink-faint);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 #review-bar-hint[hidden] {
@@ -790,7 +846,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   background: transparent;
   color: var(--ink-soft);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -803,7 +859,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 
 #review-bar-hint .review-key kbd {
   font-family: var(--font-ui);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   padding: 0 4px;
   border-radius: 4px;
@@ -821,7 +877,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 
 #review-bar-hint .review-note {
   color: var(--ink-faint);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 /* review mode with nothing waiting: the legend alone, on plain paper */
@@ -844,7 +900,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   font-size: 12px;
   padding: 4px 12px;
   border: 1px solid var(--hairline);
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--paper-raised);
   color: var(--ink-soft);
   cursor: pointer;
@@ -876,12 +932,12 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 /* rewrite diff view — quiet marks for agent-review reloads: a soft green
    wash for additions, struck-through ghosts for removals. Clears on the
    next edit. */
-.milkdown .ProseMirror .diff-add {
+#editor .milkdown .ProseMirror .diff-add {
   background: oklch(0.72 0.1 155 / 0.22);
   border-radius: 2px;
 }
 
-.milkdown .ProseMirror .diff-del {
+#editor .milkdown .ProseMirror .diff-del {
   color: var(--ink-faint);
   text-decoration: line-through;
   text-decoration-color: oklch(0.6 0.08 30 / 0.6);
@@ -896,7 +952,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 
 ::-webkit-scrollbar-thumb {
   background: var(--hairline);
-  border-radius: 5px;
+  border-radius: 4px;
   border: 2px solid var(--paper);
 }
 
@@ -966,7 +1022,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   width: min(26rem, calc(100vw - 3rem));
   background: var(--paper-raised);
   border: 1px solid var(--hairline);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: var(--crepe-shadow-2);
   padding: 1.75rem;
   animation: dialog-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -995,24 +1051,24 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 
 /* annotation marks in the document: dotted accent underline for comments,
    strikethrough for deletions, accent ghost for suggested replacements */
-.milkdown .ProseMirror .annot-comment,
-.milkdown .ProseMirror .annot-delete,
-.milkdown .ProseMirror .annot-replace {
+#editor .milkdown .ProseMirror .annot-comment,
+#editor .milkdown .ProseMirror .annot-delete,
+#editor .milkdown .ProseMirror .annot-replace {
   cursor: pointer;
 }
-.milkdown .ProseMirror .annot-comment {
+#editor .milkdown .ProseMirror .annot-comment {
   border-bottom: 2px dotted var(--accent);
 }
 
 /* looks good — a quiet green rule, so it reads as "keep", not "fix" */
-.milkdown .ProseMirror .annot-approve {
+#editor .milkdown .ProseMirror .annot-approve {
   border-bottom: 2px solid oklch(0.72 0.1 155 / 0.7);
   cursor: pointer;
 }
 
 /* ——— wikilinks ——— */
 
-.milkdown .ProseMirror .wikilink {
+#editor .milkdown .ProseMirror .wikilink {
   color: var(--accent);
   text-decoration: underline;
   text-decoration-color: color-mix(in oklch, var(--accent) 40%, transparent);
@@ -1029,13 +1085,13 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   max-width: 28rem;
   background: var(--paper-raised);
   border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border-radius: 6px;
   box-shadow: var(--crepe-shadow-2);
   padding: 4px 0;
   list-style: none;
   margin: 0;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 #wiki-complete[hidden] {
@@ -1053,7 +1109,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 
 #wiki-complete li .qo-dir {
   color: var(--ink-faint);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 #wiki-complete li[aria-selected="true"] {
@@ -1157,12 +1213,12 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   --tint-revision: oklch(0.72 0.12 150);
 }
 
-.milkdown .ProseMirror .prov-external {
+#editor .milkdown .ProseMirror .prov-external {
   background: color-mix(in oklch, var(--tint-agent) 18%, transparent);
   border-radius: 2px;
 }
 
-.milkdown .ProseMirror .prov-revision {
+#editor .milkdown .ProseMirror .prov-revision {
   background: color-mix(in oklch, var(--tint-revision) 22%, transparent);
   border-radius: 2px;
 }
@@ -1206,7 +1262,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 .review-entry {
   margin: 0.5rem 0 1.1rem;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .review-entry span {
@@ -1220,7 +1276,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   width: 100%;
   box-sizing: border-box;
   font-family: var(--font-ui);
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
   padding: 8px 10px;
   border: 1px solid var(--hairline);
@@ -1235,13 +1291,13 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   border-color: var(--accent);
 }
 
-.milkdown .ProseMirror .annot-delete {
+#editor .milkdown .ProseMirror .annot-delete {
   text-decoration: line-through;
   text-decoration-color: var(--accent);
   opacity: 0.65;
 }
 
-.milkdown .ProseMirror .annot-replace {
+#editor .milkdown .ProseMirror .annot-replace {
   color: var(--accent);
   border-bottom: 1px solid var(--accent);
   margin-left: 0.35em;
@@ -1336,7 +1392,7 @@ body.panel-resizing {
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--ink-faint);
   cursor: pointer;
@@ -1373,7 +1429,7 @@ body.panel-resizing {
 
 .annot-empty {
   padding: 8px 16px;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.55;
   color: var(--ink-faint);
 }
@@ -1383,7 +1439,7 @@ body.panel-resizing {
   flex: 0 0 auto;
   margin: 8px 16px 18px;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.5;
   padding: 6px 0 8px;
   border: none;
@@ -1412,7 +1468,7 @@ body.panel-resizing {
 #reading-stats {
   flex: 0 0 auto;
   margin: 0 16px 10px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1467,13 +1523,13 @@ body.panel-resizing {
 }
 
 .history-when {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
 }
 
 .history-label {
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .history-summary {
@@ -1494,7 +1550,7 @@ body.panel-resizing {
   gap: 6px;
   align-items: baseline;
   padding: 2px 0;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-soft);
 }
 
@@ -1508,10 +1564,14 @@ body.panel-resizing {
 }
 
 .history-kind {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--ink-faint);
+}
+
+.history-kind::first-letter {
+  text-transform: uppercase;
 }
 
 .history-quote {
@@ -1526,13 +1586,13 @@ body.panel-resizing {
 #decide-root {
   padding: 0 16px 16px;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink);
 }
 
 .decide-h {
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink-soft);
   margin: 20px 0 6px;
@@ -1544,7 +1604,7 @@ body.panel-resizing {
 
 .decide-note {
   margin: 0 0 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--ink-faint);
 }
@@ -1575,7 +1635,7 @@ body.panel-resizing {
   width: 100%;
   box-sizing: border-box;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.45;
   padding: 6px 8px;
   border: 1px solid var(--hairline);
@@ -1701,7 +1761,7 @@ body.panel-resizing {
 #analysis-root {
   padding: 4px 16px 16px;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink);
 }
 
@@ -1715,7 +1775,7 @@ body.panel-resizing {
 
 .lens-chip {
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: 12px;
   padding: 3px 9px;
   border: 1px solid var(--hairline);
   border-radius: 999px;
@@ -1786,13 +1846,13 @@ body.panel-resizing {
 }
 
 .lens-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink-faint);
 }
 
 .lens-body {
   font-family: var(--font-prose);
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--ink);
 }
@@ -1802,12 +1862,10 @@ body.panel-resizing {
 .lens-body h3,
 .lens-body h4 {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-  margin: 10px 0 4px;
+  color: var(--ink);
+  margin: 12px 0 4px;
 }
 
 .lens-body p {
@@ -1829,7 +1887,7 @@ body.panel-resizing {
   font-size: 0.85em;
   background: var(--paper-sunken);
   padding: 0.05em 0.3em;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .lens-body blockquote {
@@ -1854,7 +1912,7 @@ body.panel-resizing {
   border-top: 1px solid var(--hairline);
   background: none;
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-faint);
   cursor: pointer;
   overflow: hidden;
@@ -1883,7 +1941,7 @@ body.panel-resizing {
   align-items: baseline;
   gap: 8px;
   padding: 4px 16px 4px calc(16px + (var(--level, 1) - 1) * 12px);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.4;
   color: var(--ink-soft);
   cursor: pointer;
@@ -1913,7 +1971,7 @@ body.panel-resizing {
 
 #outline-list .outline-min {
   flex: 0 0 auto;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1940,10 +1998,8 @@ body.panel-resizing {
 
 .annot-item-kind {
   display: inline-block;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 3px;
 }
@@ -1984,7 +2040,7 @@ body.panel-resizing {
   color: var(--ink-faint);
   cursor: pointer;
   padding: 3px;
-  border-radius: 5px;
+  border-radius: 4px;
   display: inline-flex;
   font-size: 12px;
   line-height: 1;
@@ -2008,7 +2064,7 @@ body.panel-resizing {
 }
 
 .dialog-copy {
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--ink-soft);
   margin: 0 0 1.1rem;
@@ -2028,11 +2084,11 @@ body.panel-resizing {
 
 .dialog-actions button {
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   padding: 6px 14px;
   border: 1px solid var(--hairline);
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--ink-soft);
   cursor: pointer;
@@ -2088,31 +2144,157 @@ body.focus-mode:not(.source-mode) #editor .milkdown .ProseMirror > *:not([data-f
   }
 }
 
-/* ——— settings page ——— */
+/* ——— settings page ———
+   A two-column form: label and note on the left, the control on the right,
+   one hairline between rows. Controls share one height (28px) and one
+   radius (6px) with the rest of the chrome. */
 body.settings-open #main-row,
 body.settings-open #review-bar { display: none; }
-/* Body is a flex column: the page takes the room the editor row gave up,
-   rather than a viewport-height block that would slide under the toolbar. */
-#settings-root { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--paper); color: var(--ink); font-family: var(--font-ui); }
-/* The id selector above outranks the UA's `[hidden] { display: none }`. */
+
+#settings-root {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
 #settings-root[hidden] { display: none; }
-.settings-nav { width: 13rem; padding: 2.5rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.25rem; border-right: 1px solid var(--hairline); }
-.settings-nav-item { text-align: left; padding: 0.45rem 0.7rem; border: 0; background: none; color: var(--ink-soft); border-radius: 6px; font: inherit; cursor: pointer; }
-.settings-nav-item.current { background: var(--paper-sunken); color: var(--ink); }
-.settings-done { margin-top: auto; }
-.settings-main { flex: 1; overflow-y: auto; padding: 2.5rem 3rem 4rem; max-width: 44rem; }
-.settings-title { font-family: var(--font-prose); font-weight: 500; font-size: 1.6rem; margin: 0 0 1.5rem; }
-.settings-row { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--hairline); align-items: start; }
-.settings-label { font-weight: 500; }
-.settings-note { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--ink-faint); }
-.settings-row-body { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; }
-.settings-row-body input[type="text"], .settings-row-body input[type="number"] { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--hairline); border-radius: 6px; background: var(--paper); color: var(--ink); width: 100%; }
-.settings-row-body input[type="number"] { width: 6rem; }
-.settings-radio { display: inline-flex; gap: 0.3rem; align-items: center; margin-right: 0.6rem; }
-.settings-path, .settings-command { font-family: var(--font-mono); font-size: 0.8rem; background: var(--paper-sunken); padding: 0.3rem 0.5rem; border-radius: 4px; overflow-wrap: anywhere; }
-.settings-status { color: var(--ink-soft); }
-.settings-actions { display: flex; gap: 0.4rem; }
-.settings-btn { font: inherit; font-size: 0.85rem; padding: 0.3rem 0.7rem; border: 1px solid var(--hairline); border-radius: 6px; background: var(--paper); color: var(--ink); cursor: pointer; }
-.settings-btn.danger { color: oklch(0.5 0.18 25); }
-.settings-error { color: oklch(0.5 0.18 25); margin-top: 1rem; }
-.settings-info { font-size: 1rem; }
+
+.settings-nav {
+  width: 13.5rem;
+  flex: 0 0 auto;
+  padding: 40px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-right: 1px solid var(--hairline);
+}
+.settings-nav-item {
+  text-align: left;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+.settings-nav-item:hover { background: var(--paper-sunken); color: var(--ink); }
+.settings-nav-item.current { background: var(--paper-sunken); color: var(--ink); font-weight: 500; }
+.settings-done { margin-top: auto; width: 100%; }
+
+.settings-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 48px 64px;
+}
+.settings-main > * { max-width: 44rem; }
+.settings-title {
+  font-family: var(--font-prose);
+  font-weight: 500;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  margin: 0 0 16px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(11rem, 15rem) 1fr;
+  gap: 8px 32px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--hairline);
+  align-items: start;
+}
+.settings-row-head { min-width: 0; padding-top: 5px; }
+.settings-label { display: block; font-weight: 500; color: var(--ink); line-height: 1.35; }
+.settings-note { margin: 3px 0 0; font-size: 12px; line-height: 1.45; color: var(--ink-faint); }
+.settings-row-body {
+  min-width: 0;
+  min-height: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.settings-row--info { display: block; }
+.settings-info { margin: 0; color: var(--ink-soft); line-height: 1.5; }
+
+.settings-row-body input[type="text"],
+.settings-row-body input[type="password"],
+.settings-row-body input[type="number"] {
+  font: inherit;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  width: 100%;
+  transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+.settings-row-body input[type="number"] { width: 6rem; font-variant-numeric: tabular-nums; }
+.settings-row-body input::placeholder { color: var(--ink-faint); }
+.settings-row-body input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.settings-row-body input[type="checkbox"],
+.settings-row-body input[type="radio"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+.settings-row--toggle .settings-row-body { padding-top: 5px; }
+
+.settings-radio {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-right: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.settings-path,
+.settings-command {
+  display: block;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  background: var(--paper-sunken);
+  padding: 5px 9px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+.settings-status { color: var(--ink-soft); font-size: 12px; margin-right: 4px; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.settings-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out;
+}
+.settings-btn:hover { background: var(--paper-sunken); }
+.settings-btn:focus-visible,
+.settings-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-btn.danger { color: oklch(0.52 0.16 28); }
+.settings-error { color: oklch(0.52 0.16 28); margin-top: 16px; }

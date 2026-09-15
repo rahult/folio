@@ -207,8 +207,6 @@ async function initSettings(): Promise<void> {
       localStorage.setItem(MIGRATED_KEY, "1");
     }
   }
-  // The lens panel opens its own form when there is no endpoint yet.
-  lensSettingsOpen = !settings.lens.baseUrl;
   // Unconditionally, not via applySettings: the pre-paint script in
   // index.html reads the old localStorage copy, and the native window theme
   // has never been set at this point.
@@ -297,8 +295,6 @@ async function loadSettingsExtra(): Promise<void> {
     invoke<SettingsModel["cli"]>("cli_status").catch(() => settingsExtra.cli),
   ]);
   settingsExtra = { homePath, hasKey, version, lensesFolder, prompts, skills, cli };
-  // The Lenses panel shows the same fact; keep the two from drifting.
-  lensHasKey = hasKey;
 }
 
 /** Where the caret was before a repaint: the row, which control in it, and
@@ -479,7 +475,6 @@ async function onHomeChanged(): Promise<void> {
   journalPath = "";
   await resolveJournalPath();
   await loadCustomLenses();
-  lensesFolderPath = await invoke<string>("lenses_folder").catch(() => lensesFolderPath);
   applySettings();
 }
 
@@ -1227,14 +1222,11 @@ interface LensSettings {
 
 /** A derived copy of `settings.lens`, refreshed by `applySettings()`. */
 let lensSettings: LensSettings = { ...settings.lens };
-let lensHasKey = false;
-let lensSettingsOpen = !lensSettings.baseUrl;
 let selectedLens = localStorage.getItem(LENS_SELECTED_KEY) ?? BUILTIN_LENSES[0].id;
 let customLenses: Lens[] = [];
 let lensRunning = false;
 let lensStatus = "";
 let analysisFileText: string | null = null;
-let lensesFolderPath = "~/Documents/Folio/lenses";
 
 function analysisFilePath(docPath: string): string {
   return `${docPath}.analysis.md`;
@@ -1299,8 +1291,7 @@ async function refreshAnalysis(): Promise<void> {
       running: lensRunning,
       status: lensStatus,
       results,
-      settings: { ...lensSettings, hasKey: lensHasKey, open: lensSettingsOpen },
-      lensesFolder: lensesFolderPath,
+      settings: { baseUrl: lensSettings.baseUrl, model: lensSettings.model },
     },
     {
       onSelectLens: (id) => {
@@ -1309,37 +1300,9 @@ async function refreshAnalysis(): Promise<void> {
         void refreshAnalysis();
       },
       onRun: () => void runSelectedLens(),
-      onToggleSettings: () => {
-        lensSettingsOpen = !lensSettingsOpen;
-        void refreshAnalysis();
-      },
-      onSaveSettings: (entered) => {
-        void (async () => {
-          await updateSettings({ lens: { baseUrl: entered.baseUrl, model: entered.model } }).catch((err) => {
-            lensStatus = `Could not save: ${String(err)}`;
-          });
-          if (entered.key !== null) {
-            try {
-              await invoke("set_llm_key", { key: entered.key });
-            } catch (err) {
-              lensStatus = `Could not store the key: ${String(err)}`;
-            }
-            lensHasKey = entered.key !== "" && (await invoke<boolean>("has_llm_key").catch(() => false));
-          }
-          lensSettingsOpen = false;
-          if (!lensStatus) lensStatus = "Saved.";
-          void refreshAnalysis();
-        })();
-      },
-      onOpenLensesFolder: () => {
-        void (async () => {
-          try {
-            const folder = await invoke<string>("lenses_folder");
-            await openPath(folder);
-          } catch {
-            // nothing to open
-          }
-        })();
+      onOpenModelSettings: () => {
+        settingsSection = "lenses";
+        void openSettings();
       },
       onAnnotate: ({ lens, scope }) => {
         // A lens finding becomes a comment on the passage it ran on (or the
@@ -1364,9 +1327,8 @@ async function runSelectedLens(): Promise<void> {
   const lens = allLenses().find((l) => l.id === selectedLens);
   if (!path || !lens || lensRunning) return;
   if (!lensSettings.baseUrl || !lensSettings.model) {
-    lensSettingsOpen = true;
-    lensStatus = "Set the endpoint and model first.";
-    void refreshAnalysis();
+    settingsSection = "lenses";
+    void openSettings();
     return;
   }
   const selection = lensSelection();
@@ -1482,7 +1444,7 @@ async function refreshDecide(): Promise<void> {
       due: dueEntries
         .filter((e) => e.docPath !== path)
         .map((e) => ({ docName: e.docName, docPath: e.docPath, revisit: e.revisit })),
-      journalPath: journalPath || "~/Documents/Folio/decisions.md",
+      journalPath: displayPath(journalPath) || "~/Documents/Folio/decisions.md",
     },
     {
       onRecall: (heading, value) => {
@@ -3263,8 +3225,6 @@ authorshipLegend.hidden = !authorshipOn;
 void refreshDueRevisits().then(() => void refreshDecide());
 void (async () => {
   await loadCustomLenses();
-  lensHasKey = await invoke<boolean>("has_llm_key").catch(() => false);
-  lensesFolderPath = await invoke<string>("lenses_folder").catch(() => lensesFolderPath);
   void refreshAnalysis();
 })();
 syncMenuState();

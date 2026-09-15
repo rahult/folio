@@ -252,7 +252,10 @@ function actions(list: Action[], on: SettingsHandlers): HTMLElement {
 }
 
 function control(c: Control, on: SettingsHandlers): HTMLElement {
-  const row = el("div", `settings-row settings-${c.kind}`);
+  // `settings-row--<kind>`, never `settings-<kind>`: the bare names belong to
+  // inner elements (`settings-path`, `settings-radio`), and a row that shared
+  // one inherited its styles.
+  const row = el("div", `settings-row settings-row--${c.kind}`);
   row.dataset.id = c.id;
   if (c.kind === "info") {
     row.append(el("p", "settings-info", c.text));

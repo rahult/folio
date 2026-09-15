@@ -564,16 +564,15 @@ export interface AnalysisModel {
   running: boolean;
   status: string;
   results: { lens: string; model: string; date: string; scope: string; html: string }[];
-  settings: { baseUrl: string; model: string; hasKey: boolean; open: boolean };
-  lensesFolder: string;
+  /** The endpoint and model a lens runs against; edited in Settings → Lenses. */
+  settings: { baseUrl: string; model: string };
 }
 
 export interface AnalysisHandlers {
   onSelectLens(id: string): void;
   onRun(): void;
-  onToggleSettings(): void;
-  onSaveSettings(settings: { baseUrl: string; model: string; key: string | null }): void;
-  onOpenLensesFolder(): void;
+  /** Open Settings at the Lenses section, where the model is configured. */
+  onOpenModelSettings(): void;
   onAnnotate(result: { lens: string; scope: string }): void;
 }
 
@@ -711,56 +710,13 @@ export function renderAnalysis(model: AnalysisModel, on: AnalysisHandlers): void
     });
   }
 
-  // Settings
-  const settingsHead = document.createElement("button");
-  settingsHead.type = "button";
-  settingsHead.className = "lens-settings-toggle";
-  settingsHead.textContent = model.settings.open
-    ? "Model settings ▾"
-    : `Model: ${model.settings.model || "not set"} · ${model.settings.baseUrl || "no endpoint"} ▸`;
-  settingsHead.addEventListener("click", () => on.onToggleSettings());
-  root.append(settingsHead);
-  if (model.settings.open) {
-    const base = document.createElement("input");
-    base.type = "text";
-    base.className = "decide-input";
-    base.placeholder = "http://localhost:11434/v1";
-    base.value = model.settings.baseUrl;
-    const mdl = document.createElement("input");
-    mdl.type = "text";
-    mdl.className = "decide-input";
-    mdl.placeholder = "llama3.2:3b";
-    mdl.value = model.settings.model;
-    const key = document.createElement("input");
-    key.type = "password";
-    key.className = "decide-input";
-    key.placeholder = model.settings.hasKey ? "key stored in the keychain — leave blank to keep" : "API key (blank for local servers)";
-    key.autocomplete = "off";
-    const save = document.createElement("button");
-    save.type = "button";
-    save.className = "decide-button primary";
-    save.textContent = "Save";
-    save.addEventListener("click", () =>
-      on.onSaveSettings({ baseUrl: base.value.trim(), model: mdl.value.trim(), key: key.value === "" ? null : key.value }),
-    );
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "decide-button";
-    clear.textContent = "Forget key";
-    clear.addEventListener("click", () => on.onSaveSettings({ baseUrl: base.value.trim(), model: mdl.value.trim(), key: "" }));
-    const folder = document.createElement("button");
-    folder.type = "button";
-    folder.className = "decide-link";
-    folder.textContent = `Your lenses: ${model.lensesFolder}`;
-    folder.addEventListener("click", () => on.onOpenLensesFolder());
-    root.append(
-      field("OpenAI-compatible endpoint", base),
-      field("Model", mdl),
-      field("Key", key),
-      note("The key is kept in the OS keychain and used only from Folio's own process; the page never sees it. Ollama and LM Studio need no key."),
-      save,
-      clear,
-      folder,
-    );
-  }
+  // The model this panel runs against, configured once in Settings.
+  const configured = model.settings.baseUrl && model.settings.model;
+  const modelLine = document.createElement("button");
+  modelLine.type = "button";
+  modelLine.className = "lens-settings-toggle";
+  modelLine.textContent = configured ? `Model: ${model.settings.model}` : "Set up a model in Settings";
+  modelLine.title = configured ? `${model.settings.baseUrl} · change in Settings` : "Settings → Lenses";
+  modelLine.addEventListener("click", () => on.onOpenModelSettings());
+  root.append(modelLine);
 }
