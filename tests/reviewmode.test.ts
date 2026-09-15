@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hintText, reviewKeyAction, verdictFor } from "../src/reviewmode";
+import { hintItems, hintText, reviewKeyAction, verdictFor } from "../src/reviewmode";
 
 const k = (
   key: string,
@@ -31,6 +31,18 @@ describe("reviewKeyAction", () => {
     expect(reviewKeyAction(k("?", { shiftKey: true }), closed)).toEqual({ kind: "hint" });
   });
 
+  it("scopes a replacement to the sentence or the section", () => {
+    expect(reviewKeyAction(k("s"), closed)).toEqual({ kind: "annotate", annotation: "replace", scope: "sentence" });
+    expect(reviewKeyAction(k("w"), closed)).toEqual({ kind: "annotate", annotation: "replace", scope: "section" });
+  });
+
+  it("picks a numbered option with a digit", () => {
+    expect(reviewKeyAction(k("1"), closed)).toEqual({ kind: "choose", n: 1 });
+    expect(reviewKeyAction(k("9"), closed)).toEqual({ kind: "choose", n: 9 });
+    expect(reviewKeyAction(k("0"), closed)).toBeNull();
+    expect(reviewKeyAction(k("1"), { entryOpen: true })).toBeNull();
+  });
+
   it("ignores modified keys so app shortcuts and shift-selection keep working", () => {
     expect(reviewKeyAction(k("s", { metaKey: true }), closed)).toBeNull();
     expect(reviewKeyAction(k("ArrowDown", { shiftKey: true }), closed)).toBeNull();
@@ -58,6 +70,23 @@ describe("verdictFor", () => {
   it("is changes with any comment, delete, or replace", () => {
     expect(verdictFor([{ kind: "approve" }, { kind: "comment" }])).toBe("changes");
     expect(verdictFor([{ kind: "delete" }])).toBe("changes");
+  });
+});
+
+describe("hintItems", () => {
+  it("gives every key an action the bar can run on click", () => {
+    const items = hintItems(true);
+    const byKey = Object.fromEntries(items.map((i) => [i.keys, i]));
+    expect(byKey["s"].action).toEqual({ kind: "annotate", annotation: "replace", scope: "sentence" });
+    expect(byKey["w"].action).toEqual({ kind: "annotate", annotation: "replace", scope: "section" });
+    expect(byKey["⏎"].action).toEqual({ kind: "send" });
+    expect(items.every((i) => i.keys === "" || i.action !== null)).toBe(true);
+  });
+
+  it("ends with a plain note instead of send when nothing is waiting", () => {
+    const last = hintItems(false).at(-1)!;
+    expect(last.action).toBeNull();
+    expect(last.label).toContain("no review waiting");
   });
 });
 

@@ -10,11 +10,14 @@ import { $prose } from "@milkdown/kit/utils";
 import type { Node } from "@milkdown/kit/prose/model";
 import { Plugin, PluginKey } from "@milkdown/kit/prose/state";
 import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view";
+import { sectionAround, sentenceAt } from "./textscope";
 
 export interface EntrySpec {
   kind: "comment" | "replace";
   /** Text the field starts with (a lens finding, for instance). */
   prefill?: string;
+  /** Overrides the field's label, e.g. "Replace the sentence". */
+  label?: string;
   onSubmit: (body: string) => void;
   onCancel: () => void;
 }
@@ -48,7 +51,7 @@ function entryWidget(spec: EntrySpec): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "review-entry";
   const label = document.createElement("span");
-  label.textContent = ENTRY_LABEL[spec.kind];
+  label.textContent = spec.label ?? ENTRY_LABEL[spec.kind];
   const field = document.createElement("textarea");
   field.rows = 2;
   field.placeholder = ENTRY_PLACEHOLDER[spec.kind];
@@ -89,8 +92,13 @@ export const reviewViewPlugin = $prose(
           return next.current > last ? { ...next, current: last } : next;
         },
       },
+      // The document stays editable so the caret shows and the mouse can
+      // select; while review is on, any change to the text is refused, so
+      // typing does nothing and the single-key vocabulary owns the keys.
+      filterTransaction(tr, state) {
+        return !(reviewKey.getState(state)?.on && tr.docChanged);
+      },
       props: {
-        editable: (state) => !reviewKey.getState(state)?.on,
         decorations(state) {
           const s = reviewKey.getState(state);
           if (!s || state.doc.childCount === 0) return DecorationSet.empty;
@@ -179,6 +187,63 @@ export function targetQuote(view: EditorView): string {
 
 /** Show the entry field beside the selected text when the selection sits
  *  in the current block, otherwise under the block. */
+export type QuoteScope = "selection" | "sentence" | "section";
+
+/** The passage an action applies to, by scope: the selection or block
+ *  (see `targetQuote`), the sentence under the caret inside the current
+ *  block, or the whole section the current block belongs to. */
+export function quoteFor(view: EditorView, scope: QuoteScope): string {
+  const { doc, selection } = view.state;
+  if (doc.childCount === 0) return "";
+  if (scope === "selection") return targetQuote(view);
+  const index = currentIndex(view);
+  if (scope === "sentence") {
+    const { from, to } = blockRange(doc, index);
+    const text = doc.textBetween(from, to, "\n", " ");
+    const caret = Math.min(Math.max(selection.from, from), to) - from;
+    const span = sentenceAt(text, caret);
+    return text.slice(span.start, span.end);
+  }
+  const levels: number[] = [];
+  doc.forEach((node) => levels.push(node.type.name === "heading" ? Number(node.attrs.level ?? 1) : 0));
+  const { start, end } = sectionAround(levels, index);
+  const parts: string[] = [];
+  for (let i = start; i < end; i++) {
+    const { from, to } = blockRange(doc, i);
+    parts.push(doc.textBetween(from, to, "\n", " "));
+  }
+  return parts.join("\n");
+}
+
+/** When the current block asks a question with a numbered or bulleted
+ *  list of options right after it (or is that list), the question and the
+ *  option texts; else null. */
+export function currentOptions(view: EditorView): { question: string; options: string[] } | null {
+  const { doc } = view.state;
+  if (doc.childCount === 0) return null;
+  const index = currentIndex(view);
+  const isList = (i: number) => {
+    const name = doc.child(i).type.name;
+    return name === "ordered_list" || name === "bullet_list";
+  };
+  const textOf = (i: number) => {
+    const { from, to } = blockRange(doc, i);
+    return doc.textBetween(from, to, "\n", " ");
+  };
+  const itemsOf = (i: number) => {
+    const items: string[] = [];
+    doc.child(i).forEach((item) => items.push(item.textContent.trim()));
+    return items.filter((t) => t.length > 0);
+  };
+  if (isList(index)) {
+    return { question: index > 0 ? textOf(index - 1) : "", options: itemsOf(index) };
+  }
+  if (index + 1 < doc.childCount && isList(index + 1)) {
+    return { question: textOf(index), options: itemsOf(index + 1) };
+  }
+  return null;
+}
+
 export function openEntry(view: EditorView, spec: EntrySpec): void {
   const { doc, selection } = view.state;
   let entryAt: number | null = null;

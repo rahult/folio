@@ -91,15 +91,18 @@ import {
 } from "./annotations";
 import { renderAnnotations } from "./annotview";
 import { barModel, type ReviewRequest, type Verdict } from "./reviewgate";
-import { hintText, reviewKeyAction, verdictFor, type ReviewAction } from "./reviewmode";
+import { hintItems, reviewKeyAction, verdictFor, type ReviewAction } from "./reviewmode";
 import {
   closeEntry,
+  currentOptions,
   isEntryOpen,
   moveCurrent,
   openEntry,
+  quoteFor,
   setCurrentByPos,
   setReviewMode,
   targetQuote,
+  type QuoteScope,
 } from "./reviewview";
 import { isDarkTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
 import {
@@ -1014,6 +1017,7 @@ editor.onSelectionUpdate(() => {
   if (focusMode) markFocusBlock();
   if (typewriterMode) scrollCaretToTypewriterLine();
   trackCurrentSection();
+  if (reviewMode && hintVisible) renderReviewBar();
   if (!wikiComplete.hidden && !wikiPrefix()) closeWikiComplete();
   if (isPanelOpen() && activeTab() === "analysis") scheduleAnalysisRefresh();
 });
@@ -2081,15 +2085,22 @@ function selectionOrBlockQuote(view: EditorView): string {
  *  mode's c / r: open the inline entry under the target passage. In
  *  review mode the target is the current block (or a selection inside it);
  *  while editing it is the selection or the block under the caret. */
-function openInlineEntry(kind: "comment" | "replace", prefill = ""): void {
+const SCOPE_LABEL: Record<QuoteScope, string | undefined> = {
+  selection: undefined,
+  sentence: "Replace the sentence",
+  section: "Replace the section",
+};
+
+function openInlineEntry(kind: "comment" | "replace", prefill = "", scope: QuoteScope = "selection"): void {
   if (sourceMode || !doc.filePath) return;
   editor.withView((view) => {
-    const quote = reviewMode ? targetQuote(view) : selectionOrBlockQuote(view);
-    if (!quote.trim()) return;
     if (!reviewMode) setCurrentByPos(view, view.state.selection.from);
+    const quote = reviewMode || scope !== "selection" ? quoteFor(view, scope) : selectionOrBlockQuote(view);
+    if (!quote.trim()) return;
     openEntry(view, {
       kind,
       prefill,
+      label: kind === "replace" ? SCOPE_LABEL[scope] : undefined,
       onSubmit: (body) => {
         closeEntry(view);
         addAnnotation(kind, quote, body);
@@ -2205,6 +2216,53 @@ async function refreshReviewRequest(fromPoll = false): Promise<void> {
   maybeAutoEnterReviewMode();
 }
 
+/** The legend as buttons: each key's action runs on click too, and when
+ *  the current block asks a question with options, one button per option. */
+function renderHintButtons(waiting: boolean): void {
+  reviewBarHint.replaceChildren();
+  let asked: { question: string; options: string[] } | null = null;
+  editor.withView((view) => {
+    asked = currentOptions(view);
+  });
+  if (asked) {
+    const { options } = asked as { question: string; options: string[] };
+    options.slice(0, 9).forEach((text, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "review-key option";
+      b.title = text;
+      b.append(keyTag(String(i + 1)), document.createTextNode(text.length > 28 ? `${text.slice(0, 27)}…` : text));
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => runReviewAction({ kind: "choose", n: i + 1 }));
+      reviewBarHint.append(b);
+    });
+  }
+  for (const item of hintItems(waiting)) {
+    if (!item.action) {
+      const note = document.createElement("span");
+      note.className = "review-note";
+      note.textContent = item.label;
+      reviewBarHint.append(note);
+      continue;
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "review-key";
+    b.append(keyTag(item.keys), document.createTextNode(item.label));
+    // Keep the caret in the document: the button never takes focus.
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    const action = item.action;
+    b.addEventListener("click", () => runReviewAction(action));
+    reviewBarHint.append(b);
+  }
+}
+
+function keyTag(keys: string): HTMLElement {
+  const k = document.createElement("kbd");
+  k.textContent = keys;
+  return k;
+}
+
 function renderReviewBar(): void {
   if (reviewBarError !== null) {
     // Sticky failure state: keep the bar up with both buttons live for a
@@ -2220,12 +2278,14 @@ function renderReviewBar(): void {
   reviewBar.hidden = !(model.visible || reviewMode);
   reviewBar.classList.toggle("legend-only", reviewMode && !model.visible);
   const nudging = reviewRequest?.state === "waiting" && premortemNudged === reviewRequest.requestedAt;
-  reviewBarHint.textContent = nudging
-    ? PREMORTEM_NUDGE
-    : reviewMode && hintVisible
-      ? hintText(reviewRequest?.state === "waiting")
-      : "";
-  reviewBarHint.hidden = reviewBarHint.textContent === "";
+  if (nudging) {
+    reviewBarHint.textContent = PREMORTEM_NUDGE;
+  } else if (reviewMode && hintVisible) {
+    renderHintButtons(reviewRequest?.state === "waiting");
+  } else {
+    reviewBarHint.textContent = "";
+  }
+  reviewBarHint.hidden = reviewBarHint.childNodes.length === 0;
   if (!model.visible) {
     reviewBar.classList.remove("sent");
     reviewBarLabel.textContent = "";
@@ -2610,7 +2670,15 @@ function runReviewAction(action: ReviewAction): void {
       editor.withView((view) => moveCurrent(view, action.delta));
       return;
     case "annotate":
-      openInlineEntry(action.annotation);
+      openInlineEntry(action.annotation, "", action.scope ?? "selection");
+      return;
+    case "choose":
+      editor.withView((view) => {
+        const asked = currentOptions(view);
+        const pick = asked?.options[action.n - 1];
+        if (!asked || !pick) return;
+        addAnnotation("comment", asked.question || pick, `Chosen: ${pick}`);
+      });
       return;
     case "mark":
       editor.withView((view) => {
