@@ -311,6 +311,21 @@ export async function clickAt(x: number, y: number): Promise<void> {
   await new Promise((r) => setTimeout(r, 300));
 }
 
+/** Where a click has to land inside an element's frame.
+ *
+ *  A plain button takes a click anywhere in its box. A radio or a check box
+ *  written as `<label><input type="radio"> Night</label>` does not: WebKit
+ *  reports one `AXRadioButton` spanning the whole label — glyph *and* text —
+ *  but a synthetic click on the text half is ignored, where a person's click
+ *  there would check it. Verified against the Settings theme row: a click at
+ *  the frame's centre (over the word) never changed the theme, one near the
+ *  leading edge always did. So aim at the control glyph, which is about as
+ *  wide as the row is tall; a bare input (w == h) is unaffected. */
+function clickPoint(e: AxElement): { x: number; y: number } {
+  const glyph = ["AXRadioButton", "AXCheckBox"].includes(e.role);
+  return { x: e.x + (glyph ? Math.min(e.w, e.h) / 2 : e.w / 2), y: e.y + e.h / 2 };
+}
+
 export async function clickButton(name: string, win = 1, near?: number): Promise<void> {
   const els = await axDump(win);
   const roles = ["AXButton", "AXRadioButton", "AXCheckBox"];
@@ -319,7 +334,8 @@ export async function clickButton(name: string, win = 1, near?: number): Promise
     const seen = els.filter((e) => roles.includes(e.role)).map((e) => e.name).join(", ");
     throw new Error(`no button named "${name}" in window ${win}; saw: ${seen}`);
   }
-  await clickAt(target.x + target.w / 2, target.y + target.h / 2);
+  const p = clickPoint(target);
+  await clickAt(p.x, p.y);
 }
 
 export async function windowRect(win = 1): Promise<{ x: number; y: number; w: number; h: number }> {
