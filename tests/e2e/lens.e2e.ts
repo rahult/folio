@@ -89,6 +89,8 @@ describe("lens", () => {
         everyMs: 1000,
         what: "a Premortem reading in sample.md.analysis.md",
       });
-      expect(readHome(home, "docs/sample.md.analysis.md")).toContain(`— ${model!}`);
+      const analysis = readHome(home, "docs/sample.md.analysis.md")!;
+      expect(analysis.match(/^## Lens: Premortem\b/gm) ?? []).toHaveLength(1);
+      expect(analysis).toContain(`— ${model!}`);
     }));
 });

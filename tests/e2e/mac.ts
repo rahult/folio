@@ -102,6 +102,25 @@ export async function osa(script: string): Promise<string> {
   }
 }
 
+/** One System Events script that sends `action` — a `keystroke`, a
+ *  `key code`, a `click at` — only if `folio-app` is the frontmost app.
+ *
+ *  None of those is addressed to a process: a keystroke goes to whatever
+ *  app is in front and a click to whatever window is on top at that point
+ *  of the screen. In one full run another app came in front of Folio mid-
+ *  scenario and the harness typed into a Claude Code terminal. The check
+ *  and the send are consecutive Apple events in one script — not separate
+ *  `osascript` launches with a second or so between them — and if Folio is
+ *  not in front the script errors before anything is sent. Every input the
+ *  harness sends goes through here. */
+export function guardedInput(action: string): string {
+  return `tell application "System Events"
+  set fp to name of first application process whose frontmost is true
+  if fp is not "${PROCESS}" then error "Folio is not frontmost (frontmost: " & fp & ")"
+  ${action}
+end tell`;
+}
+
 export function aerospaceRunning(): boolean {
   try {
     execFileSyncQuiet("pgrep", ["-x", "AeroSpace"]);
@@ -225,12 +244,12 @@ export async function menu(...path: string[]): Promise<void> {
 }
 
 export async function keys(text: string): Promise<void> {
-  await osa(`tell application "System Events" to keystroke ${q(text)}`);
+  await osa(guardedInput(`keystroke ${q(text)}`));
   await new Promise((r) => setTimeout(r, 150));
 }
 
 export async function keyCode(code: number): Promise<void> {
-  await osa(`tell application "System Events" to key code ${code}`);
+  await osa(guardedInput(`key code ${code}`));
   await new Promise((r) => setTimeout(r, 150));
 }
 
@@ -241,8 +260,9 @@ const DUMP_ROLES = `{"AXButton", "AXRadioButton", "AXCheckBox", "AXStaticText", 
  *  app-level menu shared by every window, so a check mark there says nothing
  *  about which window applied the change. A pop-up button answers with the
  *  name of the item showing, the only reading of a `<select>` there is: its
- *  menu is not in the tree at all (see `choosePopup`). */
-const VALUE_ROLES = `{"AXStaticText", "AXRadioButton", "AXCheckBox", "AXPopUpButton"}`;
+ *  menu is not in the tree at all (see `choosePopup`). A text field answers
+ *  with its text, which is how `setTextField` checks what it typed. */
+const VALUE_ROLES = `{"AXStaticText", "AXRadioButton", "AXCheckBox", "AXPopUpButton", "AXTextField"}`;
 
 /** Every interesting element of a window in one osascript round trip.
  *
@@ -315,7 +335,7 @@ export async function frames(role: string | string[], win = 1): Promise<AxElemen
 }
 
 export async function clickAt(x: number, y: number): Promise<void> {
-  await osa(`tell application "System Events" to click at {${Math.round(x)}, ${Math.round(y)}}`);
+  await osa(guardedInput(`click at {${Math.round(x)}, ${Math.round(y)}}`));
   await new Promise((r) => setTimeout(r, 300));
 }
 
@@ -454,14 +474,10 @@ export async function frontmostProcess(): Promise<string> {
 
 /** Bring the app to the front and make sure it got there.
  *
- *  A synthetic `click at` lands on whatever window is on top at that point
- *  of the screen, and `keystroke` goes to the frontmost app — neither is
- *  addressed to a process. Nothing keeps the app in front for a whole
- *  scenario: in one full run the lens scenario's field clicks and Done went
- *  nowhere, and the failure screenshot of Folio's window rect showed a
- *  terminal on top of it (not reproduced on demand since). A helper that
- *  types must therefore put the app in front first, or its keystrokes go to
- *  whatever app is there — the person's terminal included. */
+ *  `guardedInput` refuses to send anything while another app is in front;
+ *  this is how a helper asks for the front instead of failing on it. It is
+ *  not a guard itself: focus can move again straight after it returns,
+ *  which is why every send still goes through `guardedInput`. */
 export async function focusApp(): Promise<void> {
   await osa(`tell application "System Events" to set frontmost of process "${PROCESS}" to true`);
   await waitFor(async () => (await frontmostProcess()) === PROCESS, { timeoutMs: 3_000, what: "Folio to be the frontmost app" });
@@ -476,25 +492,36 @@ export async function focusApp(): Promise<void> {
  *  through on `change`, which a click elsewhere would also fire, but only a
  *  key press does it without moving the focus somewhere unpredictable. */
 export async function setTextField(label: string, value: string, win = 1): Promise<void> {
-  const els = await axDump(win);
-  const lab = els.find((e) => e.role === "AXStaticText" && e.value === label);
-  if (!lab) throw new Error(`no label "${label}" in window ${win}`);
-  const fields = els.filter((e) => e.role === "AXTextField");
-  let field: AxElement | null = null;
-  let best = Infinity;
-  for (const f of fields) {
-    const d = Math.abs(f.y + f.h / 2 - (lab.y + lab.h / 2));
-    if (d < best) {
-      best = d;
-      field = f;
-    }
-  }
-  if (!field) throw new Error(`no text field near "${label}"`);
+  // Front first, then the dump: activation can move or redraw the window,
+  // and the click point must come from the window as it is now.
   await focusApp();
+  const fieldNear = (els: AxElement[]): AxElement | null => {
+    const lab = els.find((e) => e.role === "AXStaticText" && e.value === label);
+    if (!lab) return null;
+    let field: AxElement | null = null;
+    let best = Infinity;
+    for (const f of els) {
+      if (f.role !== "AXTextField") continue;
+      const d = Math.abs(f.y + f.h / 2 - (lab.y + lab.h / 2));
+      if (d < best) {
+        best = d;
+        field = f;
+      }
+    }
+    return field;
+  };
+  const els = await axDump(win);
+  if (!els.some((e) => e.role === "AXStaticText" && e.value === label)) throw new Error(`no label "${label}" in window ${win}`);
+  const field = fieldNear(els);
+  if (!field) throw new Error(`no text field near "${label}"`);
   await clickAt(field.x + field.w / 2, field.y + field.h / 2);
-  await osa(`tell application "System Events" to keystroke "a" using command down`);
+  await osa(guardedInput(`keystroke "a" using command down`));
   await keys(value);
   await keyCode(36);
+  await waitFor(async () => fieldNear(await axDump(win))?.value === value, {
+    timeoutMs: 5_000,
+    what: `"${value}" in the text field near "${label}"`,
+  });
 }
 
 /** Pick `item` from the window's first pop-up button (a `<select>`).
@@ -509,17 +536,18 @@ export async function setTextField(label: string, value: string, win = 1): Promi
  *  fires the `change` the page listens for. Verified against the Lenses
  *  panel — "Working backwards" and "Premortem" both chosen this way.
  *
- *  `focusApp` makes sure the keystrokes reach this app; the wait at the end
- *  makes sure they reached the select, which the focus cannot say (this app
- *  reports no `AXFocusedUIElement`). If the click missed and the typing went
- *  to the document instead, the button's value never becomes `item` and
- *  this throws, rather than leaving a lens running under the wrong name. */
+ *  `guardedInput` makes sure the click and the keystrokes reach this app;
+ *  the wait at the end makes sure they reached the select, which the focus
+ *  cannot say (this app reports no `AXFocusedUIElement`). If the click
+ *  missed and the typing went to the document instead, the button's value
+ *  never becomes `item` and this throws, rather than leaving a lens running
+ *  under the wrong name. */
 export async function choosePopup(item: string, win = 1): Promise<void> {
   const popup = async (): Promise<AxElement | null> => (await axDump(win)).find((e) => e.role === "AXPopUpButton") ?? null;
+  await focusApp();
   const pop = await popup();
   if (pop === null) throw new Error(`no pop up button in window ${win}`);
   if (pop.value === item) return;
-  await focusApp();
   await clickAt(pop.x + pop.w / 2, pop.y + pop.h / 2);
   await keys(item);
   await keyCode(36);

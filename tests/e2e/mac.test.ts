@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { bundle, homeFor, nearest, parseDump, readHome, removeHome, seedHome, settingsOf, SETTINGS_REL } from "./mac";
+import { bundle, guardedInput, homeFor, nearest, parseDump, readHome, removeHome, seedHome, settingsOf, SETTINGS_REL } from "./mac";
 
 const dump = [
   "AXButton\tDone\t\t100\t20\t60\t24",
@@ -100,6 +100,27 @@ describe("removeHome", () => {
       expect(existsSync(join(outside, "keep.txt"))).toBe(true);
     } finally {
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("guardedInput", () => {
+  it("checks that folio-app is frontmost before the action, which it sends once", () => {
+    const action = "key code 36";
+    const script = guardedInput(action);
+    const check = script.indexOf("name of first application process whose frontmost is true");
+    const refuse = script.indexOf('if fp is not "folio-app" then error "Folio is not frontmost (frontmost: " & fp & ")"');
+    expect(check).toBeGreaterThanOrEqual(0);
+    expect(refuse).toBeGreaterThan(check);
+    expect(script.indexOf(action)).toBeGreaterThan(refuse);
+    expect(script.split(action)).toHaveLength(2);
+    expect(script.startsWith('tell application "System Events"')).toBe(true);
+  });
+
+  it("passes the action through verbatim", () => {
+    for (const action of ['keystroke "a" using command down', 'keystroke "say \\"hi\\""', "click at {10, 20}"]) {
+      const lines = guardedInput(action).split("\n").map((l) => l.trim());
+      expect(lines).toContain(action);
     }
   });
 });
