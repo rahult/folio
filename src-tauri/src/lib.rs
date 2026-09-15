@@ -898,15 +898,25 @@ fn check_item<R: Runtime, M: Manager<R>>(
 /// to the webview as `menu` events; predefined items act natively.
 fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
 
+    // The macOS order: About first, then updates, then Settings, then the
+    // system items. The app is named explicitly so a development build
+    // (whose process is `folio-app`) reads the same as the bundle.
     let app_menu = SubmenuBuilder::new(app, "Folio")
-        .item(&menu_item(app, "app.settings", "Settings…", Some("CmdOrCtrl+,"))?)
-        .separator()
+        .about_with_text(
+            "About Folio",
+            Some(AboutMetadata {
+                name: Some("Folio".into()),
+                ..Default::default()
+            }),
+        )
         .item(&menu_item(
             app,
             "app.check-updates",
             "Check for Updates…",
             None,
         )?)
+        .separator()
+        .item(&menu_item(app, "app.settings", "Settings…", Some("CmdOrCtrl+,"))?)
         .item(&menu_item(
             app,
             "app.install-cli",
@@ -914,15 +924,13 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             None,
         )?)
         .separator()
-        .about(Some(AboutMetadata::default()))
-        .separator()
         .services()
         .separator()
-        .hide()
+        .hide_with_text("Hide Folio")
         .hide_others()
         .show_all()
         .separator()
-        .quit()
+        .quit_with_text("Quit Folio")
         .build()?;
 
     let mut file_builder = SubmenuBuilder::new(app, "File")
