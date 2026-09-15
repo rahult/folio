@@ -3,8 +3,8 @@
 // process parts are exercised by the *.e2e.ts files.
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { dirname, join, resolve, sep } from "node:path";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -170,21 +170,29 @@ export async function launchApp(home: string): Promise<void> {
   await new Promise((r) => setTimeout(r, 1000));
 }
 
+/** Quit the app *this helper started*, and nothing else.
+ *
+ *  Every branch is keyed on `child`, never on `appRunning()`: when
+ *  `launchApp` refuses because a Folio was already up, vitest still runs
+ *  the `afterAll` that calls this, and a global check would then read the
+ *  person's own instance as "ours" and kill it — `pkill -9 -x folio-app`
+ *  would take their unsaved work with it. With no child of our own there is
+ *  nothing here to quit. */
 export async function quitApp(): Promise<void> {
-  if (!appRunning()) return;
+  const own = child;
+  child = null;
+  if (own === null) return;
+  const gone = (): boolean => own.exitCode !== null || own.signalCode !== null;
+  if (gone()) return;
   try {
     await menu("Folio", "Quit Folio");
-    await waitFor(() => !appRunning(), { timeoutMs: 5_000, what: "quit" });
+    await waitFor(gone, { timeoutMs: 5_000, what: "quit" });
   } catch {
-    child?.kill("SIGKILL");
-    try {
-      execFileSyncQuiet("pkill", ["-9", "-x", PROCESS]);
-    } catch {
-      /* already gone */
-    }
-    await waitFor(() => !appRunning(), { timeoutMs: 5_000, what: "the process to end" });
+    // SIGKILL by pid, so the signal can only ever reach the process we
+    // spawned — not whatever else answers to the name `folio-app`.
+    own.kill("SIGKILL");
+    await waitFor(gone, { timeoutMs: 5_000, what: "the process to end" });
   }
-  child = null;
 }
 
 export async function folio(
@@ -254,20 +262,26 @@ export async function axDump(win = 1): Promise<AxElement[]> {
       set vs to item 5 of res
     end try
     repeat with i from 1 to (count of rs)
-      set r to item i of rs
-      if r is in ${DUMP_ROLES} then
-        set p to item i of ps
-        set s to item i of ss
-        if p is missing value then set p to {0, 0}
-        if s is missing value then set s to {0, 0}
-        set n to item i of ns
-        if n is missing value then set n to ""
-        set v to ""
-        if r is "AXStaticText" then set v to item i of vs
-        if v is missing value then set v to ""
-        set out to out & r & tab & n & tab & v & tab & (item 1 of p) & tab & (item 2 of p) & tab & (item 1 of s) & tab & (item 2 of s) & linefeed
-      end if
-      set out to out & my walk(UI element i of el)
+      -- A row of its own: the window keeps changing under the walk (a
+      -- review bar re-rendering, an annotation entry opening), and an
+      -- element that goes away between the batch read and this line must
+      -- cost one row, not the whole dump.
+      try
+        set r to item i of rs
+        if r is in ${DUMP_ROLES} then
+          set p to item i of ps
+          set s to item i of ss
+          if p is missing value then set p to {0, 0}
+          if s is missing value then set s to {0, 0}
+          set n to item i of ns
+          if n is missing value then set n to ""
+          set v to ""
+          if r is "AXStaticText" then set v to item i of vs
+          if v is missing value then set v to ""
+          set out to out & r & tab & n & tab & v & tab & (item 1 of p) & tab & (item 2 of p) & tab & (item 1 of s) & tab & (item 2 of s) & linefeed
+        end if
+        set out to out & my walk(UI element i of el)
+      end try
     end repeat
   end tell
   return out
@@ -391,6 +405,20 @@ export async function withArtifacts(name: string, fn: () => Promise<void>): Prom
   }
 }
 
+/** `rm -rf` on a throwaway home, with a fuse.
+ *
+ *  `homeFor` hands back `FOLIO_E2E_HOME` verbatim, so a stale or mistyped
+ *  export — `FOLIO_E2E_HOME=$HOME` is the one that hurts — would otherwise
+ *  arrive here and be deleted without a word, `force: true` swallowing every
+ *  complaint. A path only counts as disposable when it sits under the temp
+ *  directory or names itself `folio-e2e`, and never when it is the person's
+ *  own home. */
 export function removeHome(home: string): void {
-  rmSync(home, { recursive: true, force: true });
+  const path = resolve(home);
+  const underTmp = path.startsWith(resolve(tmpdir()) + sep);
+  const named = path.split(sep).some((part) => part.includes("folio-e2e"));
+  if (path === resolve(homedir()) || !(underTmp || named)) {
+    throw new Error(`refusing to remove ${path}: not a throwaway home under ${tmpdir()} or named folio-e2e`);
+  }
+  rmSync(path, { recursive: true, force: true });
 }

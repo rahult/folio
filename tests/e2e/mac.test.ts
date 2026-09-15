@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { bundle, homeFor, nearest, parseDump, readHome, seedHome, settingsOf, SETTINGS_REL } from "./mac";
+import { homedir, tmpdir } from "node:os";
+import { bundle, homeFor, nearest, parseDump, readHome, removeHome, seedHome, settingsOf, SETTINGS_REL } from "./mac";
 
 const dump = [
   "AXButton\tDone\t\t100\t20\t60\t24",
@@ -69,6 +69,34 @@ describe("seedHome", () => {
       expect(readHome(home, SETTINGS_REL)).not.toBeNull();
     } finally {
       rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("removeHome", () => {
+  it("removes a throwaway home under the temp dir", () => {
+    const home = mkdtempSync(join(tmpdir(), "folio-e2e-rm-"));
+    writeFileSync(join(home, "settings.json"), "{}");
+    removeHome(home);
+    expect(existsSync(home)).toBe(false);
+  });
+
+  it("refuses the person's own home directory and leaves it standing", () => {
+    expect(() => removeHome(homedir())).toThrow(/refusing to remove/);
+    expect(existsSync(homedir())).toBe(true);
+  });
+
+  it("refuses a real directory outside the temp dir that is not a folio-e2e one", () => {
+    // A directory of our own, so the check costs nothing if it ever fails —
+    // but outside `tmpdir()` and without "folio-e2e" in any segment, which is
+    // what a mistyped FOLIO_E2E_HOME looks like.
+    const outside = mkdtempSync(join(homedir(), ".folio-harness-guard-"));
+    try {
+      writeFileSync(join(outside, "keep.txt"), "not yours to delete");
+      expect(() => removeHome(outside)).toThrow(/refusing to remove/);
+      expect(existsSync(join(outside, "keep.txt"))).toBe(true);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });
