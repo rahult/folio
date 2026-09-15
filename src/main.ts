@@ -656,6 +656,18 @@ async function openFile(): Promise<void> {
 /** Check GitHub Releases for a newer version. The automatic startup check
  *  (manual = false) stays silent when offline or already up to date. */
 async function checkForUpdates(manual: boolean): Promise<void> {
+  // A development build runs from `target/debug`, not from a bundle: the
+  // updater would try to replace that folder and fail (across volumes it
+  // fails with "Cross-device link"). Nothing to update here.
+  if (import.meta.env.DEV) {
+    if (manual) {
+      await message("Update checks are off in a development build.", {
+        title: "Check for Updates",
+        kind: "info",
+      });
+    }
+    return;
+  }
   let update;
   try {
     update = await check();
@@ -2621,6 +2633,8 @@ function enterReviewMode(): void {
   reviewMode = true;
   document.body.classList.add("review-mode");
   editor.withView((view) => setReviewMode(view, true));
+  // Reviewing is marking up: keep the annotations in view from the start.
+  openPanel("annotations");
   trackEvent("review_mode");
   renderReviewBar();
   syncMenuState();
