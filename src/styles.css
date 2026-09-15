@@ -15,6 +15,7 @@
   --accent-strong: oklch(0.42 0.11 33);
   --accent-wash: oklch(0.945 0.018 45);
   --accent-selection: oklch(0.89 0.035 45);
+  --positive: oklch(0.52 0.09 155);
 
   --font-ui: "Instrument Sans Variable", system-ui, sans-serif;
   --font-prose: "Newsreader Variable", Georgia, serif;
@@ -83,6 +84,7 @@
   --accent-strong: oklch(0.73 0.12 38);
   --accent-wash: oklch(0.325 0.03 45);
   --accent-selection: oklch(0.43 0.06 45);
+  --positive: oklch(0.74 0.09 155);
 
   --crepe-shadow-1:
     0 1px 2px oklch(0.1 0.01 70 / 0.4), 0 4px 16px oklch(0.1 0.01 70 / 0.4);
@@ -106,6 +108,7 @@
   --accent-strong: oklch(0.78 0.11 60);
   --accent-wash: oklch(0.33 0.03 60);
   --accent-selection: oklch(0.42 0.05 60);
+  --positive: oklch(0.76 0.08 160);
 
   --crepe-shadow-1:
     0 1px 2px oklch(0.1 0.01 250 / 0.4), 0 4px 16px oklch(0.1 0.01 250 / 0.4);
@@ -947,17 +950,23 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
 /* ——— scrollbars ——— */
 
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
+  height: 8px;
+  background: transparent;
 }
 
+/* A 4px thumb inside an 8px lane. Always drawn: WebKit does not repaint
+   scrollbar pseudo-elements on hover, so a hover-only thumb sticks in
+   whichever state it last painted. */
 ::-webkit-scrollbar-thumb {
-  background: var(--hairline);
-  border-radius: 4px;
-  border: 2px solid var(--paper);
+  background-color: var(--hairline);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-faint);
+  background-color: var(--ink-faint);
 }
 
 /* ——— source code mode ——— */
@@ -2004,12 +2013,8 @@ body.panel-resizing {
   margin-bottom: 3px;
 }
 
-.annot-item-kind.delete {
-  color: oklch(0.55 0.1 30);
-}
-
-.annot-item-kind.replace {
-  color: oklch(0.55 0.09 155);
+.annot-item-kind.approve {
+  color: var(--positive);
 }
 
 .annot-item-quote {
@@ -2044,6 +2049,17 @@ body.panel-resizing {
   display: inline-flex;
   font-size: 12px;
   line-height: 1;
+}
+
+.annot-item-delete {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.annot-item:hover .annot-item-delete,
+.annot-item:focus-within .annot-item-delete,
+.annot-item-delete:focus-visible {
+  opacity: 1;
 }
 
 .annot-item-delete:hover {
