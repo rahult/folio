@@ -38,10 +38,16 @@ describe("layout", () => {
       await waitFor(async () => (await windowCount()) === before + 1, { timeoutMs: 5_000, what: "a new window" });
       // The new window is in front (window 1); the original is now window 2.
       expect(await windowRect(2)).toEqual(original);
-      // A review window opens at the app's 800x600 default, not at some
-      // compact float size of its own.
+      // A review window opens at the app's 800x600 *inner* default, not at
+      // some compact float size of its own. The frame System Events reports
+      // is that plus a native title bar: unlike the declarative first
+      // window, one built by `open_window` sets no `titleBarStyle`, so it
+      // keeps the standard macOS bar and its outer height may run taller
+      // than its content. Hence a bound rather than an equality.
       const fresh = await windowRect(1);
-      expect([fresh.w, fresh.h]).toEqual([800, 600]);
+      expect(fresh.w).toBe(800);
+      expect(fresh.h).toBeGreaterThanOrEqual(600);
+      expect(fresh.h).toBeLessThanOrEqual(640);
     }));
 
   it("fits every panel tab inside the reading panel", () =>
