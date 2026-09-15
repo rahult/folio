@@ -2,7 +2,7 @@
 // parts (paths, parsing, seeding) are unit-tested in mac.test.ts; the
 // process parts are exercised by the *.e2e.ts files.
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -56,13 +56,52 @@ export function bundle(): { app: string; bin: string; cli: string } {
   return { app, bin: join(app, "Contents/MacOS/folio-app"), cli: join(app, "Contents/MacOS/folio") };
 }
 
+/** The file `seedHome` writes first into every home it lays out. `removeHome`
+ *  deletes nothing that does not carry it. */
+export const HOME_MARKER = ".folio-e2e-home";
+
+/** Whether `path` may serve as a HOME the harness writes into, runs the app
+ *  against, and deletes afterwards.
+ *
+ *  Everything the harness does to a home — seed settings over whatever is
+ *  there, let the app install a skill and write lenses into it, `rm -rf` it —
+ *  is only safe on a folder made for the purpose. A mistyped or stale
+ *  `FOLIO_E2E_HOME` (`$HOME` is the one that hurts; `""` resolves to the
+ *  working directory) must be caught before the first write, not at the
+ *  delete. So a path counts only when it is not blank, is not the person's
+ *  own home, and sits under the temp directory or names itself `folio-e2e`.
+ *  Pure: it reads the string, never the disk. */
+export function isThrowawayHome(path: string): boolean {
+  if (path.trim() === "") return false;
+  const abs = resolve(path);
+  if (abs === resolve(homedir())) return false;
+  const underTmp = abs.startsWith(resolve(tmpdir()) + sep);
+  const named = abs.split(sep).some((part) => part.includes("folio-e2e"));
+  return underTmp || named;
+}
+
 export function homeFor(file: string): string {
-  return process.env.FOLIO_E2E_HOME ?? join(tmpdir(), "folio-e2e", `${file}-${process.pid}`);
+  const env = process.env.FOLIO_E2E_HOME;
+  if (env !== undefined) {
+    if (!isThrowawayHome(env)) throw new Error(`refusing FOLIO_E2E_HOME=${env}: not a throwaway folder`);
+    return env;
+  }
+  return join(tmpdir(), "folio-e2e", `${file}-${process.pid}`);
 }
 
 /** A fresh HOME: the Folio home folder, the fixture at docs/sample.md, and
- *  settings that keep the consent overlay and the update dialog away. */
+ *  settings that keep the consent overlay and the update dialog away.
+ *
+ *  Refuses a path `isThrowawayHome` rejects, and a folder that already has
+ *  something in it but no `HOME_MARKER` — a throwaway-looking path can still
+ *  be someone's folder. The marker is the first thing written. */
 export function seedHome(home: string): { doc: string } {
+  if (!isThrowawayHome(home)) throw new Error(`refusing to seed ${home}: not a throwaway folder`);
+  if (existsSync(home) && readdirSync(home).length > 0 && !existsSync(join(home, HOME_MARKER))) {
+    throw new Error(`refusing to seed ${home}: not empty and not a folio-e2e home (no ${HOME_MARKER})`);
+  }
+  mkdirSync(home, { recursive: true });
+  writeFileSync(join(home, HOME_MARKER), "");
   mkdirSync(join(home, "Documents/Folio"), { recursive: true });
   mkdirSync(join(home, "docs"), { recursive: true });
   const doc = join(home, "docs/sample.md");
@@ -177,12 +216,16 @@ let child: ChildProcess | null = null;
  *  how `folio review` reaches the running window — so both get it here,
  *  and `removeHome` takes the spool with the rest. */
 function envFor(home: string): NodeJS.ProcessEnv {
+  if (!isThrowawayHome(home)) throw new Error(`refusing to run Folio with HOME=${home}: not a throwaway folder`);
   const tmp = join(home, "tmp");
   mkdirSync(tmp, { recursive: true });
-  return { ...process.env, HOME: home, CFFIXED_USER_HOME: home, TMPDIR: tmp };
+  // `FOLIO_APP` pinned too: the CLI tries it before its sibling binary, so a
+  // value exported in the person's shell would start some other Folio.
+  return { ...process.env, HOME: home, CFFIXED_USER_HOME: home, TMPDIR: tmp, FOLIO_APP: bundle().bin };
 }
 
 export async function launchApp(home: string): Promise<void> {
+  if (!isThrowawayHome(home)) throw new Error(`refusing to launch Folio with HOME=${home}: not a throwaway folder`);
   if (appRunning()) throw new Error("a folio-app process is already running; the harness never touches it");
   child = spawn(bundle().bin, [], { env: envFor(home), stdio: "ignore" });
   await waitFor(async () => (await windowCount()) >= 1, { timeoutMs: 10_000, what: "the first window" });
@@ -449,20 +492,16 @@ export async function withArtifacts(name: string, fn: () => Promise<void>): Prom
   }
 }
 
-/** `rm -rf` on a throwaway home, with a fuse.
- *
- *  `homeFor` hands back `FOLIO_E2E_HOME` verbatim, so a stale or mistyped
- *  export — `FOLIO_E2E_HOME=$HOME` is the one that hurts — would otherwise
- *  arrive here and be deleted without a word, `force: true` swallowing every
- *  complaint. A path only counts as disposable when it sits under the temp
- *  directory or names itself `folio-e2e`, and never when it is the person's
- *  own home. */
+/** `rm -rf` on a throwaway home, with two fuses: the path must pass
+ *  `isThrowawayHome`, and the folder must carry the `HOME_MARKER` that
+ *  `seedHome` wrote — so only a home this harness laid out is ever deleted.
+ *  A folder that is not there is nothing to do. */
 export function removeHome(home: string): void {
+  if (!isThrowawayHome(home)) throw new Error(`refusing to remove ${home}: not a throwaway folder`);
   const path = resolve(home);
-  const underTmp = path.startsWith(resolve(tmpdir()) + sep);
-  const named = path.split(sep).some((part) => part.includes("folio-e2e"));
-  if (path === resolve(homedir()) || !(underTmp || named)) {
-    throw new Error(`refusing to remove ${path}: not a throwaway home under ${tmpdir()} or named folio-e2e`);
+  if (!existsSync(path)) return;
+  if (!existsSync(join(path, HOME_MARKER))) {
+    throw new Error(`refusing to remove ${path}: no ${HOME_MARKER}, so not a home seedHome laid out`);
   }
   rmSync(path, { recursive: true, force: true });
 }

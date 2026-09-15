@@ -20,6 +20,7 @@ import {
   themeMark,
   waitFor,
   windowCount,
+  windowRect,
   withArtifacts,
 } from "./mac";
 
@@ -78,7 +79,19 @@ describe("settings", () => {
       // mark reads Slate even for a window that ignored the event. The other
       // window's own Settings page is the per-window reading — its Slate radio
       // answers "1" only if that window applied the change.
+      // The raise has to be seen to work: if it left the order alone, Settings
+      // would reopen in the window that picked Slate and prove nothing about
+      // the other one. Window 1 is always the front one, so its frame changes
+      // exactly when another window came in front.
+      const before = await windowRect(1);
       await raiseWindow(2);
+      await waitFor(
+        async () => {
+          const now = await windowRect(1);
+          return now.x !== before.x || now.y !== before.y || now.w !== before.w || now.h !== before.h;
+        },
+        { timeoutMs: 3_000, what: "the other window in front" },
+      );
       await openSettings();
       await waitFor(
         async () => (await axDump(1)).some((e) => e.role === "AXRadioButton" && e.name === "Slate" && e.value === "1"),

@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { bundle, guardedInput, homeFor, nearest, parseDump, readHome, removeHome, seedHome, settingsOf, SETTINGS_REL } from "./mac";
+import {
+  HOME_MARKER,
+  ROOT,
+  bundle,
+  guardedInput,
+  homeFor,
+  isThrowawayHome,
+  nearest,
+  parseDump,
+  readHome,
+  removeHome,
+  seedHome,
+  settingsOf,
+  SETTINGS_REL,
+} from "./mac";
 
 const dump = [
   "AXButton\tDone\t\t100\t20\t60\t24",
@@ -43,19 +57,36 @@ describe("nearest", () => {
 describe("paths", () => {
   it("points into the release bundle", () => {
     const b = bundle();
-    expect(b.app.endsWith("src-tauri/target/release/bundle/macos/Folio.app")).toBe(true);
-    expect(b.bin).toBe(join(b.app, "Contents/MacOS/folio-app"));
-    expect(b.cli).toBe(join(b.app, "Contents/MacOS/folio"));
+    expect(b.app).toBe(join(ROOT, "src-tauri", "target", "release", "bundle", "macos", "Folio.app"));
+    expect(b.bin).toBe(join(b.app, "Contents", "MacOS", "folio-app"));
+    expect(b.cli).toBe(join(b.app, "Contents", "MacOS", "folio"));
   });
 
   it("derives a per-file home under the temp dir unless FOLIO_E2E_HOME is set", () => {
     const saved = process.env.FOLIO_E2E_HOME;
-    delete process.env.FOLIO_E2E_HOME;
-    expect(homeFor("review")).toBe(join(tmpdir(), "folio-e2e", `review-${process.pid}`));
-    process.env.FOLIO_E2E_HOME = "/x/home";
-    expect(homeFor("review")).toBe("/x/home");
-    if (saved === undefined) delete process.env.FOLIO_E2E_HOME;
-    else process.env.FOLIO_E2E_HOME = saved;
+    try {
+      delete process.env.FOLIO_E2E_HOME;
+      expect(homeFor("review")).toBe(join(tmpdir(), "folio-e2e", `review-${process.pid}`));
+      const chosen = join(tmpdir(), "folio-e2e", "chosen");
+      process.env.FOLIO_E2E_HOME = chosen;
+      expect(homeFor("review")).toBe(chosen);
+    } finally {
+      if (saved === undefined) delete process.env.FOLIO_E2E_HOME;
+      else process.env.FOLIO_E2E_HOME = saved;
+    }
+  });
+
+  it("refuses a FOLIO_E2E_HOME that is empty or the person's own home", () => {
+    const saved = process.env.FOLIO_E2E_HOME;
+    try {
+      process.env.FOLIO_E2E_HOME = "";
+      expect(() => homeFor("review")).toThrow(/refusing FOLIO_E2E_HOME=: not a throwaway folder/);
+      process.env.FOLIO_E2E_HOME = homedir();
+      expect(() => homeFor("review")).toThrow(/refusing FOLIO_E2E_HOME=.*: not a throwaway folder/);
+    } finally {
+      if (saved === undefined) delete process.env.FOLIO_E2E_HOME;
+      else process.env.FOLIO_E2E_HOME = saved;
+    }
   });
 });
 
@@ -64,9 +95,10 @@ describe("seedHome", () => {
     const home = mkdtempSync(join(tmpdir(), "folio-e2e-seed-"));
     try {
       const { doc } = seedHome(home);
-      expect(doc).toBe(join(home, "docs/sample.md"));
+      expect(doc).toBe(join(home, "docs", "sample.md"));
       expect(readFileSync(doc, "utf8")).toContain("# Sample plan");
-      expect(readHome(home, "Documents/Folio/.keep")).toBeNull();
+      expect(existsSync(join(home, HOME_MARKER))).toBe(true);
+      expect(existsSync(join(home, "Documents", "Folio"))).toBe(true);
       expect(readHome(home, "docs/sample.md")).toContain("## Risks");
       expect(settingsOf(home)).toEqual({ telemetry: false, checkUpdates: false });
       expect(readHome(home, SETTINGS_REL)).not.toBeNull();
@@ -74,32 +106,54 @@ describe("seedHome", () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it("refuses a folder that has something in it but no marker, and writes nothing", () => {
+    const home = mkdtempSync(join(tmpdir(), "folio-e2e-seed-"));
+    try {
+      writeFileSync(join(home, "keep.txt"), "not yours");
+      expect(() => seedHome(home)).toThrow(/refusing to seed/);
+      expect(readdirSync(home)).toEqual(["keep.txt"]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+// Strings only: a wrong answer here must never reach the disk.
+describe("isThrowawayHome", () => {
+  it("rejects blank, the person's home, and folders outside the temp dir", () => {
+    for (const p of ["", "   ", homedir(), join(homedir(), "Documents"), "/usr/local"]) {
+      expect(isThrowawayHome(p), JSON.stringify(p)).toBe(false);
+    }
+  });
+
+  it("accepts a folder under the temp dir or one named folio-e2e", () => {
+    for (const p of [join(tmpdir(), "x"), "/Volumes/data/folio-e2e/run-1"]) {
+      expect(isThrowawayHome(p), p).toBe(true);
+    }
+  });
 });
 
 describe("removeHome", () => {
-  it("removes a throwaway home under the temp dir", () => {
+  it("removes a home seedHome laid out", () => {
     const home = mkdtempSync(join(tmpdir(), "folio-e2e-rm-"));
-    writeFileSync(join(home, "settings.json"), "{}");
-    removeHome(home);
-    expect(existsSync(home)).toBe(false);
-  });
-
-  it("refuses the person's own home directory and leaves it standing", () => {
-    expect(() => removeHome(homedir())).toThrow(/refusing to remove/);
-    expect(existsSync(homedir())).toBe(true);
-  });
-
-  it("refuses a real directory outside the temp dir that is not a folio-e2e one", () => {
-    // A directory of our own, so the check costs nothing if it ever fails —
-    // but outside `tmpdir()` and without "folio-e2e" in any segment, which is
-    // what a mistyped FOLIO_E2E_HOME looks like.
-    const outside = mkdtempSync(join(homedir(), ".folio-harness-guard-"));
     try {
-      writeFileSync(join(outside, "keep.txt"), "not yours to delete");
-      expect(() => removeHome(outside)).toThrow(/refusing to remove/);
-      expect(existsSync(join(outside, "keep.txt"))).toBe(true);
+      seedHome(home);
+      removeHome(home);
+      expect(existsSync(home)).toBe(false);
     } finally {
-      rmSync(outside, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a throwaway-looking folder without the marker and leaves its files", () => {
+    const home = mkdtempSync(join(tmpdir(), "folio-e2e-rm-"));
+    try {
+      writeFileSync(join(home, "keep.txt"), "not yours to delete");
+      expect(() => removeHome(home)).toThrow(/refusing to remove/);
+      expect(existsSync(join(home, "keep.txt"))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
     }
   });
 });

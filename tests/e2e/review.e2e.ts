@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   axTexts,
@@ -21,16 +21,14 @@ import {
 } from "./mac";
 
 const home = homeFor("review");
-let doc = "";
 
 beforeAll(async () => {
-  ({ doc } = seedHome(home));
+  seedHome(home);
   await launchApp(home);
 });
 
 afterAll(async () => {
   await quitApp();
-  rmSync(`${doc}.feedback.md`, { force: true });
   removeHome(home);
 });
 
