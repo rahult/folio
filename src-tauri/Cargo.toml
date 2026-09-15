@@ -2,7 +2,7 @@
 members = ["crates/core", "crates/cli"]
 
 [workspace.package]
-version = "0.14.7"
+version = "0.15.0"
 authors = ["rahult"]
 edition = "2021"
 
