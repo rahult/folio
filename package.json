@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "e2e": "bash scripts/e2e.sh",
     "tauri": "tauri",
     "build:cli": "node scripts/build-cli.mjs",
     "dev:site": "vite --config site/vite.config.ts",
