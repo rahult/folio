@@ -2846,6 +2846,16 @@ void listen<string>("file-open", (event) => {
   void loadFromPath(event.payload);
 });
 
+// A review request for a file this window already shows: the app focused
+// us instead of opening another window; switch to that tab and let the
+// bar pick the request up on its next poll.
+void listen<string>("open-path", (event) => {
+  const tab = tabs.all.find((t) => t.path === event.payload);
+  if (tab && tab.id !== tabs.active.id) void activateTab(tab.id);
+  else if (!tab) void loadFromPath(event.payload);
+  else void refreshReviewRequest();
+});
+
 // ——— toolbar + fallback shortcuts (dev in browser has no native menu) ———
 
 // ——— tabs ———
@@ -2957,6 +2967,11 @@ async function closeTab(id: number): Promise<void> {
 function renderTabs(): void {
   const list = tabs.all;
   tabStrip.hidden = list.length < 2;
+  // Tell the app which files this window shows, so a review request for
+  // one of them lands here instead of in a new window.
+  void invoke("report_open_paths", { paths: list.map((t) => t.path).filter((p): p is string => p !== null) }).catch(
+    () => {},
+  );
   tabStrip.replaceChildren(
     ...list.map((tab) => {
       const el = document.createElement("div");

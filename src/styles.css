@@ -713,6 +713,27 @@ body.source-mode #main-row {
   }
 }
 
+/* ——— selection toolbar ——— */
+
+/* Crepe paints every icon in its outline grey, which reads as disabled.
+   Ink for the live ones; the accent marks the active mark. */
+body .milkdown .milkdown-toolbar .toolbar-item svg {
+  color: var(--ink);
+  fill: var(--ink);
+}
+
+body .milkdown .milkdown-toolbar .toolbar-item.active svg {
+  color: var(--accent);
+  fill: var(--accent);
+}
+
+/* Review mode reads the page without changing it: formatting has nothing
+   to do, so the bubble keeps only the annotate action. */
+body.review-mode .milkdown .milkdown-toolbar .toolbar-item:not(:has(svg[data-annotate])),
+body.review-mode .milkdown .milkdown-toolbar .divider {
+  display: none;
+}
+
 /* ——— review bar ——— */
 
 /* Shown only while an agent is blocked on `folio review --wait`. A window

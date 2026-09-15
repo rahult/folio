@@ -30,6 +30,16 @@ describe("review bar model", () => {
 
   it("names the waiting agent", () => {
     expect(barModel(request("waiting", "codex"), 0).label).toContain("codex");
+    expect(barModel({ ...request("waiting"), agentAlive: true }, 0).label).toContain("claude waiting");
+  });
+
+  it("says when the agent's process is gone but the verdict will keep", () => {
+    const model = barModel({ ...request("waiting", "pi"), agentAlive: false }, 2);
+    expect(model.visible).toBe(true);
+    expect(model.label).toContain("pi left");
+    expect(model.label).toContain("kept");
+    expect(model.label).toContain("2 annotations");
+    expect(model.primary).toBe("changes");
   });
 
   it("makes approve primary on a clean document", () => {

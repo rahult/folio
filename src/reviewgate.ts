@@ -20,6 +20,9 @@ export interface ReviewRequest {
   decidedAt: string | null;
   feedback: string | null;
   documentEdited: boolean;
+  /** False when the process that opened the review has exited (a harness
+   *  timeout, a killed shell). Absent from older payloads. */
+  agentAlive?: boolean;
 }
 
 export interface BarModel {
@@ -45,9 +48,15 @@ export function barModel(request: ReviewRequest | null, annotationCount: number)
     annotationCount === 0
       ? "no annotations"
       : `${annotationCount} annotation${annotationCount === 1 ? "" : "s"}`;
+  // The agent's process is gone, but the handshake is not: whatever is
+  // sent now is kept for its next `folio review` on this file.
+  const who =
+    request.agentAlive === false
+      ? `${request.agent} left · verdict kept`
+      : `${request.agent} waiting`;
   return {
     visible: true,
-    label: `${request.agent} waiting · ${count}`,
+    label: `${who} · ${count}`,
     primary: annotationCount > 0 ? "changes" : "approved",
   };
 }

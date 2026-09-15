@@ -1123,6 +1123,7 @@ dependencies = [
  "core-foundation 0.10.1",
  "folio-core",
  "keyring",
+ "libc",
  "reqwest",
  "rusqlite",
  "serde",

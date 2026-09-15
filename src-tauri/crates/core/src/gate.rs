@@ -226,6 +226,14 @@ pub fn run_cli_in(
     sweep_stale_in(dir, STALE_SECS);
 
     if wait {
+        // A verdict recorded after an earlier `--wait` was cut short (harness
+        // timeout, killed shell) is still the answer. Hand it over instead of
+        // asking again — a fresh request would clobber it and reopen the file.
+        if let Some(decided) = read_request_in(dir, path).filter(|r| r.state != ReviewState::Waiting) {
+            print!("{}", decided.feedback.as_deref().unwrap_or_default());
+            clear_in(dir, path);
+            return exit_code(decided.state);
+        }
         let req = ReviewRequest::waiting(path, agent, std::process::id());
         if write_request_in(dir, &req).is_err() {
             eprintln!("folio: could not open a review request");
@@ -440,5 +448,20 @@ mod tests {
         assert_eq!(code, 0);
         assert_eq!(opened.lock().unwrap().as_slice(), &[path.clone()]);
         assert!(read_request_in(&dir, &path).is_none(), "cleared after collection");
+    }
+
+    #[test]
+    fn run_cli_wait_returns_an_uncollected_verdict_without_reopening() {
+        let dir = temp_dir("run-cli-wait-decided");
+        let path = "/tmp/plan.md".to_string();
+        write_request_in(&dir, &ReviewRequest::waiting(&path, "pi", 1)).unwrap();
+        resolve_in(&dir, &path, ReviewState::Changes, "# fix\n", false).unwrap();
+        let opened = std::sync::Mutex::new(Vec::<String>::new());
+        let code = run_cli_in(&dir, &[path.clone()], true, "pi", 0, &|p| {
+            opened.lock().unwrap().push(p.to_string())
+        });
+        assert_eq!(code, 2);
+        assert!(opened.lock().unwrap().is_empty(), "no second window for a decided review");
+        assert!(read_request_in(&dir, &path).is_none(), "collected");
     }
 }

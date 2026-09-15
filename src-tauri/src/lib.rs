@@ -29,6 +29,49 @@ struct WindowRequests(Mutex<HashMap<String, CliOptions>>);
 #[derive(Default)]
 struct WindowCounter(AtomicU32);
 
+/// Which files each window currently shows, as the frontend reports them
+/// whenever its tabs change. A review request for a file that is already
+/// open focuses that window instead of stacking another on top of it.
+#[derive(Default)]
+struct WindowPaths(Mutex<HashMap<String, Vec<String>>>);
+
+/// The label of a window showing `path`, if any. Both sides are compared
+/// canonically so `/tmp/x.md` and `/private/tmp/x.md` are the same file.
+fn window_showing(paths: &HashMap<String, Vec<String>>, path: &str) -> Option<String> {
+    let wanted = canonical_key(path);
+    let mut labels: Vec<&String> = paths
+        .iter()
+        .filter(|(_, open)| open.iter().any(|p| canonical_key(p) == wanted))
+        .map(|(label, _)| label)
+        .collect();
+    labels.sort();
+    labels.first().map(|l| (*l).clone())
+}
+
+fn canonical_key(path: &str) -> String {
+    std::fs::canonicalize(path)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string())
+}
+
+/// Whether the process that opened a review is still running. A gate cut
+/// short by its harness leaves the request behind with a dead pid; the bar
+/// says so instead of pretending someone is still blocked on the answer.
+#[cfg(unix)]
+fn process_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    // SAFETY: kill with signal 0 only checks for the process's existence.
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[cfg(not(unix))]
+fn process_alive(_pid: u32) -> bool {
+    true
+}
+
 /// Set once the first window has drained its request. Before that, an OS
 /// file-open event is seeding the starting window; after, it opens a new one.
 #[derive(Default)]
@@ -149,6 +192,17 @@ fn drain_spool_in(dir: &std::path::Path, own_pid: u32, max_age_secs: u64) -> Vec
 /// new window's label *before* the webview is built so the frontend's
 /// startup drain can never lose the race.
 fn open_window(app: &AppHandle<Wry>, request: CliOptions) -> tauri::Result<WebviewWindow<Wry>> {
+    // One file, already on screen: bring that window forward and let it
+    // switch to the file. Its review bar picks the new request up by itself.
+    if let [path] = request.paths.as_slice() {
+        let label = window_showing(&app.state::<WindowPaths>().0.lock().unwrap(), path);
+        if let Some(window) = label.and_then(|l| app.get_webview_window(&l)) {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+            let _ = window.emit("open-path", path.clone());
+            return Ok(window);
+        }
+    }
     let n = app
         .state::<WindowCounter>()
         .0
@@ -1214,9 +1268,28 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
 
 /// The pending or decided review request for a path, if any. Polled by the
 /// window so the review bar can appear the moment an agent starts waiting.
+/// The frontend's list of open files for its window, refreshed on every
+/// tab change so `open_window` can find a file that is already showing.
 #[tauri::command]
-fn review_request_state(path: String) -> Option<reviewgate::ReviewRequest> {
-    reviewgate::read_request_in(&reviewgate::review_dir(), &path)
+fn report_open_paths(window: tauri::Window<Wry>, paths: Vec<String>, state: tauri::State<WindowPaths>) {
+    state.0.lock().unwrap().insert(window.label().to_string(), paths);
+}
+
+/// A review request as the bar shows it: the handshake plus whether the
+/// agent that opened it is still around to receive the verdict.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReviewStatus {
+    #[serde(flatten)]
+    request: reviewgate::ReviewRequest,
+    agent_alive: bool,
+}
+
+#[tauri::command]
+fn review_request_state(path: String) -> Option<ReviewStatus> {
+    let request = reviewgate::read_request_in(&reviewgate::review_dir(), &path)?;
+    let agent_alive = process_alive(request.pid);
+    Some(ReviewStatus { request, agent_alive })
 }
 
 /// Feedback sent as "changes requested" that no rewrite has answered yet,
@@ -1455,6 +1528,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(requests)
         .manage(WindowCounter::default())
+        .manage(WindowPaths::default())
         .manage(Started::default())
         .manage(RecentFiles::default())
         .manage(RevisionMenu::default())
@@ -1507,6 +1581,7 @@ pub fn run() {
             read_revision,
             register_default_markdown_handler,
             review_request_state,
+            report_open_paths,
             resolve_review,
             pending_feedback,
             build_feedback,
@@ -1630,6 +1705,35 @@ mod tests {
     /// case-insensitive, so differing only in extension case collides).
     fn temp_file(stem: &str, ext: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("folio-test-{stem}-{}.{ext}", std::process::id()))
+    }
+
+    #[test]
+    fn window_showing_finds_the_window_with_the_file_open() {
+        let mut paths = HashMap::new();
+        paths.insert("main".to_string(), vec!["/a/notes.md".to_string()]);
+        paths.insert("folio-2".to_string(), vec!["/a/plan.md".to_string(), "/a/spec.md".to_string()]);
+        assert_eq!(window_showing(&paths, "/a/spec.md").as_deref(), Some("folio-2"));
+        assert_eq!(window_showing(&paths, "/a/notes.md").as_deref(), Some("main"));
+        assert_eq!(window_showing(&paths, "/a/other.md"), None);
+    }
+
+    #[test]
+    fn window_showing_matches_paths_through_symlinks() {
+        let dir = std::env::temp_dir().join(format!("folio-showing-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("doc.md");
+        std::fs::write(&file, "# hi\n").unwrap();
+        let canonical = std::fs::canonicalize(&file).unwrap();
+        let mut paths = HashMap::new();
+        paths.insert("main".to_string(), vec![canonical.to_string_lossy().into_owned()]);
+        assert_eq!(window_showing(&paths, &file.to_string_lossy()).as_deref(), Some("main"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn process_alive_tells_a_live_process_from_a_dead_pid() {
+        assert!(process_alive(std::process::id()));
+        assert!(!process_alive(0));
     }
 
     fn spool_test_dir(name: &str) -> std::path::PathBuf {
