@@ -38,8 +38,10 @@ describe("layout", () => {
       await waitFor(async () => (await windowCount()) === before + 1, { timeoutMs: 5_000, what: "a new window" });
       // The new window is in front (window 1); the original is now window 2.
       expect(await windowRect(2)).toEqual(original);
+      // A review window opens at the app's 800x600 default, not at some
+      // compact float size of its own.
       const fresh = await windowRect(1);
-      expect([fresh.w, fresh.h]).not.toEqual([420, 640]);
+      expect([fresh.w, fresh.h]).toEqual([800, 600]);
     }));
 
   it("fits every panel tab inside the reading panel", () =>
