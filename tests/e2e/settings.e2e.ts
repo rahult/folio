@@ -73,8 +73,18 @@ describe("settings", () => {
       await clickButton("Slate");
       await waitFor(() => settingsOf(home)?.theme === "slate", { timeoutMs: 3_000, what: "theme slate in settings.json" });
       await clickButton("Done");
+      // Not the menu's check mark: `set_menu` installs one app-level menu and
+      // every window's `settings-changed` handler syncs that same menu, so the
+      // mark reads Slate even for a window that ignored the event. The other
+      // window's own Settings page is the per-window reading — its Slate radio
+      // answers "1" only if that window applied the change.
       await raiseWindow(2);
-      await waitFor(async () => (await themeMark()) === "Slate", { timeoutMs: 3_000, what: "the Slate check mark in the other window" });
+      await openSettings();
+      await waitFor(
+        async () => (await axDump(1)).some((e) => e.role === "AXRadioButton" && e.name === "Slate" && e.value === "1"),
+        { timeoutMs: 3_000, what: "Slate checked in the other window's Settings" },
+      );
+      await clickButton("Done");
     }));
 
   it("edits a built-in lens in Folio", () =>

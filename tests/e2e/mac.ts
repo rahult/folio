@@ -235,6 +235,12 @@ export async function keyCode(code: number): Promise<void> {
 }
 
 const DUMP_ROLES = `{"AXButton", "AXRadioButton", "AXCheckBox", "AXStaticText", "AXGroup", "AXTextField", "AXPopUpButton"}`;
+/** Roles whose `value` is worth a column. Static text *is* its value; a
+ *  radio or a check box answers "1" when checked and "0" when not, which is
+ *  the only per-window reading of a control's state — the menu bar is one
+ *  app-level menu shared by every window, so a check mark there says nothing
+ *  about which window applied the change. */
+const VALUE_ROLES = `{"AXStaticText", "AXRadioButton", "AXCheckBox"}`;
 
 /** Every interesting element of a window in one osascript round trip.
  *
@@ -276,7 +282,7 @@ export async function axDump(win = 1): Promise<AxElement[]> {
           set n to item i of ns
           if n is missing value then set n to ""
           set v to ""
-          if r is "AXStaticText" then set v to item i of vs
+          if r is in ${VALUE_ROLES} then set v to item i of vs
           if v is missing value then set v to ""
           set out to out & r & tab & n & tab & v & tab & (item 1 of p) & tab & (item 2 of p) & tab & (item 1 of s) & tab & (item 2 of s) & linefeed
         end if

@@ -10,15 +10,18 @@ const dump = [
   "AXButton\tInstall\t\t500\t204\t70\t24",
   "AXStaticText\tPi\tPi\t40\t260\t30\t18",
   "AXButton\tInstall\t\t500\t264\t70\t24",
+  "AXRadioButton\tSlate\t1\t640\t500\t60\t21",
   "",
 ].join("\n");
 
 describe("parseDump", () => {
   it("reads one element per line and skips blanks", () => {
     const els = parseDump(dump);
-    expect(els).toHaveLength(5);
+    expect(els).toHaveLength(6);
     expect(els[0]).toEqual({ role: "AXButton", name: "Done", value: "", x: 100, y: 20, w: 60, h: 24 });
     expect(els[1].value).toBe("Claude Code");
+    // A radio carries its checked state in the same column: "1" checked.
+    expect(els[5]).toEqual({ role: "AXRadioButton", name: "Slate", value: "1", x: 640, y: 500, w: 60, h: 21 });
   });
 });
 
