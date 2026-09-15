@@ -239,8 +239,10 @@ const DUMP_ROLES = `{"AXButton", "AXRadioButton", "AXCheckBox", "AXStaticText", 
  *  radio or a check box answers "1" when checked and "0" when not, which is
  *  the only per-window reading of a control's state — the menu bar is one
  *  app-level menu shared by every window, so a check mark there says nothing
- *  about which window applied the change. */
-const VALUE_ROLES = `{"AXStaticText", "AXRadioButton", "AXCheckBox"}`;
+ *  about which window applied the change. A pop-up button answers with the
+ *  name of the item showing, the only reading of a `<select>` there is: its
+ *  menu is not in the tree at all (see `choosePopup`). */
+const VALUE_ROLES = `{"AXStaticText", "AXRadioButton", "AXCheckBox", "AXPopUpButton"}`;
 
 /** Every interesting element of a window in one osascript round trip.
  *
@@ -443,4 +445,83 @@ export function removeHome(home: string): void {
     throw new Error(`refusing to remove ${path}: not a throwaway home under ${tmpdir()} or named folio-e2e`);
   }
   rmSync(path, { recursive: true, force: true });
+}
+
+/** The name of the process macOS has in front. */
+export async function frontmostProcess(): Promise<string> {
+  return osa(`tell application "System Events" to get name of first process whose frontmost is true`);
+}
+
+/** Bring the app to the front and make sure it got there.
+ *
+ *  A synthetic `click at` lands on whatever window is on top at that point
+ *  of the screen, and `keystroke` goes to the frontmost app — neither is
+ *  addressed to a process. Nothing keeps the app in front for a whole
+ *  scenario: in one full run the lens scenario's field clicks and Done went
+ *  nowhere, and the failure screenshot of Folio's window rect showed a
+ *  terminal on top of it (not reproduced on demand since). A helper that
+ *  types must therefore put the app in front first, or its keystrokes go to
+ *  whatever app is there — the person's terminal included. */
+export async function focusApp(): Promise<void> {
+  await osa(`tell application "System Events" to set frontmost of process "${PROCESS}" to true`);
+  await waitFor(async () => (await frontmostProcess()) === PROCESS, { timeoutMs: 3_000, what: "Folio to be the frontmost app" });
+  await new Promise((r) => setTimeout(r, 200));
+}
+
+/** Type `value` into the text field on the row labelled `label`.
+ *
+ *  The Settings page draws a control as a label and its input side by side,
+ *  so the field is found by vertical centre, the same rule `nearest` uses
+ *  for a row's action button. Return is what commits it: the inputs write
+ *  through on `change`, which a click elsewhere would also fire, but only a
+ *  key press does it without moving the focus somewhere unpredictable. */
+export async function setTextField(label: string, value: string, win = 1): Promise<void> {
+  const els = await axDump(win);
+  const lab = els.find((e) => e.role === "AXStaticText" && e.value === label);
+  if (!lab) throw new Error(`no label "${label}" in window ${win}`);
+  const fields = els.filter((e) => e.role === "AXTextField");
+  let field: AxElement | null = null;
+  let best = Infinity;
+  for (const f of fields) {
+    const d = Math.abs(f.y + f.h / 2 - (lab.y + lab.h / 2));
+    if (d < best) {
+      best = d;
+      field = f;
+    }
+  }
+  if (!field) throw new Error(`no text field near "${label}"`);
+  await focusApp();
+  await clickAt(field.x + field.w / 2, field.y + field.h / 2);
+  await osa(`tell application "System Events" to keystroke "a" using command down`);
+  await keys(value);
+  await keyCode(36);
+}
+
+/** Pick `item` from the window's first pop-up button (a `<select>`).
+ *
+ *  Not `click menu item … of menu 1 of the button`, which is how a native
+ *  pop-up is driven: WebKit's `<select>` has no menu in the accessibility
+ *  tree — `menu 1` of it is an invalid index, `AXPress` on it opens nothing,
+ *  and the one `AXMenu` the window does carry holds no items. What the
+ *  select does answer to is the menu AppKit puts on screen when a *click*
+ *  lands on it, and that menu takes type-select: the item's own name is a
+ *  prefix of itself, so typing it and pressing Return commits that item and
+ *  fires the `change` the page listens for. Verified against the Lenses
+ *  panel — "Working backwards" and "Premortem" both chosen this way.
+ *
+ *  `focusApp` makes sure the keystrokes reach this app; the wait at the end
+ *  makes sure they reached the select, which the focus cannot say (this app
+ *  reports no `AXFocusedUIElement`). If the click missed and the typing went
+ *  to the document instead, the button's value never becomes `item` and
+ *  this throws, rather than leaving a lens running under the wrong name. */
+export async function choosePopup(item: string, win = 1): Promise<void> {
+  const popup = async (): Promise<AxElement | null> => (await axDump(win)).find((e) => e.role === "AXPopUpButton") ?? null;
+  const pop = await popup();
+  if (pop === null) throw new Error(`no pop up button in window ${win}`);
+  if (pop.value === item) return;
+  await focusApp();
+  await clickAt(pop.x + pop.w / 2, pop.y + pop.h / 2);
+  await keys(item);
+  await keyCode(36);
+  await waitFor(async () => (await popup())?.value === item, { timeoutMs: 5_000, what: `"${item}" in the pop-up button` });
 }
