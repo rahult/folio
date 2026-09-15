@@ -57,18 +57,23 @@ fn canonical_key(path: &str) -> String {
 /// Whether the process that opened a review is still running. A gate cut
 /// short by its harness leaves the request behind with a dead pid; the bar
 /// says so instead of pretending someone is still blocked on the answer.
-#[cfg(unix)]
 fn process_alive(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
+    // No process has pid 0 as far as a review is concerned; it is what a
+    // corrupt or hand-written request carries.
+    pid != 0 && process_alive_os(pid)
+}
+
+#[cfg(unix)]
+fn process_alive_os(pid: u32) -> bool {
     // SAFETY: kill with signal 0 only checks for the process's existence.
     let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
     rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
+/// Without a cheap liveness check, assume the agent is still there: the
+/// bar then says "waiting", which is the safe default.
 #[cfg(not(unix))]
-fn process_alive(_pid: u32) -> bool {
+fn process_alive_os(_pid: u32) -> bool {
     true
 }
 
