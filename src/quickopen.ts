@@ -1,5 +1,5 @@
 /**
- * Quick Open (⌘P): fuzzy ranking of the Markdown files under the current
+ * File ranking for the ⌘K palette: fuzzy ranking of the Markdown files under the current
  * project folder, with recent files floated up. Pure and DOM-free; the
  * palette itself lives in main.ts and the file listing comes from Rust.
  */

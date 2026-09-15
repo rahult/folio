@@ -16,6 +16,7 @@ export type MenuAction =
   | { kind: "save-file-as" }
   | { kind: "export-html" }
   | { kind: "export-pdf" }
+  | { kind: "print" }
   | { kind: "export-docx" }
   | { kind: "toggle-source-mode" }
   | { kind: "toggle-focus-mode" }
@@ -96,6 +97,8 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "export-html" };
     case "file.export-pdf":
       return { kind: "export-pdf" };
+    case "file.print":
+      return { kind: "print" };
     case "file.export-docx":
       return { kind: "export-docx" };
     case "view.focus-mode":

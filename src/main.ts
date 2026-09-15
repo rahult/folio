@@ -5,6 +5,10 @@ import "@fontsource-variable/jetbrains-mono";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { isPathMenuClick, pathMenuEntries } from "./pathmenu";
+import { commandKIntent, formatShortcut, rankPalette, type PaletteCommand, type PaletteItem } from "./palette";
 import { getVersion } from "@tauri-apps/api/app";
 import { confirm, message, ask, open, save } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
@@ -142,6 +146,36 @@ interface StartupRequest {
 }
 
 const titleEl = document.querySelector<HTMLSpanElement>("#doc-title")!;
+
+// ⌘-click (Ctrl-click off macOS) on the title shows where the document lives,
+// the way a macOS window title does: the file, then each folder above it.
+// Handled on mousedown so the title strip's drag handler never sees it.
+const IS_MAC = /Mac/i.test(navigator.userAgent);
+titleEl.addEventListener("mousedown", (e) => {
+  if (settingsOpen || !doc.filePath || !isPathMenuClick(e, IS_MAC)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  void showPathMenu(doc.filePath);
+});
+
+async function showPathMenu(path: string): Promise<void> {
+  const entries = pathMenuEntries(path);
+  const items = await Promise.all(
+    entries.map((entry) =>
+      MenuItem.new({
+        text: entry.label,
+        action: () => {
+          void revealItemInDir(entry.reveal).catch(() => {});
+        },
+      }),
+    ),
+  );
+  // The file sits apart from the folders that contain it.
+  const separator = await PredefinedMenuItem.new({ item: "Separator" });
+  const menu = await Menu.new({ items: [items[0], separator, ...items.slice(1)] });
+  const box = titleEl.getBoundingClientRect();
+  await menu.popup(new LogicalPosition(box.left, box.bottom + 4));
+}
 const pathEl = document.querySelector<HTMLSpanElement>("#doc-path")!;
 const wordCountEl = document.querySelector<HTMLSpanElement>("#word-count")!;
 const navBackBtn = document.querySelector<HTMLButtonElement>("#nav-back-btn")!;
@@ -906,6 +940,14 @@ async function exportDocx(): Promise<void> {
   if (selected === null) return;
   const bytes = await buildDocx(currentMarkdown(), doc.fileName, { image: docxImage });
   await invoke("write_binary_file", { path: selected, contents: Array.from(bytes) });
+}
+
+/** ⌘P: the native print panel over the rendered document (which also
+ *  offers Save as PDF). */
+async function printDocument(): Promise<void> {
+  trackEvent("print");
+  printRoot.innerHTML = await renderForExport();
+  await invoke("print_document");
 }
 
 async function exportPdf(): Promise<void> {
@@ -2726,7 +2768,9 @@ async function runMenuAction(action: MenuAction): Promise<void> {
     case "open-file":
       return openFile();
     case "quick-open":
-      return openQuickOpen();
+      return quickOpenOrLink();
+    case "print":
+      return printDocument();
     case "save-file":
       return saveFile();
     case "save-file-as":
@@ -2996,7 +3040,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// ——— quick open (⌘P) ———
+// ——— go to file or command (⌘K) ———
 //
 // A fuzzy finder over the Markdown files of the current project (the
 // nearest git root, or the document's folder), with recents first. No
@@ -3013,20 +3057,36 @@ interface ProjectFiles {
 }
 
 let quickOpenProject: ProjectFiles | null = null;
-let quickOpenResults: string[] = [];
+let paletteCommands: PaletteCommand[] = [];
+let quickOpenResults: PaletteItem[] = [];
 let quickOpenIndex = 0;
 
+/** ⌘K: jump to a Markdown file in this project or run any menu command. */
 async function openQuickOpen(): Promise<void> {
   const path = doc.filePath ?? recentFiles[0];
-  if (!path) {
-    await openFile();
-    return;
-  }
-  quickOpenProject = await invoke<ProjectFiles>("list_project_markdown", { path });
+  const [project, commands] = await Promise.all([
+    path ? invoke<ProjectFiles>("list_project_markdown", { path }).catch(() => null) : Promise.resolve(null),
+    invoke<PaletteCommand[]>("menu_commands").catch(() => []),
+  ]);
+  quickOpenProject = project;
+  // Only what this window can run: the frontend maps each id to an action.
+  paletteCommands = commands.filter((c) => actionForMenuId(c.id) !== null);
   quickOpenInput.value = "";
   quickOpen.hidden = false;
   renderQuickOpen();
   quickOpenInput.focus();
+}
+
+/** ⌘K makes a link when text is selected in the document, as it does in
+ *  most editors; otherwise it opens the palette. */
+function quickOpenOrLink(): Promise<void> {
+  let selectionEmpty = true;
+  editor.withView((view) => (selectionEmpty = view.state.selection.empty));
+  if (commandKIntent({ selectionEmpty, sourceMode, settingsOpen }) === "link") {
+    editor.runCommand("link");
+    return Promise.resolve();
+  }
+  return openQuickOpen();
 }
 
 function closeQuickOpen(): void {
@@ -3036,33 +3096,46 @@ function closeQuickOpen(): void {
 
 function renderQuickOpen(): void {
   const project = quickOpenProject;
-  if (!project) return;
-  const root = project.root.endsWith("/") ? project.root : `${project.root}/`;
-  const recents = recentFiles
-    .filter((p) => p.startsWith(root))
-    .map((p) => p.slice(root.length));
-  quickOpenResults = rankFiles(quickOpenInput.value, project.files, recents, 12);
+  const root = project ? (project.root.endsWith("/") ? project.root : `${project.root}/`) : "";
+  const recents = project ? recentFiles.filter((p) => p.startsWith(root)).map((p) => p.slice(root.length)) : [];
+  quickOpenResults = rankPalette(quickOpenInput.value, project?.files ?? [], recents, paletteCommands, {
+    files: 8,
+    commands: 8,
+  }).slice(0, 14);
   quickOpenIndex = 0;
-  quickOpenHint.textContent = `${displayPath(project.root)} · ${project.files.length} files`;
+  quickOpenHint.textContent = project
+    ? `${displayPath(project.root)} · ${project.files.length} files · ↵ open · esc close`
+    : "↵ run · esc close";
   if (quickOpenResults.length === 0) {
     const empty = document.createElement("li");
     empty.className = "qo-empty";
-    empty.textContent = "No matching Markdown files";
+    empty.textContent = "No matching files or commands";
     quickOpenList.replaceChildren(empty);
     return;
   }
   quickOpenList.replaceChildren(
-    ...quickOpenResults.map((rel, i) => {
+    ...quickOpenResults.map((item, i) => {
       const li = document.createElement("li");
       li.setAttribute("role", "option");
       if (i === quickOpenIndex) li.setAttribute("aria-selected", "true");
-      const slash = rel.lastIndexOf("/");
       const name = document.createElement("span");
-      name.textContent = slash === -1 ? rel : rel.slice(slash + 1);
-      const dir = document.createElement("span");
-      dir.className = "qo-dir";
-      dir.textContent = slash === -1 ? "" : rel.slice(0, slash);
-      li.append(name, dir);
+      name.className = "qo-name";
+      const meta = document.createElement("span");
+      meta.className = "qo-dir";
+      if (item.kind === "file") {
+        const slash = item.rel.lastIndexOf("/");
+        name.textContent = slash === -1 ? item.rel : item.rel.slice(slash + 1);
+        meta.textContent = slash === -1 ? "" : item.rel.slice(0, slash);
+        li.append(name, meta);
+      } else {
+        li.classList.add("qo-command");
+        name.textContent = item.command.label.replace(/…$/, "");
+        meta.textContent = item.command.group;
+        const keys = document.createElement("kbd");
+        keys.className = "qo-keys";
+        keys.textContent = formatShortcut(item.command.shortcut, IS_MAC);
+        li.append(name, meta, keys);
+      }
       li.addEventListener("mousedown", (e) => {
         e.preventDefault();
         void chooseQuickOpen(i);
@@ -3083,12 +3156,18 @@ function moveQuickOpen(delta: number): void {
 }
 
 async function chooseQuickOpen(index: number): Promise<void> {
-  const rel = quickOpenResults[index];
-  const project = quickOpenProject;
-  if (!rel || !project) return;
-  const root = project.root.endsWith("/") ? project.root : `${project.root}/`;
+  const item = quickOpenResults[index];
+  if (!item) return;
   closeQuickOpen();
-  await loadFromPath(root + rel);
+  if (item.kind === "command") {
+    const action = actionForMenuId(item.command.id);
+    if (action) await runMenuAction(action);
+    return;
+  }
+  const project = quickOpenProject;
+  if (!project) return;
+  const root = project.root.endsWith("/") ? project.root : `${project.root}/`;
+  await loadFromPath(root + item.rel);
 }
 
 quickOpenInput.addEventListener("input", renderQuickOpen);
@@ -3157,9 +3236,12 @@ window.addEventListener("keydown", (e) => {
   } else if (key === "s") {
     e.preventDefault();
     void saveFile(e.shiftKey);
+  } else if (key === "k" && !e.shiftKey) {
+    e.preventDefault();
+    void quickOpenOrLink();
   } else if (key === "p" && !e.shiftKey) {
     e.preventDefault();
-    void openQuickOpen();
+    void printDocument();
   } else if (key === "[") {
     e.preventDefault();
     void navigateBack();

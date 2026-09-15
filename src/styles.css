@@ -1125,7 +1125,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   background: var(--accent-wash);
 }
 
-/* ——— quick open (⌘P) ——— */
+/* ——— go to file or command (⌘K) ——— */
 
 #quick-open {
   position: fixed;
@@ -1190,6 +1190,27 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#quick-open-list li .qo-name {
+  flex: 0 0 auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A command: its label, the menu it lives in, and its shortcut at the end. */
+#quick-open-list li.qo-command .qo-dir {
+  flex: 1 1 auto;
+}
+
+#quick-open-list li .qo-keys {
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
 }
 
 #quick-open-list li[aria-selected="true"] {

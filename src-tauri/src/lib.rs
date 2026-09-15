@@ -864,6 +864,83 @@ fn sync_menu_state(
     }
 }
 
+/// Accelerators by menu id, recorded as items are built: Tauri cannot read
+/// an item's accelerator back, and the ⌘K palette shows each command's.
+fn shortcuts() -> &'static Mutex<HashMap<String, String>> {
+    static SHORTCUTS: std::sync::OnceLock<Mutex<HashMap<String, String>>> = std::sync::OnceLock::new();
+    SHORTCUTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn remember_shortcut(id: &str, accelerator: Option<&str>) {
+    let mut map = shortcuts().lock().unwrap();
+    match accelerator {
+        Some(accel) => map.insert(id.to_string(), accel.to_string()),
+        None => map.remove(id),
+    };
+}
+
+/// One runnable menu command for the ⌘K palette.
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+struct PaletteCommand {
+    id: String,
+    label: String,
+    /// The menus it sits in, e.g. "View › Themes".
+    group: String,
+    shortcut: Option<String>,
+}
+
+/// Whether a menu id belongs in the palette: our own commands, but not the
+/// per-file entries (recent files and revisions), which the palette's file
+/// list already covers.
+fn palette_id(id: &str) -> bool {
+    let ours = ["app.", "file.", "edit.", "paragraph.", "format.", "view."]
+        .iter()
+        .any(|prefix| id.starts_with(prefix));
+    ours && !id.starts_with("file.recent.") && !id.starts_with("file.revision.") && id != "file.quick-open"
+}
+
+fn collect_palette<R: Runtime>(
+    items: Vec<tauri::menu::MenuItemKind<R>>,
+    group: &str,
+    shortcuts: &HashMap<String, String>,
+    out: &mut Vec<PaletteCommand>,
+) {
+    use tauri::menu::MenuItemKind;
+    for item in items {
+        let (id, label, enabled) = match &item {
+            MenuItemKind::MenuItem(i) => (i.id().0.clone(), i.text().unwrap_or_default(), i.is_enabled().unwrap_or(false)),
+            MenuItemKind::Check(i) => (i.id().0.clone(), i.text().unwrap_or_default(), i.is_enabled().unwrap_or(false)),
+            MenuItemKind::Submenu(s) => {
+                let name = s.text().unwrap_or_default();
+                let inner = if group.is_empty() { name } else { format!("{group} › {name}") };
+                collect_palette(s.items().unwrap_or_default(), &inner, shortcuts, out);
+                continue;
+            }
+            _ => continue,
+        };
+        if enabled && palette_id(&id) {
+            out.push(PaletteCommand {
+                shortcut: shortcuts.get(&id).cloned(),
+                id,
+                label,
+                group: group.to_string(),
+            });
+        }
+    }
+}
+
+/// Every enabled command in the menu bar, in menu order.
+#[tauri::command]
+fn menu_commands(app: AppHandle<Wry>) -> Vec<PaletteCommand> {
+    let Some(menu) = app.menu() else {
+        return Vec::new();
+    };
+    let shortcuts = shortcuts().lock().unwrap().clone();
+    let mut out = Vec::new();
+    collect_palette(menu.items().unwrap_or_default(), "", &shortcuts, &mut out);
+    out
+}
+
 /// Build a custom menu item whose id is forwarded to the frontend.
 fn menu_item<R: Runtime, M: Manager<R>>(
     manager: &M,
@@ -871,6 +948,7 @@ fn menu_item<R: Runtime, M: Manager<R>>(
     label: &str,
     accelerator: Option<&str>,
 ) -> tauri::Result<MenuItem<R>> {
+    remember_shortcut(id, accelerator);
     let mut builder = MenuItemBuilder::with_id(id, label);
     if let Some(accel) = accelerator {
         builder = builder.accelerator(accel);
@@ -886,6 +964,7 @@ fn check_item<R: Runtime, M: Manager<R>>(
     accelerator: Option<&str>,
     checked: bool,
 ) -> tauri::Result<CheckMenuItem<R>> {
+    remember_shortcut(id, accelerator);
     let mut builder = CheckMenuItemBuilder::with_id(id, label).checked(checked);
     if let Some(accel) = accelerator {
         builder = builder.accelerator(accel);
@@ -935,7 +1014,7 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
 
     let mut file_builder = SubmenuBuilder::new(app, "File")
         .item(&menu_item(app, "file.new", "New", Some("CmdOrCtrl+N"))?)
-        .item(&menu_item(app, "file.quick-open", "Quick Open…", Some("CmdOrCtrl+P"))?)
+        .item(&menu_item(app, "file.quick-open", "Go to File or Command…", Some("CmdOrCtrl+K"))?)
         .item(&menu_item(
             app,
             "file.new-window",
@@ -1030,7 +1109,8 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
                 .item(&menu_item(app, "file.export-pdf", "PDF…", None)?)
                 .item(&menu_item(app, "file.export-docx", "Word…", None)?)
                 .build()?,
-        );
+        )
+        .item(&menu_item(app, "file.print", "Print…", Some("CmdOrCtrl+P"))?);
     if cfg!(target_os = "macos") {
         file_builder = file_builder.separator().item(&menu_item(
             app,
@@ -1158,7 +1238,8 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             app,
             "format.link",
             "Hyperlink",
-            Some("CmdOrCtrl+K"),
+            // ⌘K opens the palette, or makes a link when text is selected.
+            None,
         )?)
         .separator()
         .item(&menu_item(
@@ -1594,6 +1675,7 @@ pub fn run() {
             read_revision,
             register_default_markdown_handler,
             review_request_state,
+            menu_commands,
             report_open_paths,
             resolve_review,
             pending_feedback,
@@ -1718,6 +1800,16 @@ mod tests {
     /// case-insensitive, so differing only in extension case collides).
     fn temp_file(stem: &str, ext: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("folio-test-{stem}-{}.{ext}", std::process::id()))
+    }
+
+    #[test]
+    fn palette_lists_our_commands_but_not_per_file_entries() {
+        assert!(palette_id("view.focus-mode"));
+        assert!(palette_id("file.print"));
+        assert!(!palette_id("file.recent.0"));
+        assert!(!palette_id("file.revision.12"));
+        assert!(!palette_id("file.quick-open"));
+        assert!(!palette_id("quit"));
     }
 
     #[test]

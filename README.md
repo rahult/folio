@@ -15,7 +15,7 @@
   headings, emphasis, lists, tables, code blocks, blockquotes, links, images
 - **Typora-style native menus** — Paragraph (⌘1–6 headings, ⌥⌘Q quote,
   ⌥⌘T table, ⌥⌘C code fence, ⌥⌘O/U/X lists), Format (⌘B strong, ⌘I emphasis,
-  ⌘K link, ⌘\\ clear format), and more
+  ⌘K link on a selection, ⌘\\ clear format), and more
 - **Source Code Mode** — ⌘/ flips between the rendered page and raw Markdown
 - **Editorial design** — warm paper canvas, Newsreader serif prose, a single
   oxblood accent; the text is the interface
@@ -258,9 +258,11 @@ their default applications.
   (`[[name#Heading]]` to a heading, `[[name|label]]` for the text). Type
   `[[` for a completion list; ⌘-click follows, as with ordinary links,
   which now honour `file.md#heading` targets too
-- **Quick Open** — ⌘P fuzzy-finds any Markdown file in the current
-  project (the nearest git root, or the document's folder), recents first.
-  No sidebar: type, arrow, Enter
+- **Go to File or Command** — ⌘K fuzzy-finds any Markdown file in the
+  current project (the nearest git root, or the document's folder), recents
+  first, and every menu command with its shortcut. With text selected, ⌘K
+  makes a link instead. No sidebar: type, arrow, Enter
+- **Print** — ⌘P opens the native print panel (which also saves as PDF)
 - **Tabs** — several documents in one window. Open, Open Recent, Finder,
   and links land in tabs; a tab keeps its unsaved edits, caret, and scroll
   while you work elsewhere. ⌘W closes the tab (the window with one left),
