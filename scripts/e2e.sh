@@ -17,7 +17,9 @@ if [[ "${FOLIO_E2E_SKIP_BUILD:-}" != "1" ]]; then
   npm run build:cli
   # `tauri build` runs beforeBuildCommand (frontend + sidecar) itself; only
   # the .app is needed, not a dmg.
-  npx tauri build --bundles app
+  # Updater artifacts need a signing key this machine has not got, and their
+  # failure would abort the run under `set -e`; the .app itself is enough.
+  npx tauri build --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
 fi
 app="src-tauri/target/release/bundle/macos/Folio.app/Contents/MacOS/folio-app"
 if [[ ! -x "$app" ]]; then
