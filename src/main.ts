@@ -185,13 +185,13 @@ const navBackBtn = document.querySelector<HTMLButtonElement>("#nav-back-btn")!;
 const navForwardBtn = document.querySelector<HTMLButtonElement>("#nav-forward-btn")!;
 const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
 const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn")!;
-const feedbackBtn = document.querySelector<HTMLButtonElement>("#feedback-btn")!;
+const panelExportBtn = document.querySelector<HTMLButtonElement>("#panel-export")!;
 const reviewBar = document.querySelector<HTMLElement>("#review-bar")!;
 const reviewBarLabel = document.querySelector<HTMLElement>("#review-bar-label")!;
 const reviewBarHint = document.querySelector<HTMLElement>("#review-bar-hint")!;
 const reviewChangesBtn = document.querySelector<HTMLButtonElement>("#review-changes-btn")!;
 const reviewApproveBtn = document.querySelector<HTMLButtonElement>("#review-approve-btn")!;
-const annotationsBtn = document.querySelector<HTMLButtonElement>("#annotations-btn")!;
+const panelBtn = document.querySelector<HTMLButtonElement>("#panel-btn")!;
 const annotList = document.querySelector<HTMLDivElement>("#annot-list")!;
 const annotSection = document.querySelector<HTMLElement>("#panel-annotations")!;
 const telemetryOverlay = document.querySelector<HTMLDivElement>("#telemetry-overlay")!;
@@ -2010,12 +2010,12 @@ const ANNOT_KIND_LABEL: Record<AnnotationKind, string> = {
   approve: "Looks good",
 };
 
-/** The Annotations tab of the reading panel. The toolbar button reflects
- *  whether that tab is showing. */
+/** The Annotations tab of the reading panel. The toolbar's panel toggle
+ *  reflects whether the panel is showing at all — which tab is the
+ *  rail's business, not the toolbar's. */
 function renderSidebar(): void {
-  const showing = isPanelOpen() && activeTab() === "annotations";
-  annotationsBtn.classList.toggle("active", showing);
-  annotationsBtn.setAttribute("aria-pressed", String(showing));
+  panelBtn.classList.toggle("active", isPanelOpen());
+  panelBtn.setAttribute("aria-pressed", String(isPanelOpen()));
   if (annotations.length === 0) {
     const empty = document.createElement("div");
     empty.className = "annot-empty";
@@ -2184,7 +2184,7 @@ async function deleteAnnotation(annotation: Annotation): Promise<void> {
   renderAnnotationsNow();
 }
 
-annotationsBtn.addEventListener("click", () => togglePanel("annotations"));
+panelBtn.addEventListener("click", () => togglePanel());
 onPanelChange(renderSidebar);
 
 /** The selection, or with no selection the innermost block under the
@@ -2282,8 +2282,8 @@ async function exportReviewFeedback(): Promise<void> {
       contents: feedback,
     });
   }
-  feedbackBtn.classList.add("copied");
-  setTimeout(() => feedbackBtn.classList.remove("copied"), 900);
+  panelExportBtn.classList.add("copied");
+  setTimeout(() => panelExportBtn.classList.remove("copied"), 900);
 }
 
 // ——— review gate ———
@@ -3334,7 +3334,7 @@ window.addEventListener("mousemove", () => setHushed(false));
 window.addEventListener("blur", () => setHushed(false));
 floatBtn.addEventListener("click", () => toggleFloatMode());
 copyAgentBtn.addEventListener("click", () => void copyForAgent());
-feedbackBtn.addEventListener("click", () => void exportReviewFeedback());
+panelExportBtn.addEventListener("click", () => void exportReviewFeedback());
 
 /** Copy the whole document as clean Markdown, ready to paste back into a
  *  coding agent with review feedback. */

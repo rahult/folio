@@ -33,10 +33,10 @@
       <span id="doc-title" data-tauri-drag-region>Untitled</span>
       <div class="toolbar-end" data-tauri-drag-region>
         <button
-          id="annotations-btn"
+          id="panel-btn"
           type="button"
-          title="Show annotations"
-          aria-label="Show annotations"
+          title="Reading panel (⌘⇧O)"
+          aria-label="Reading panel"
           aria-pressed="false"
         >
           <svg
@@ -50,34 +50,8 @@
             stroke-linejoin="round"
             aria-hidden="true"
           >
-            <line x1="8" y1="6" x2="21" y2="6" />
-            <line x1="8" y1="12" x2="21" y2="12" />
-            <line x1="8" y1="18" x2="21" y2="18" />
-            <line x1="3" y1="6" x2="3.01" y2="6" />
-            <line x1="3" y1="12" x2="3.01" y2="12" />
-            <line x1="3" y1="18" x2="3.01" y2="18" />
-          </svg>
-        </button>
-        <button
-          id="feedback-btn"
-          type="button"
-          title="Export review feedback for your agent (⌥⌘R)"
-          aria-label="Export review feedback"
-        >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            <line x1="8" y1="8" x2="16" y2="8" />
-            <line x1="8" y1="11" x2="13" y2="11" />
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="15" y1="4" x2="15" y2="20" />
           </svg>
         </button>
         <button
@@ -176,6 +150,9 @@
         <button id="panel-tab-decide" type="button" role="tab" aria-selected="false" aria-controls="panel-decide" title="Decide" aria-label="Decide">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m15 9-2 6-4 2 2-6z" /></svg>
         </button>
+          <button id="panel-export" type="button" title="Export review feedback for your agent (⌥⌘R)" aria-label="Export review feedback">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3" /><path d="m7 8 5-5 5 5" /><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></svg>
+          </button>
           <button id="panel-close" type="button" title="Hide panel" aria-label="Hide panel">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <path d="M18 6 6 18M6 6l12 12" />
