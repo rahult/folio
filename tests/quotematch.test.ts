@@ -54,4 +54,35 @@ describe("findQuoteRange", () => {
   it("returns null for an empty quote", () => {
     expect(findQuoteRange(segs([0, "anything"]), "  \n ", DOC_SIZE)).toBeNull();
   });
+
+  it("matches a selection that stops short of the document's punctuation", () => {
+    // Selected "liquor jugs" out of "liquor jugs, then": the document's
+    // word carries the comma, the quote's does not.
+    expect(findQuoteRange(segs([0, "five dozen liquor jugs, then"]), "liquor jugs", DOC_SIZE)).toEqual(
+      { from: 11, to: 22 },
+    );
+  });
+
+  it("matches a quote that carries punctuation the selection kept", () => {
+    expect(findQuoteRange(segs([0, "said \"hello\" and"]), "\"hello\"", DOC_SIZE)).toEqual({
+      from: 5,
+      to: 12,
+    });
+    expect(findQuoteRange(segs([0, "(first, second) next"]), "(first, second)", DOC_SIZE)).toEqual({
+      from: 0,
+      to: 15,
+    });
+  });
+
+  it("covers only the quoted words, not the punctuation around them", () => {
+    // "jugs," in the document: the range ends before the comma.
+    expect(findQuoteRange(segs([0, "liquor jugs, then"]), "jugs", DOC_SIZE)).toEqual({
+      from: 7,
+      to: 11,
+    });
+  });
+
+  it("still requires the words themselves to match", () => {
+    expect(findQuoteRange(segs([0, "five dozen jugs, then"]), "liquor jugs", DOC_SIZE)).toBeNull();
+  });
 });

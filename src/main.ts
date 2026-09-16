@@ -5,6 +5,7 @@ import "@fontsource-variable/jetbrains-mono";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { isPathMenuClick, pathMenuEntries } from "./pathmenu";
@@ -80,6 +81,8 @@ import {
 import { classifyLink } from "./links";
 import { countWords, normalizeMarkdown } from "./markdown";
 import { actionForMenuId, type MenuAction } from "./menu";
+import { markdownDrops } from "./drops";
+import { stackSlots, type AnchorSlot } from "./annotlayout";
 import { shouldScroll, typewriterScrollTop } from "./modes";
 import { NavigationHistory } from "./navhistory";
 import { addRecent, loadRecent, saveRecent } from "./recent";
@@ -190,6 +193,7 @@ const reviewChangesBtn = document.querySelector<HTMLButtonElement>("#review-chan
 const reviewApproveBtn = document.querySelector<HTMLButtonElement>("#review-approve-btn")!;
 const annotationsBtn = document.querySelector<HTMLButtonElement>("#annotations-btn")!;
 const annotList = document.querySelector<HTMLDivElement>("#annot-list")!;
+const annotSection = document.querySelector<HTMLElement>("#panel-annotations")!;
 const telemetryOverlay = document.querySelector<HTMLDivElement>("#telemetry-overlay")!;
 const telemetryAcceptBtn = document.querySelector<HTMLButtonElement>("#telemetry-accept-btn")!;
 const telemetryDeclineBtn = document.querySelector<HTMLButtonElement>("#telemetry-decline-btn")!;
@@ -583,6 +587,7 @@ const editor = new MarkdownEditor(editorRoot, (markdown) => {
   renderStatus(markdown);
   scheduleOutlineRefresh();
   scheduleAuthorshipRefresh();
+  scheduleSidebarLayout();
   renderTitle();
   if (!sourceMode) void updateWikiComplete();
 }, {
@@ -2017,16 +2022,110 @@ function renderSidebar(): void {
     empty.textContent =
       "No annotations yet — select text and click the annotate icon in the selection popup, or use Edit → Annotate Selection…";
     annotList.replaceChildren(empty);
+    clearSidebarLayout();
     renderReviewBar();
     return;
   }
   annotList.replaceChildren(...annotations.map(renderSidebarItem));
+  layoutSidebar();
   renderReviewBar();
+}
+
+/** Put each card beside the passage it refers to: the card's top follows
+ *  the passage's top in the document, pushed down only when the card above
+ *  needs the room. When no passage can be located (source mode, a quote a
+ *  rewrite removed, the view not yet up), the list falls back to plain
+ *  flow in document order. */
+function layoutSidebar(): void {
+  if (sourceMode) {
+    clearSidebarLayout();
+    return;
+  }
+  const slots: AnchorSlot[] = annotations.map((a) => ({ id: a.id, anchorTop: null as number | null }));
+  let anyAnchor = false;
+  editor.withView((view) => {
+    const docSize = view.state.doc.content.size;
+    if (docSize === 0) return;
+    const { segments } = docSegments(view);
+    // Viewport tops of the anchor and of the editor's content origin, so
+    // the difference is the passage's place in the content.
+    const rootTop = editorRoot.getBoundingClientRect().top - editorRoot.scrollTop;
+    annotations.forEach((a, i) => {
+      const range = findQuoteRange(segments, a.quote, docSize);
+      if (!range) return;
+      const top = view.coordsAtPos(range.from).top - rootTop;
+      if (Number.isFinite(top)) {
+        slots[i].anchorTop = top;
+        anyAnchor = true;
+      }
+    });
+  });
+  if (!anyAnchor) {
+    clearSidebarLayout();
+    return;
+  }
+  const heights: Record<string, number> = {};
+  for (const card of Array.from(annotList.children)) {
+    const el = card as HTMLElement;
+    if (el.dataset.annotId) heights[el.dataset.annotId] = el.offsetHeight;
+  }
+  const { placed, listHeight } = stackSlots(slots, heights);
+  annotList.classList.add("aligned");
+  annotSection.classList.add("annotations-aligned");
+  // As tall as the document, so the panel's scroll space matches the
+  // editor's and each card can sit exactly level with its passage.
+  annotList.style.height = `${Math.round(Math.max(listHeight, editorRoot.scrollHeight))}px`;
+  const tops = new Map(placed.map((p) => [p.id, p.top]));
+  for (const card of Array.from(annotList.children)) {
+    const el = card as HTMLElement;
+    const top = tops.get(el.dataset.annotId ?? "");
+    el.style.top = top === undefined ? "" : `${Math.round(top)}px`;
+  }
+  syncSidebarScroll();
+}
+
+function clearSidebarLayout(): void {
+  annotList.classList.remove("aligned");
+  annotSection.classList.remove("annotations-aligned");
+  annotList.style.height = "";
+  for (const card of Array.from(annotList.children)) {
+    (card as HTMLElement).style.top = "";
+  }
+}
+
+/** The editor drives the panel: while the Annotations tab is showing, its
+ *  scroll follows the document's, so a card stays beside its passage as
+ *  the reader moves through the document. */
+function syncSidebarScroll(): void {
+  if (!isPanelOpen() || activeTab() !== "annotations") return;
+  // How far the list sits below the scroller's content origin (leftover
+  // heading or padding), and how the two viewports are offset from each
+  // other (they share the toolbar, but nothing promises they always will).
+  const headerOffset =
+    annotList.getBoundingClientRect().top - annotSection.getBoundingClientRect().top + annotSection.scrollTop;
+  const sectionTop = annotSection.getBoundingClientRect().top;
+  const editorTop = editorRoot.getBoundingClientRect().top;
+  annotSection.scrollTop = Math.max(0, editorRoot.scrollTop + headerOffset + sectionTop - editorTop);
+}
+
+editorRoot.addEventListener("scroll", () => syncSidebarScroll());
+new ResizeObserver(() => scheduleSidebarLayout()).observe(editorRoot);
+
+let sidebarLayoutTimer: ReturnType<typeof setTimeout> | null = null;
+/** Relayout soon, coalesced: reflow on every keystroke would measure for
+ *  the words still arriving. */
+function scheduleSidebarLayout(): void {
+  if (sidebarLayoutTimer !== null) clearTimeout(sidebarLayoutTimer);
+  sidebarLayoutTimer = setTimeout(() => {
+    sidebarLayoutTimer = null;
+    if (isPanelOpen() && activeTab() === "annotations") layoutSidebar();
+  }, 400);
 }
 
 function renderSidebarItem(annotation: Annotation): HTMLElement {
   const item = document.createElement("div");
   item.className = "annot-item";
+  item.dataset.annotId = annotation.id;
   item.addEventListener("click", () => jumpToAnnotation(annotation));
 
   const kind = document.createElement("div");
@@ -2120,11 +2219,14 @@ function openInlineEntry(kind: "comment" | "replace", prefill = "", scope: Quote
       onSubmit: (body) => {
         closeEntry(view);
         addAnnotation(kind, quote, body);
-        if (!reviewMode) view.focus();
+        // Closing the field drops focus to the page; the reader's place
+        // (and the single-key vocabulary) needs the caret back in the
+        // document, reviewing or not.
+        view.focus();
       },
       onCancel: () => {
         closeEntry(view);
-        if (!reviewMode) view.focus();
+        view.focus();
       },
     });
   });
@@ -2864,6 +2966,21 @@ void listen<string>("menu", (event) => {
 // one opens in its own tab.
 void listen<string>("file-open", (event) => {
   void loadFromPath(event.payload);
+});
+
+// Files dragged onto the window. Tauri consumes external drags before the
+// DOM (so a page-level drop handler would never fire); the Markdown ones
+// open in tabs, the same way a Finder double-click would.
+void getCurrentWebview().onDragDropEvent((event) => {
+  if (event.payload.type !== "drop") return;
+  const paths = markdownDrops(event.payload.paths);
+  if (paths.length === 0) return;
+  // One at a time: two loads racing would interleave their tab bookkeeping.
+  void (async () => {
+    for (const path of paths) {
+      await loadFromPath(path);
+    }
+  })();
 });
 
 // A review request for a file this window already shows: the app focused

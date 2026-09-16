@@ -55,6 +55,10 @@ function entryWidget(spec: EntrySpec): HTMLElement {
   const field = document.createElement("textarea");
   field.rows = 2;
   field.placeholder = ENTRY_PLACEHOLDER[spec.kind];
+  // A note for an agent is often code-ish terms the system would "helpfully"
+  // rewrite; keep every character exactly as typed.
+  field.autocapitalize = "off";
+  field.setAttribute("autocorrect", "off");
   if (spec.prefill) field.value = spec.prefill;
   field.addEventListener("keydown", (e) => {
     // The field owns the keyboard: nothing here is a review key or an
@@ -114,6 +118,13 @@ export const reviewViewPlugin = $prose(
               Decoration.widget(at, () => entryWidget(entry), {
                 side: 1,
                 key: `review-entry-${entry.kind}-${at}`,
+                // The field is an editable inside the editor's own DOM.
+                // Without these two, ProseMirror treats the caret's presence
+                // in the widget as its own selection moving and rewrites the
+                // DOM selection out from under the field — the caret visibly
+                // leaves the text box mid-sentence.
+                ignoreSelection: true,
+                stopEvent: () => true,
               }),
             );
           }

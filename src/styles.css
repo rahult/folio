@@ -2022,6 +2022,36 @@ body.panel-resizing {
   line-height: 1.45;
 }
 
+/* While each card can be placed beside its passage, the list becomes a
+   coordinate space matching the document's flow (see layoutSidebar in
+   main.ts); the section's scroll follows the editor's so cards stay level
+   with their text as the reader scrolls. The margin is the annotation's
+   place — no heading above it to sit under. */
+#annot-list.aligned {
+  position: relative;
+  /* The section is a column: without this the list would be squeezed back
+     to the section's height and the panel could never scroll far enough
+     to keep step with the document. */
+  flex: 0 0 auto;
+}
+
+#annot-list.aligned .annot-item {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  border-bottom: none;
+  border-radius: 6px;
+}
+
+#panel-annotations.annotations-aligned {
+  padding-top: 0;
+}
+
+#panel-annotations.annotations-aligned > .panel-title {
+  display: none;
+}
+
 .annot-item:hover {
   background: var(--paper-sunken);
 }
