@@ -1,27 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- squircle backdrop: warm paper -->
-  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="#f8f4ea"/>
-  <!-- soft shadow under the leaf -->
-  <rect x="292" y="232" width="460" height="600" rx="26" fill="#000000" opacity="0.06"/>
-  <!-- the folio leaf -->
-  <path d="M 292 226
-           Q 292 200 318 200
-           L 632 200
-           L 752 320
-           L 752 786
-           Q 752 812 726 812
-           L 318 812
-           Q 292 812 292 786
+  <!-- squircle backdrop: warm paper, one shade deeper than the page -->
+  <rect x="0" y="0" width="1024" height="1024" rx="230" fill="#f0e7d2"/>
+  <!-- soft shadow under the page -->
+  <path d="M 284 212
+           Q 284 186 310 186
+           L 588 186
+           L 756 354
+           L 756 814
+           Q 756 840 730 840
+           L 310 840
+           Q 284 840 284 814
            Z"
-        fill="#fdfbf7" stroke="#ddd5c4" stroke-width="6"/>
+        fill="#000000" opacity="0.05"/>
+  <!-- the folio page -->
+  <path d="M 312 184
+           Q 312 160 336 160
+           L 592 160
+           L 752 320
+           L 752 800
+           Q 752 824 728 824
+           L 336 824
+           Q 312 824 312 800
+           Z"
+        fill="#fffdf6"/>
   <!-- dog-ear fold -->
-  <path d="M 632 200 L 752 320 L 658 320 Q 632 320 632 294 Z"
-        fill="#ece4d2" stroke="#ddd5c4" stroke-width="6" stroke-linejoin="round"/>
-  <!-- pilcrow in oxblood -->
-  <text x="524" y="664"
-        font-family="Georgia, 'Times New Roman', serif"
-        font-size="400"
-        font-weight="bold"
-        fill="#9e3b2a"
-        text-anchor="middle">¶</text>
+  <path d="M 592 160 L 752 320 L 636 320 Q 592 320 592 276 Z"
+        fill="#e5d8bc"/>
+  <!-- the verdict: approve -->
+  <path d="M 400 522 L 498 626 L 634 428"
+        fill="none" stroke="#9e3b2a" stroke-width="94"
+        stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
