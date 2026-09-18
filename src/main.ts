@@ -185,6 +185,7 @@ const navBackBtn = document.querySelector<HTMLButtonElement>("#nav-back-btn")!;
 const navForwardBtn = document.querySelector<HTMLButtonElement>("#nav-forward-btn")!;
 const floatBtn = document.querySelector<HTMLButtonElement>("#float-btn")!;
 const copyAgentBtn = document.querySelector<HTMLButtonElement>("#copy-agent-btn")!;
+const feedbackBtn = document.querySelector<HTMLButtonElement>("#feedback-btn")!;
 const panelExportBtn = document.querySelector<HTMLButtonElement>("#panel-export")!;
 const reviewBar = document.querySelector<HTMLElement>("#review-bar")!;
 const reviewBarLabel = document.querySelector<HTMLElement>("#review-bar-label")!;
@@ -456,6 +457,7 @@ async function settingsAction(id: string): Promise<void> {
     else if (id === "about.site") await openUrl("https://folio.rahultrikha.com");
     else if (id === "about.github") await openUrl("https://github.com/rahult/folio");
     else if (id === "about.roadmap") await openUrl("https://github.com/rahult/folio/blob/main/docs/ROADMAP.md");
+    else if (id === "about.feedback") await openFeedback("settings");
   } catch (err) {
     settingsError = typeof err === "string" ? err : String(err);
   }
@@ -2948,6 +2950,10 @@ async function runMenuAction(action: MenuAction): Promise<void> {
       return checkForUpdates(true);
     case "install-cli":
       return installCliTool();
+    case "open-feedback":
+      return openFeedback("menu");
+    case "open-website":
+      return openUrl("https://folio.rahultrikha.com");
     case "settings":
       return openSettings();
     case "editor-command":
@@ -3335,6 +3341,19 @@ window.addEventListener("blur", () => setHushed(false));
 floatBtn.addEventListener("click", () => toggleFloatMode());
 copyAgentBtn.addEventListener("click", () => void copyForAgent());
 panelExportBtn.addEventListener("click", () => void exportReviewFeedback());
+feedbackBtn.addEventListener("click", () => void openFeedback("toolbar"));
+
+/** Where the Send Feedback surfaces land: the site's feedback section,
+ *  tagged so site analytics can tell app-originated traffic apart. */
+const FEEDBACK_URL =
+  "https://folio.rahultrikha.com/?utm_source=app&utm_medium=feedback-button#feedback";
+
+/** Open the feedback page, counting the surface it came from for
+ *  consented users. */
+async function openFeedback(surface: string): Promise<void> {
+  trackEvent("feedback_opened", { surface });
+  await openUrl(FEEDBACK_URL);
+}
 
 /** Copy the whole document as clean Markdown, ready to paste back into a
  *  coding agent with review feedback. */

@@ -1345,6 +1345,11 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
         .maximize()
         .build()?;
 
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .item(&menu_item(app, "help.feedback", "Send Feedback", None)?)
+        .item(&menu_item(app, "help.site", "Folio Website", None)?)
+        .build()?;
+
     MenuBuilder::new(app)
         .items(&[
             &app_menu,
@@ -1354,6 +1359,7 @@ fn build_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             &format_menu,
             &view_menu,
             &window_menu,
+            &help_menu,
         ])
         .build()
 }

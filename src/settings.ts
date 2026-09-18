@@ -210,6 +210,7 @@ function about(m: SettingsModel): Control[] {
         { id: "about.site", label: "Website" },
         { id: "about.github", label: "GitHub" },
         { id: "about.roadmap", label: "Roadmap" },
+        { id: "about.feedback", label: "Feedback" },
       ],
     },
   ];

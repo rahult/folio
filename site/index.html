@@ -5,59 +5,69 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Folio is a calm Markdown editor for macOS, Windows, and Linux that renders as you write, and a review window for the plans and docs your coding agent writes."
+      content="Folio is where you approve what your agent wrote: a floating review window for the plans and docs your coding agent writes — and a calm Markdown editor for your own. macOS, Windows, Linux. Free and open source."
     />
     <link rel="canonical" href="https://folio.rahultrikha.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Folio" />
-    <meta property="og:title" content="Folio — a calm Markdown editor" />
+    <meta property="og:title" content="Folio — approve what your agent wrote" />
     <meta
       property="og:description"
-      content="Markdown, rendered as you write it. A small native editor for macOS, Windows, and Linux — and a review window for the plans your coding agent writes."
+      content="A floating review window for the plans your coding agent writes: see what changed, annotate beside the passage, send the verdict back to the agent's terminal. Plus a calm Markdown editor for your own writing."
     />
     <meta property="og:url" content="https://folio.rahultrikha.com/" />
     <meta property="og:image" content="https://folio.rahultrikha.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Folio — a calm Markdown editor" />
+    <meta name="twitter:title" content="Folio — approve what your agent wrote" />
     <meta
       name="twitter:description"
-      content="Markdown, rendered as you write it. A small native editor for macOS, Windows, and Linux — and a review window for the plans your coding agent writes."
+      content="A floating review window for the plans your coding agent writes: see what changed, annotate beside the passage, send the verdict back to the agent's terminal. Plus a calm Markdown editor for your own writing."
     />
     <meta name="twitter:image" content="https://folio.rahultrikha.com/og.png" />
     <link rel="icon" type="image/svg+xml" href="./folio-icon.svg" />
     <link rel="stylesheet" href="./site.css" />
-    <title>Folio — a calm Markdown editor</title>
+    <title>Folio — approve what your agent wrote</title>
     <script type="module" src="./demo.ts" defer></script>
   </head>
 
   <body>
     <header class="site-header">
-      <a class="brand" href="#top">
-        <img src="./folio-icon.svg" alt="" width="26" height="26" />
-        <span>Folio</span>
-      </a>
-      <nav aria-label="Sections">
-        <a href="#write">Writing</a>
-        <a href="#review">Agent review</a>
-        <a href="#think">Thinking</a>
-        <a href="#keys">Shortcuts</a>
-        <a href="#download">Download</a>
-        <a href="https://github.com/rahult/folio">GitHub</a>
-      </nav>
+      <div class="header-inner">
+        <a class="brand" href="#top">
+          <img src="./folio-icon.svg" alt="" width="26" height="26" />
+          <span>Folio</span>
+        </a>
+        <nav aria-label="Sections">
+          <a href="#loop">The loop</a>
+          <a href="#write">Writing</a>
+          <a href="#think">Thinking</a>
+          <a href="#keys">Shortcuts</a>
+          <a href="#feedback">Feedback</a>
+          <a href="https://github.com/rahult/folio">GitHub</a>
+        </nav>
+        <a
+          class="btn btn-primary header-cta"
+          id="dl-header"
+          href="https://github.com/rahult/folio/releases/latest"
+          >Download</a
+        >
+      </div>
     </header>
 
     <main id="top">
-      <!-- ——— hero: the editor itself ——— -->
+      <!-- ——— act one: the review loop ——— -->
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <h1 id="hero-title">Markdown, rendered as you write it.</h1>
+          <p class="kicker">The review gate for agent-written Markdown</p>
+          <h1 id="hero-title">Folio is where you approve what your agent wrote.</h1>
           <p class="lede">
-            One page, no split panes. Folio is a small native editor for
-            people who write in Markdown, a review window for the plans your
-            coding agent writes, and a place to think about a document
-            before you decide. Free and open source.
+            Your agent writes its plans in Markdown and you read them as a
+            diff in a terminal. Folio is the other half of that loop — a
+            floating window that shows what changed, takes your notes beside
+            the passage, and returns them to the agent's terminal. Approve,
+            or send it back.
           </p>
           <div class="hero-actions">
             <a
@@ -66,13 +76,160 @@
               href="https://github.com/rahult/folio/releases/latest"
               >Download for macOS</a
             >
-            <a class="btn" href="#download">Other platforms</a>
+            <a class="btn" href="#loop">How the loop works</a>
           </div>
+          <p class="hero-start">
+            Use it from Claude Code, Codex, or any shell: add the skill once
+            with <code>npx skills add rahult/folio</code>, then type
+            <code>/folio docs/plan.md</code> and Claude hands its plan to
+            Folio for you to judge.
+          </p>
           <p class="hero-note">
-            About 5&nbsp;MB, built on the system webview. Try the real editor
-            below first.
+            Free and open source · about 5&nbsp;MB · nothing loads before you
+            ask it to
           </p>
         </div>
+
+        <div class="hero-stage" aria-label="A review in progress: Claude Code on the left, Folio's floating window on the right">
+          <div class="loop">
+            <div class="loop-terminal" aria-label="A Claude Code session: /folio hands the plan to Folio">
+              <p class="cc-user"><b class="step" aria-hidden="true">1</b><span class="marker">&gt;</span>/folio docs/plan.md</p>
+              <p class="cc-claude"><span class="marker">⏺</span>I'll open the rollout plan in Folio for you to review.</p>
+              <p class="cc-claude"><span class="marker">⏺</span>Bash(folio review --wait --agent claude docs/plan.md)</p>
+              <p class="cc-result wait"><span class="marker">⎿</span>waiting for your verdict in Folio…</p>
+              <p class="cc-beat"><b class="step" aria-hidden="true">2</b><span>you review plan.md in Folio — comment, replace, approve</span></p>
+              <p class="cc-claude"><span class="marker">⏺</span>Review returned: <strong>changes requested</strong> — 2 annotations</p>
+              <p class="cc-result"><span class="marker">⎿</span>1. Replace "ship to all users at once"</p>
+              <p class="cc-result cont">→ 10% canary for a day, then 100%.</p>
+              <p class="cc-claude"><b class="step" aria-hidden="true">3</b><span class="marker">⏺</span>Updated the rollout section. Resubmitting.</p>
+            </div>
+
+            <div class="loop-window" aria-label="Folio's floating review window">
+              <div class="win-bar">
+                <span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="win-title">plan.md</span>
+                <span class="win-live"><b></b>live</span>
+              </div>
+              <div class="win-doc">
+                <p class="doc-h">Rollout</p>
+                <p>
+                  <span class="del">Ship to all users at once.</span>
+                  <span class="add">Ship to 10% of users for a day, then everyone.</span>
+                  Watch error rate and p95 latency before widening.
+                </p>
+                <p>
+                  Roll back by flipping the flag, not by redeploying.
+                  <mark class="note">Say who owns the flag during the canary.</mark>
+                </p>
+              </div>
+              <div class="win-review">
+                <span>claude waiting, 2 annotations</span>
+                <span class="win-buttons"><b class="primary">Request changes</b><b>✓ Approve</b></span>
+              </div>
+            </div>
+          </div>
+          <div class="stage-legend">
+            <div>
+              <h3><b class="step" aria-hidden="true">1</b>Ask for the review</h3>
+              <p>
+                In Claude Code, type <code>/folio docs/plan.md</code>. The
+                skill makes Claude open Folio itself and wait — no copy
+                pasting, no reading diffs in the terminal.
+              </p>
+            </div>
+            <div>
+              <h3><b class="step" aria-hidden="true">2</b>Judge it in Folio</h3>
+              <p>
+                The plan floats over your work, live. Comment, replace, or
+                delete beside the passage; the page turns read-only while
+                Claude waits. Enter sends your verdict.
+              </p>
+            </div>
+            <div>
+              <h3><b class="step" aria-hidden="true">3</b>Claude revises, you re-approve</h3>
+              <p>
+                Your notes land in Claude's terminal as numbered Markdown,
+                it rewrites the plan, and your open window reloads the new
+                draft in place until you approve.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ——— the loop, in detail ——— -->
+      <section id="loop" class="loopsection" aria-labelledby="loop-title">
+        <header class="section-head">
+          <h2 id="loop-title">How a review runs</h2>
+          <p>
+            One command opens the window and blocks until your verdict. The
+            agent branches on the exit code; you never leave the page.
+          </p>
+        </header>
+
+        <div class="loop-notes">
+          <div>
+            <h3>What changed, at a glance</h3>
+            <p>
+              While the window floats, Folio watches the file. Each rewrite
+              reloads in place with additions washed green and removals shown
+              struck through. Your own unsaved edits are never clobbered.
+            </p>
+          </div>
+          <div>
+            <h3>Annotate with single keys, then send</h3>
+            <p>
+              The page turns read-only while the agent waits. Move between
+              blocks with <code>j</code> and <code>k</code>, press
+              <code>c</code> to comment, <code>d</code> to delete,
+              <code>r</code> to suggest a replacement, <code>a</code> for
+              looks good, Enter to send. Each note appears in the margin
+              beside the passage it refers to, and stays beside it as you
+              scroll. The feedback reaches the agent's terminal as
+              structured Markdown with line numbers.
+            </p>
+          </div>
+          <div>
+            <h3>Ask for it, or not</h3>
+            <p>
+              The <code>/folio</code> skill teaches Claude Code, Codex, and
+              other agents the loop. It only runs when you type it. Without
+              the skill, <code>folio review plan.md</code> from any shell
+              opens a floating window and keeps watching the file.
+            </p>
+          </div>
+          <div>
+            <h3>Every version, kept</h3>
+            <p>
+              Revision History archives each on-disk version of a reviewed
+              file and diffs any two, so you can see exactly what the agent
+              did between its first draft and its fourth.
+            </p>
+          </div>
+        </div>
+
+        <div class="loop-install">
+          <p>Install the skill once. It is user-invoked only.</p>
+          <pre><code>npx skills add rahult/folio      # via skills.sh, any agent
+folio skill install              # or from Folio's own command line
+npx skills add rahult/folio -a pi   # Pi, invoked there as /skill:folio</code></pre>
+          <p class="loop-exit">
+            The CLI exits 0 on approve, 2 on changes requested, 3 if the
+            review is still open, so an agent can branch on the result.
+          </p>
+        </div>
+      </section>
+
+      <!-- ——— act two: writing ——— -->
+      <section id="write" class="tour" aria-labelledby="write-title">
+        <header class="section-head">
+          <p class="kicker">Act two</p>
+          <h2 id="write-title">A calm editor for your own Markdown</h2>
+          <p>
+            The text is the interface. Everything else steps out of the way
+            until you ask for it. This is the real editor, running here.
+          </p>
+        </header>
 
         <div class="demo-frame" id="demo">
           <div class="demo-chrome">
@@ -85,9 +242,53 @@
                 Exported page
               </button>
             </div>
-            <span class="demo-hint">This is the editor from the app, running here.</span>
+            <span class="demo-hint">This is the editor from the app, running in your browser.</span>
           </div>
-          <div id="demo-editor" role="tabpanel" aria-labelledby="tab-write"></div>
+          <!-- Static pre-render of the demo document. Shown until (and
+               replaced when) the real editor mounts in demo.ts — so the
+               frame is never empty, with or without JavaScript. -->
+          <div id="demo-editor" class="demo-fallback" role="tabpanel" aria-labelledby="tab-write">
+            <h1>Write, and watch it render</h1>
+            <p>
+              Folio renders Markdown <strong>inline as you type</strong>.
+              There is no preview pane to glance at and no toolbar to reach
+              for: make this sentence <em>italic</em>, turn the next line
+              into a heading with <code>#</code>, or press ⌘/ to see the
+              source.
+            </p>
+            <h2>Everything you expect</h2>
+            <ul>
+              <li>Headings, emphasis, links, and inline <code>code</code></li>
+              <li>Ordered and unordered lists (press Enter below to add one)</li>
+              <li>Tables with draggable columns, blockquotes, images</li>
+            </ul>
+            <ul class="tasks">
+              <li><span class="box" aria-hidden="true">☑</span> Task lists that round-trip to <code>- [x]</code></li>
+              <li><span class="box" aria-hidden="true">☐</span> A checkbox you can tick</li>
+            </ul>
+            <blockquote>The text is the interface. Everything else steps out of the way.</blockquote>
+            <h2>A table</h2>
+            <table>
+              <thead><tr><th>Feature</th><th>Shortcut</th></tr></thead>
+              <tbody>
+                <tr><td>Source mode</td><td>⌘/</td></tr>
+                <tr><td>Export</td><td>⌘E</td></tr>
+                <tr><td>Focus mode</td><td>⌥⌘F</td></tr>
+                <tr><td>Annotate</td><td>⌥⌘A</td></tr>
+              </tbody>
+            </table>
+            <h2>Code and diagrams</h2>
+            <pre class="sample-code"><code>fn main() {
+    println!("calm software, small footprint");
+}</code></pre>
+            <div class="diagram" aria-hidden="true">
+              <span>Agent</span><i></i><span>plan.md</span><i></i><span>Folio</span><i></i><span>verdict</span>
+            </div>
+            <p>
+              Switch to <strong>Exported page</strong> above to see this
+              document the way File → Export writes it.
+            </p>
+          </div>
           <iframe
             id="demo-preview"
             title="Rendered document preview"
@@ -97,17 +298,6 @@
             hidden
           ></iframe>
         </div>
-      </section>
-
-      <!-- ——— writing ——— -->
-      <section id="write" class="tour" aria-labelledby="write-title">
-        <header class="section-head">
-          <h2 id="write-title">For writing</h2>
-          <p>
-            The text is the interface. Everything else steps out of the way
-            until you ask for it.
-          </p>
-        </header>
 
         <article class="tour-row">
           <div class="tour-text">
@@ -242,111 +432,10 @@ Ship to **10% of users** for a day, then *everyone*. Roll back with `deploy --un
         </article>
       </section>
 
-      <!-- ——— agent review ——— -->
-      <section id="review" class="review" aria-labelledby="review-title">
-        <header class="section-head">
-          <h2 id="review-title">For reviewing what your agent wrote</h2>
-          <p>
-            Coding agents produce plans, specs, and docs in Markdown, and you
-            end up reading them as a diff in a terminal. Folio is the other
-            half of that loop: a window that stays on top, shows what changed,
-            and sends your notes straight back.
-          </p>
-        </header>
-
-        <div class="loop">
-          <div class="loop-terminal" aria-label="The agent's terminal">
-            <p class="prompt"><span class="you">you</span> /folio docs/plan.md</p>
-            <p class="dim">$ folio review --wait --agent claude docs/plan.md</p>
-            <p class="dim wait">waiting for your verdict in Folio…</p>
-            <p class="dim out"># Review feedback: plan.md</p>
-            <p class="dim out">Verdict: <strong>changes requested</strong> (2 annotations)</p>
-            <p class="dim out">## 1. Replace "ship to all users at once"</p>
-            <p class="dim out">Suggested replacement: 10% canary for a day, then 100%.</p>
-            <p class="agent"><span class="you">claude</span> Updated the rollout section. Resubmitting.</p>
-          </div>
-
-          <div class="loop-window" aria-label="Folio's floating review window">
-            <div class="win-bar">
-              <span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span class="win-title">plan.md</span>
-              <span class="win-live"><b></b>live</span>
-            </div>
-            <div class="win-doc">
-              <p class="doc-h">Rollout</p>
-              <p>
-                <span class="del">Ship to all users at once.</span>
-                <span class="add">Ship to 10% of users for a day, then everyone.</span>
-                Watch error rate and p95 latency before widening.
-              </p>
-              <p>
-                Roll back by flipping the flag, not by redeploying.
-                <mark class="note">Say who owns the flag during the canary.</mark>
-              </p>
-            </div>
-            <div class="win-review">
-              <span>claude waiting, 2 annotations</span>
-              <span class="win-buttons"><b class="primary">Request changes</b><b>✓ Approve</b></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="loop-notes">
-          <div>
-            <h3>What changed, at a glance</h3>
-            <p>
-              While the window floats, Folio watches the file. Each rewrite
-              reloads in place with additions washed green and removals shown
-              struck through. Your own unsaved edits are never clobbered.
-            </p>
-          </div>
-          <div>
-            <h3>Annotate with single keys, then send</h3>
-            <p>
-              The page turns read-only while the agent waits. Move between
-              blocks with <code>j</code> and <code>k</code>, press
-              <code>c</code> to comment, <code>d</code> to delete,
-              <code>r</code> to suggest a replacement, <code>a</code> for
-              looks good, Enter to send. Each note appears in the margin
-              beside the passage it refers to, and stays beside it as you
-              scroll. The feedback reaches the agent's terminal as
-              structured Markdown with line numbers.
-            </p>
-          </div>
-          <div>
-            <h3>Ask for it, or not</h3>
-            <p>
-              The <code>/folio</code> skill teaches Claude Code, Codex, and
-              other agents the loop. It only runs when you type it. Without
-              the skill, <code>folio review plan.md</code> from any shell
-              opens a floating window and keeps watching the file.
-            </p>
-          </div>
-          <div>
-            <h3>Every version, kept</h3>
-            <p>
-              Revision History archives each on-disk version of a reviewed
-              file and diffs any two, so you can see exactly what the agent
-              did between its first draft and its fourth.
-            </p>
-          </div>
-        </div>
-
-        <div class="loop-install">
-          <p>Install the skill once. It is user-invoked only.</p>
-          <pre><code>npx skills add rahult/folio      # via skills.sh, any agent
-folio skill install              # or from Folio's own command line
-npx skills add rahult/folio -a pi   # Pi, invoked there as /skill:folio</code></pre>
-          <p class="loop-exit">
-            The CLI exits 0 on approve, 2 on changes requested, 3 if the
-            review is still open, so an agent can branch on the result.
-          </p>
-        </div>
-      </section>
-
-      <!-- ——— thinking ——— -->
+      <!-- ——— act three: thinking ——— -->
       <section id="think" class="think" aria-labelledby="think-title">
         <header class="section-head">
+          <p class="kicker">Act three</p>
           <h2 id="think-title">For thinking about what you read</h2>
           <p>
             A reading panel beside the page, in three tabs that follow the
@@ -503,6 +592,31 @@ npx skills add rahult/folio -a pi   # Pi, invoked there as /skill:folio</code></
         </div>
       </section>
 
+      <!-- ——— feedback ——— -->
+      <section id="feedback" class="feedback" aria-labelledby="feedback-title">
+        <header class="section-head">
+          <p class="kicker">Feedback</p>
+          <h2 id="feedback-title">Tell me what's broken, missing, or worth paying for.</h2>
+          <p>
+            Folio is one person's work. A bug, a rough edge, or the feature
+            that would make it part of your day — every note gets read, and
+            the sharp ones shape the roadmap.
+          </p>
+        </header>
+        <div class="feedback-actions">
+          <a
+            class="btn btn-primary"
+            data-feedback-channel="github"
+            href="https://github.com/rahult/folio/issues/new"
+            >Open a GitHub issue</a
+          >
+        </div>
+        <p class="feedback-note">
+          The feedback button in the app lands here too, and the site itself
+          keeps no cookies — analytics are opt-in and anonymous.
+        </p>
+      </section>
+
       <!-- ——— download ——— -->
       <section id="download" class="download" aria-labelledby="download-title">
         <header class="section-head">
@@ -556,7 +670,8 @@ npx skills add rahult/folio -a pi   # Pi, invoked there as /skill:folio</code></
         <a href="https://github.com/rahult/folio/blob/main/LICENSE">MIT license</a>.
         Built with Tauri and Milkdown. Follow new releases on
         <a href="https://github.com/rahult/folio/releases">GitHub</a>
-        (<a href="https://github.com/rahult/folio/releases.atom">RSS</a>).
+        (<a href="https://github.com/rahult/folio/releases.atom">RSS</a>), or
+        <a href="#feedback">send feedback</a>.
       </p>
     </footer>
 
@@ -592,6 +707,9 @@ npx skills add rahult/folio -a pi   # Pi, invoked there as /skill:folio</code></
             { mac: /aarch64\.dmg$/, win: /x64-setup\.exe$/, linux: /\.AppImage$/ }[
               platform
             ],
+          "dl-header": { mac: /aarch64\.dmg$/, win: /x64-setup\.exe$/, linux: /\.AppImage$/ }[
+            platform
+          ],
           "dl-macos": /aarch64\.dmg$/,
           "dl-win-msi": /\.msi$/,
           "dl-win-exe": /x64-setup\.exe$/,

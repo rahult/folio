@@ -43,6 +43,8 @@ export type MenuAction =
   | { kind: "make-default-app" }
   | { kind: "check-updates" }
   | { kind: "install-cli" }
+  | { kind: "open-feedback" }
+  | { kind: "open-website" }
   | { kind: "settings" }
   | { kind: "editor-command"; command: EditorCommand };
 
@@ -149,6 +151,10 @@ export function actionForMenuId(id: string): MenuAction | null {
       return { kind: "check-updates" };
     case "app.install-cli":
       return { kind: "install-cli" };
+    case "help.feedback":
+      return { kind: "open-feedback" };
+    case "help.site":
+      return { kind: "open-website" };
     case "app.settings":
       return { kind: "settings" };
     case "file.make-default":

@@ -58,7 +58,12 @@ const writeTab = document.querySelector<HTMLButtonElement>("#tab-write")!;
 const previewTab = document.querySelector<HTMLButtonElement>("#tab-preview")!;
 
 const editor = new MarkdownEditor(editorRoot, () => {});
-const editorReady = editor.create(SAMPLE_MARKDOWN);
+// The frame ships with a static pre-render of the same document (for
+// file:// and pre-JS viewing). create() wipes that markup; only after the
+// live editor is up do we drop the fallback class and its prose styling.
+const editorReady = editor
+  .create(SAMPLE_MARKDOWN)
+  .then(() => editorRoot.classList.remove("demo-fallback"));
 
 async function activate(view: "write" | "preview"): Promise<void> {
   const isWrite = view === "write";
@@ -138,3 +143,19 @@ gaDecline.addEventListener("click", () => {
   localStorage.setItem(GA_KEY, "off");
   gaConsent.hidden = true;
 });
+
+// ——— feedback attribution ———
+//
+// The app's Feedback button lands here with ?utm_source=app. Count which
+// channel people pick (and where they came from) for consented visitors
+// only; the links themselves work identically without analytics.
+const utmSource = new URLSearchParams(location.search).get("utm_source") ?? "site";
+for (const el of document.querySelectorAll<HTMLAnchorElement>("[data-feedback-channel]")) {
+  el.addEventListener("click", () => {
+    const w = window as unknown as { gtag?: (...args: unknown[]) => void };
+    w.gtag?.("event", "feedback_click", {
+      channel: el.dataset.feedbackChannel ?? "unknown",
+      source: utmSource,
+    });
+  });
+}
