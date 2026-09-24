@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in Folio misbehaves or crashes
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of Folio is affected?
+      options:
+        - Editor / Markdown
+        - Preview
+        - Agent review
+        - File tree / workspace
+        - Search
+        - Settings
+        - Themes
+        - Export / publish
+        - Sync / git
+        - Window / UI chrome
+        - Install / update
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact clicks and state. Short numbered steps work best for automation.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Folio version
+      description: App menu → About Folio (or the version shown in Settings)
+      placeholder: "0.16.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log / console output
+      description: Crash text, DevTools console, or anything the app showed. Fenced code block, please.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this problem
+        - label: This still happens after restarting Folio
