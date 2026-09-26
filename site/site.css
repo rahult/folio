@@ -1143,6 +1143,23 @@ section + section {
   color: var(--ink-soft);
 }
 
+/* the mock's verdict bar mirrors the app: the send key rides on the
+   primary button, whichever verdict the annotations imply */
+.win-buttons kbd {
+  font-size: 0.72rem;
+  padding: 0 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  background: var(--paper-raised);
+  color: var(--ink);
+}
+
+.win-buttons b.primary kbd {
+  background: transparent;
+  border-color: color-mix(in oklch, var(--night-paper) 55%, transparent);
+  color: var(--night-paper);
+}
+
 .win-buttons b.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -1270,6 +1287,24 @@ kbd {
   border-radius: 4px;
   background: var(--paper-raised);
   color: var(--ink);
+}
+
+/* The keycaps answer the hand: they press like the app's keys do. No
+   JavaScript — a pointer is enough, and the page still works without it. */
+.keys kbd {
+  cursor: pointer;
+  transition:
+    transform 80ms ease,
+    background-color 80ms ease;
+}
+
+.keys kbd:hover {
+  background: var(--paper);
+}
+
+.keys kbd:active {
+  transform: translateY(1px);
+  border-bottom-width: 1px;
 }
 
 /* ——— download ——— */

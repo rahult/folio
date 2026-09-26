@@ -842,7 +842,7 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   align-items: center;
   gap: 5px;
   margin: 2px 6px 2px 0;
-  padding: 2px 7px 2px 3px;
+  padding: 3px 8px 3px 4px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -897,15 +897,33 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   flex: 0 0 auto;
 }
 
+/* The verdict is the product's one unmissable action: Apple HIG wants a
+   28px minimum hit target, and these two buttons earn it. */
 #review-bar-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
   font-family: var(--font-ui);
   font-size: 12px;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border: 1px solid var(--hairline);
   border-radius: 4px;
   background: var(--paper-raised);
   color: var(--ink-soft);
   cursor: pointer;
+}
+
+#review-bar-actions button kbd {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
 }
 
 #review-bar-actions button:hover {
@@ -920,6 +938,12 @@ body.review-mode .milkdown .milkdown-toolbar .divider {
   border-color: var(--accent-strong);
   color: var(--paper);
   font-weight: 500;
+}
+
+#review-bar-actions button.primary kbd {
+  background: transparent;
+  border-color: color-mix(in oklab, var(--paper) 55%, transparent);
+  color: var(--paper);
 }
 
 #review-bar-actions button.primary:hover {
@@ -2088,6 +2112,14 @@ body.panel-resizing {
   -webkit-box-orient: vertical;
 }
 
+/* A replace or delete note shows its passage struck through, so the card
+   previews the change the way the document does. */
+.annot-item-quote.struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--accent);
+  opacity: 0.8;
+}
+
 .annot-item-body {
   color: var(--ink);
   margin-top: 3px;
@@ -2095,6 +2127,19 @@ body.panel-resizing {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+}
+
+/* The suggested replacement renders as an insertion — the same accent the
+   document's inline ghost uses — after the struck passage above it. */
+.annot-item-body.insert {
+  color: var(--accent);
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+}
+
+.annot-item-arrow {
+  margin-right: 5px;
+  color: var(--ink-faint);
 }
 
 .annot-item-delete {

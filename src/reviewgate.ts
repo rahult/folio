@@ -5,6 +5,8 @@
  * Pure and DOM-free so the model is unit-testable.
  */
 
+import { isChangeRequest, type AnnotationKind } from "./annotations";
+
 export type ReviewState = "waiting" | "approved" | "changes";
 
 /** The two decisions a reviewer can send back. */
@@ -38,25 +40,36 @@ const HIDDEN: BarModel = Object.freeze({ visible: false, label: "", primary: "ap
  * The bar exists only while an agent is actually blocked: a decided request
  * (or none at all) leaves the window free of review chrome.
  *
+ * The label states the consequence of sending, not just a count — approval
+ * is terminal for the agent, so the line reads as what each verdict does
+ * ("2 notes go back on send", "approve sends it as-is").
+ *
  * Always returns a fresh object — never `HIDDEN` by reference — so a caller
  * that mutates one `BarModel` can't corrupt the shared hidden sentinel for
  * every subsequent hidden call.
  */
-export function barModel(request: ReviewRequest | null, annotationCount: number): BarModel {
+export function barModel(
+  request: ReviewRequest | null,
+  annotations: { kind: AnnotationKind }[],
+): BarModel {
   if (request === null || request.state !== "waiting") return { ...HIDDEN };
-  const count =
-    annotationCount === 0
-      ? "no annotations"
-      : `${annotationCount} annotation${annotationCount === 1 ? "" : "s"}`;
+  const changes = annotations.filter((a) => isChangeRequest(a.kind)).length;
+  const keeps = annotations.length - changes;
   // The agent's process is gone, but the handshake is not: whatever is
   // sent now is kept for its next `folio review` on this file.
   const who =
     request.agentAlive === false
       ? `${request.agent} left · verdict kept`
       : `${request.agent} waiting`;
+  const detail =
+    changes > 0
+      ? `${changes} note${changes === 1 ? "" : "s"} ${changes === 1 ? "goes" : "go"} back on send${keeps > 0 ? ` · ${keeps} marked good` : ""}`
+      : keeps > 0
+        ? `${keeps} marked good · approve sends it as-is`
+        : `no notes yet — approve sends it as-is`;
   return {
     visible: true,
-    label: `${who} · ${count}`,
-    primary: annotationCount > 0 ? "changes" : "approved",
+    label: `${who} · ${detail}`,
+    primary: changes > 0 ? "changes" : "approved",
   };
 }

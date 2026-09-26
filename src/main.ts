@@ -1013,14 +1013,22 @@ telemetryDeclineBtn.addEventListener("click", () => {
   void updateSettings({ telemetry: false }).catch(reportSettingsError);
 });
 
-/** First launch: ask once. Subsequent launches respect the stored choice. */
+/**
+ * First launch: don't ask yet. The consent ask is deferred to
+ * `maybeAskForTelemetry` — after the first verdict proves the loop, not at
+ * launch before the product has done anything. An existing choice (on or
+ * off) is honored here; a decline is a choice, so the ask never returns.
+ */
 function initTelemetryFlow(): void {
-  if (settings.telemetry === null) {
-    telemetryOverlay.hidden = false;
-    return;
-  }
   initTelemetry();
   trackEvent("app_launch");
+}
+
+/** The first-run consent ask, shown only once a verdict has gone back to an
+ *  agent and the choice has not been made (either way) before. */
+function maybeAskForTelemetry(): void {
+  if (settings.telemetry !== null) return;
+  telemetryOverlay.hidden = false;
 }
 
 /** Mark the top-level block containing the caret for Focus Mode. */
@@ -1759,7 +1767,20 @@ async function followLink(href: string): Promise<void> {
         await loadFromPath(target.path);
         if (target.anchor) jumpToAnchor(target.anchor);
       } catch {
-        await message(`Couldn't open ${target.path}`, { title: "Open Link", kind: "error" });
+        // A dead end teaches nothing: put the path on the clipboard for the
+        // terminal-bound and offer Reveal as the next action.
+        const why = await navigator.clipboard
+          .writeText(target.path)
+          .then(() => " — path copied to the clipboard")
+          .catch(() => "");
+        await ask(`Couldn't open ${target.path}${why}.`, {
+          title: "Open Link",
+          kind: "error",
+          okLabel: "Reveal in Finder",
+          cancelLabel: "OK",
+        }).then((reveal) => {
+          if (reveal) return revealItemInDir(target.path).catch(() => {});
+        });
       }
       return;
     case "external-url":
@@ -2022,7 +2043,7 @@ function renderSidebar(): void {
     const empty = document.createElement("div");
     empty.className = "annot-empty";
     empty.textContent =
-      "No annotations yet — select text and click the annotate icon in the selection popup, or use Edit → Annotate Selection…";
+      "No notes yet — select a passage and press c to comment, r to suggest a replacement, a to mark it good. Prefer the mouse? Select text and use the annotate icon in the selection popup, or Edit → Annotate Selection…";
     annotList.replaceChildren(empty);
     clearSidebarLayout();
     renderReviewBar();
@@ -2136,13 +2157,29 @@ function renderSidebarItem(annotation: Annotation): HTMLElement {
 
   const quote = document.createElement("div");
   quote.className = "annot-item-quote";
+  // The passage reads as struck-through when the note replaces or deletes
+  // it, so the card previews the change the way the document does.
+  if (annotation.kind !== "comment" && annotation.kind !== "approve") {
+    quote.classList.add("struck");
+  }
   quote.textContent = annotation.quote.replace(/\s+/g, " ").trim();
   item.append(kind, quote);
 
   if (annotation.body) {
     const body = document.createElement("div");
     body.className = "annot-item-body";
-    body.textContent = annotation.body;
+    if (annotation.kind === "replace") {
+      // The suggested text renders as an insertion — the same accent ghost
+      // the document shows after the struck passage.
+      body.classList.add("insert");
+      const arrow = document.createElement("span");
+      arrow.className = "annot-item-arrow";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.textContent = "→";
+      body.append(arrow, document.createTextNode(annotation.body));
+    } else {
+      body.textContent = annotation.body;
+    }
     item.append(body);
   }
 
@@ -2392,13 +2429,17 @@ function renderReviewBar(): void {
     reviewBarLabel.textContent = reviewBarError;
     return;
   }
-  const model = barModel(reviewRequest, annotations.length);
+  const model = barModel(reviewRequest, annotations);
   // In review mode the bar stays up for the key legend even with nothing
   // waiting; the verdict buttons only show while an agent is blocked.
   reviewBar.hidden = !(model.visible || reviewMode);
   reviewBar.classList.toggle("legend-only", reviewMode && !model.visible);
   const nudging = reviewRequest?.state === "waiting" && premortemNudged === reviewRequest.requestedAt;
-  if (nudging) {
+  const changesNudging =
+    reviewRequest?.state === "waiting" && changesNudged === reviewRequest.requestedAt;
+  if (changesNudging) {
+    reviewBarHint.textContent = CHANGES_NUDGE;
+  } else if (nudging) {
     reviewBarHint.textContent = PREMORTEM_NUDGE;
   } else if (reviewMode && hintVisible) {
     renderHintButtons(reviewRequest?.state === "waiting");
@@ -2419,6 +2460,13 @@ function renderReviewBar(): void {
   reviewBarLabel.textContent = `⏳ ${model.label}`;
   reviewApproveBtn.classList.toggle("primary", model.primary === "approved");
   reviewChangesBtn.classList.toggle("primary", model.primary === "changes");
+  // The send key shows on whichever button the annotations imply, so the
+  // keyboard and the mouse lead to the same verdict.
+  reviewApproveBtn.replaceChildren("✓ Approve");
+  reviewChangesBtn.replaceChildren("Request changes");
+  const sendHint = document.createElement("kbd");
+  sendHint.textContent = "⏎";
+  (model.primary === "approved" ? reviewApproveBtn : reviewChangesBtn).append(sendHint);
 }
 
 /** Called once when a verdict's round trip settles, whichever way it went.
@@ -2452,6 +2500,9 @@ function showVerdictConfirmation(verdict: Verdict): void {
     reviewBarConfirming = false;
     reviewBar.classList.remove("sent");
     renderReviewBar();
+    // First verdict sent is the moment the product has proved itself; that
+    // is when an opt-in ask for usage statistics belongs — not at launch.
+    maybeAskForTelemetry();
   }, 1600);
 }
 
@@ -2481,6 +2532,15 @@ const PREMORTEM_NUDGE =
 /** Send the verdict back to the blocked agent: the same structured feedback
  *  `Export Review Feedback` writes, plus the handshake resolution that
  *  unblocks `folio review --wait`. */
+/** Before a changes verdict with nothing marked for change, pause once:
+ *  an empty "changes requested" tells the agent nothing. The second click
+ *  (or Enter, which would send an approval here) sends regardless; the
+ *  prompt is a pause, not a gate — same contract as the premortem nudge. */
+let changesNudged: string | null = null;
+
+const CHANGES_NUDGE =
+  "Nothing is marked for a change yet — press c to add a note, or click again to send it back as-is";
+
 async function submitVerdict(verdict: Verdict): Promise<void> {
   const path = doc.filePath;
   if (!path) {
@@ -2508,6 +2568,16 @@ async function submitVerdict(verdict: Verdict): Promise<void> {
   // bar — and therefore its buttons — are visible, so it never blocks the
   // buttons' own clicks.
   if (reviewRequest === null || reviewRequest.state !== "waiting") return;
+  if (
+    verdict === "changes" &&
+    verdictFor(annotations) !== "changes" &&
+    !documentEditedDuringReview &&
+    changesNudged !== reviewRequest.requestedAt
+  ) {
+    changesNudged = reviewRequest.requestedAt;
+    renderReviewBar();
+    return;
+  }
   verdictInFlight = true;
   // A click is either the first attempt or a retry after a failure — either
   // way, any previous sticky error no longer describes the current attempt.
@@ -3401,6 +3471,65 @@ async function claimNativeMenu(): Promise<void> {
   syncMenuState();
 }
 
+// ——— first-run practice review ———
+
+const WELCOME_FLAG = "folio-welcomed";
+
+const WELCOME_DOC = `# Welcome to Folio
+
+This page opened in Review Mode — the mode you will use to judge what
+your coding agent writes. Nothing is waiting on this file: no agent is
+blocked, so you can try everything with no consequences.
+
+## The keys
+
+Move between blocks with \`j\` and \`k\`. With the caret on a passage:
+
+- \`c\` comment on it — type the note, press Enter to save
+- \`r\` replace it — type the better wording, press Enter
+- \`d\` delete it · \`a\` it looks good, keep it
+- \`n\` and \`p\` jump between your notes
+- \`?\` show or hide the key legend in the bar below
+- Enter sends the verdict — only when an agent is actually waiting
+
+Each note lands in the margin beside the passage it refers to and stays
+beside it as you scroll.
+
+## Try it
+
+This plan is exactly the kind of draft an agent might hand you. Press
+\`c\` on the first line and tell it what you think, then mark the
+paragraph under **Rollback** with \`a\` if it reads well.
+
+> **Rollout.** Ship to all users at once and watch the dashboards.
+>
+> **Rollback.** Redeploy the previous build if anything looks wrong.
+
+When you are done, press \`e\` to leave Review Mode and edit this page
+like any Markdown file — or close the tab and forget it. The real loop
+starts in your agent: type \`/folio docs/plan.md\` in Claude Code, or
+\`folio review --wait plan.md\` in any shell, and the plan lands here for
+your verdict.
+`;
+
+/** On the very first launch, with nothing to reopen, open a practice
+ *  review: the welcome document teaches the keys by being reviewed, not
+ *  read. A one-time flag — a failure (no home folder, unwritable disk)
+ *  must never turn into a nag on every launch. */
+async function offerWelcomeReview(): Promise<void> {
+  try {
+    if (localStorage.getItem(WELCOME_FLAG)) return;
+    localStorage.setItem(WELCOME_FLAG, "1");
+    const home = await invoke<string>("home_dir");
+    const path = await join(home, "Welcome to Folio.md");
+    await invoke("write_text_file_mkdir", { path, contents: WELCOME_DOC });
+    await loadFromPath(path);
+    enterReviewMode();
+  } catch {
+    // Onboarding is best-effort; skip it silently.
+  }
+}
+
 void editor.create("").then(async () => {
   renderTitle();
   // The preferences file first: theme, watching, telemetry and the float
@@ -3419,6 +3548,8 @@ void editor.create("").then(async () => {
     await loadFromPath(startup.paths[0]);
   } else if (isPrimaryWindow) {
     await restoreSession();
+    // A first launch with no file to reopen opens the practice review.
+    await offerWelcomeReview();
   }
   // `folio --float [file.md]` — enter floating review mode on launch, unless
   // the user turned floating review windows off. The file still opens and is
