@@ -2435,8 +2435,14 @@ function renderReviewBar(): void {
   reviewBar.hidden = !(model.visible || reviewMode);
   reviewBar.classList.toggle("legend-only", reviewMode && !model.visible);
   const nudging = reviewRequest?.state === "waiting" && premortemNudged === reviewRequest.requestedAt;
+  // The changes nudge only stands while it is still true: the moment a
+  // change-requesting note exists (or the document was edited by hand), the
+  // legend comes back — the send no longer needs the pause.
   const changesNudging =
-    reviewRequest?.state === "waiting" && changesNudged === reviewRequest.requestedAt;
+    reviewRequest?.state === "waiting" &&
+    changesNudged === reviewRequest.requestedAt &&
+    verdictFor(annotations) !== "changes" &&
+    !documentEditedDuringReview;
   if (changesNudging) {
     reviewBarHint.textContent = CHANGES_NUDGE;
   } else if (nudging) {
