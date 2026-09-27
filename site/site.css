@@ -1032,6 +1032,7 @@ section + section {
 
 /* the floating window */
 
+/* the floating window: a real screenshot of the app, mid-review */
 .loop-window {
   display: flex;
   flex-direction: column;
@@ -1040,6 +1041,12 @@ section + section {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 24px 60px oklch(0.1 0.01 70 / 0.5);
+}
+
+.loop-window img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 .win-bar {

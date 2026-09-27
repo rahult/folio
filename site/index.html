@@ -104,31 +104,14 @@
               <p class="cc-claude"><b class="step" aria-hidden="true">3</b><span class="marker">⏺</span>Updated the rollout section. Resubmitting.</p>
             </div>
 
-            <div class="loop-window" aria-label="Folio's floating review window">
-              <div class="win-bar">
-                <span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span class="win-title">plan.md</span>
-                <span class="win-live"><b></b>live</span>
-              </div>
-              <div class="win-doc">
-                <p class="doc-h">Rollout</p>
-                <p>
-                  <span class="del">Ship to all users at once.</span>
-                  <span class="add">Ship to 10% of users for a day, then everyone.</span>
-                  Watch error rate and p95 latency before widening.
-                </p>
-                <p>
-                  Roll back by flipping the flag, not by redeploying.
-                  <mark class="note">Say who owns the flag during the canary.</mark>
-                </p>
-              </div>
-              <div class="win-review">
-                <span>claude waiting · 2 notes go back on send</span>
-                <span class="win-buttons"
-                  ><b class="primary">Request changes <kbd>⏎</kbd></b
-                  ><b>✓ Approve</b></span
-                >
-              </div>
+            <div class="loop-window">
+              <img
+                src="./review-window.png"
+                width="957"
+                height="1025"
+                loading="eager"
+                alt="Folio reviewing a rollout plan: the passage marked for replacement is struck through with the suggested wording beside it, and the verdict bar reads “claude waiting · 2 notes go back on send · 1 marked good” next to Request changes ⏎ and ✓ Approve."
+              />
             </div>
           </div>
           <div class="stage-legend">
@@ -186,10 +169,12 @@
               blocks with <code>j</code> and <code>k</code>, press
               <code>c</code> to comment, <code>d</code> to delete,
               <code>r</code> to suggest a replacement, <code>a</code> for
-              looks good, Enter to send. Each note appears in the margin
-              beside the passage it refers to, and stays beside it as you
-              scroll. The feedback reaches the agent's terminal as
-              structured Markdown with line numbers.
+              looks good, Enter to send. The bar says exactly what sending
+              does — “claude waiting · 2 notes go back on send” — and an
+              empty changes verdict pauses once instead of going out. Each
+              note appears in the margin beside the passage it refers to,
+              and reaches the agent's terminal as structured Markdown with
+              line numbers.
             </p>
           </div>
           <div>
@@ -526,6 +511,9 @@ Ship to **10% of users** for a day, then *everyone*. Roll back with `deploy --un
         <ul class="more-list">
           <li><strong>Lenses</strong> read the document through a council of experts, second-order effects, two-way doors, working backwards, a premortem, inversion, steelman and strawman, or your own prompt, using any OpenAI-compatible model you point it at, local ones included.</li>
           <li><strong>Decide tab</strong> with section recall, a premortem, a debiasing checklist, a decision record with locked confidence, revisits, and a journal across documents.</li>
+          <li><strong>The verdict bar states the send</strong> — “2 notes go back on send”, or “approve sends it as-is” — the ⏎ hint rides whichever verdict your marks imply, and an empty “changes requested” pauses once before going out.</li>
+          <li><strong>A practice review on first launch</strong> teaches the single keys with no agent blocked: mark up a sample plan for real before anything is at stake.</li>
+          <li><strong>Annotation cards preview the change</strong> — the passage struck through, the suggested wording in the accent, in the margin and beside it.</li>
           <li><strong>Go to File or Command</strong> (⌘K) fuzzy-finds any Markdown file in the project, recents first, and every menu command, without a sidebar.</li>
           <li><strong>Authorship</strong> tints the words an agent wrote, and the ones it rewrote after your feedback, so your own edits stand out untinted.</li>
           <li><strong>Tabs</strong> keep several documents in one window, each with its own unsaved edits, caret, and scroll.</li>
